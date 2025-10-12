@@ -9,23 +9,40 @@ running diverse game types from DSL descriptions.
 import sys
 import yaml
 import os
+import logging
 from dotenv import load_dotenv
+
 
 # Load environment variables with absolute path
 env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 load_dotenv(env_path)
 
-# Ensure critical environment variables are set in os.environ (for LangSmith tracing)
-if os.getenv('LANGSMITH_TRACING'):
-    os.environ['LANGSMITH_TRACING'] = os.getenv('LANGSMITH_TRACING')
-if os.getenv('LANGSMITH_API_KEY'):
-    os.environ['LANGSMITH_API_KEY'] = os.getenv('LANGSMITH_API_KEY')
-if os.getenv('OPENAI_API_KEY'):
-    os.environ['OPENAI_API_KEY'] = os.getenv('OPENAI_API_KEY')
-if os.getenv('LANGSMITH_PROJECT'):
-    os.environ['LANGSMITH_PROJECT'] = os.getenv('LANGSMITH_PROJECT')
-if os.getenv('LANGSMITH_WORKSPACE_ID'):
-    os.environ['LANGSMITH_WORKSPACE_ID'] = os.getenv('LANGSMITH_WORKSPACE_ID')
+# Monitoring configuration
+VERBOSE_LOGGING = True  # Set to False to disable detailed logging
+
+# 直接配置 logger，不依赖 basicConfig
+logger = logging.getLogger('GameAgent')
+logger.handlers.clear()  # 清除现有 handlers
+
+if VERBOSE_LOGGING:
+    logger.setLevel(logging.INFO)
+    
+    # 创建格式器
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+    
+    # 文件处理器
+    file_handler = logging.FileHandler('/home/lee/canvas-with-langgraph-python/logs/agent.log')
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    
+    # 控制台处理器
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+    
+    logger.propagate = False  # 防止传播到root logger
+else:
+    logger.setLevel(logging.CRITICAL)
 
 # Only apply the patch if the module doesn't already exist
 if 'langgraph.graph.graph' not in sys.modules:
@@ -82,32 +99,24 @@ class AgentState(CopilotKitState):
     planSteps: List[Dict[str, Any]] = []
     currentStepIndex: int = -1
     planStatus: str = ""
-def load_game_dsl() -> dict:
+async def load_game_dsl() -> dict:
     """Load the game DSL from YAML file"""
+    import asyncio
+    import aiofiles
+    
     try:
         dsl_path = '/home/lee/canvas-with-langgraph-python/games/simple_choice_game.yaml'
-        with open(dsl_path, 'r', encoding='utf-8') as f:
-            dsl_content = yaml.safe_load(f)
+        async with aiofiles.open(dsl_path, 'r', encoding='utf-8') as f:
+            content = await f.read()
+            dsl_content = yaml.safe_load(content)
         return dsl_content
     except Exception as e:
         print(f"Failed to load DSL: {e}")
         return {}
 
-# Debug environment variables loading
-def check_env_vars():
-    """Debug function to check if environment variables are loaded"""
-    langsmith_tracing = os.getenv('LANGSMITH_TRACING', 'not_set')
-    langchain_tracing = os.getenv('LANGCHAIN_TRACING_V2', 'not_set') 
-    openai_key = os.getenv('OPENAI_API_KEY', 'not_set')
-    langsmith_key = os.getenv('LANGSMITH_API_KEY', 'not_set')
-    
-    print(f"[ENV DEBUG] LANGSMITH_TRACING: {langsmith_tracing}")
-    print(f"[ENV DEBUG] LANGCHAIN_TRACING_V2: {langchain_tracing}")
-    print(f"[ENV DEBUG] OPENAI_API_KEY: {'set' if openai_key != 'not_set' else 'not_set'}")
-    print(f"[ENV DEBUG] LANGSMITH_API_KEY: {'set' if langsmith_key != 'not_set' else 'not_set'}")
 
-# Call debug function at module load
-check_env_vars()
+
+
 
 def summarize_items_for_prompt(state: AgentState) -> str:
     """Simplified for game engine - items not used for complex project management"""
@@ -168,7 +177,9 @@ FRONTEND_TOOL_ALLOWLIST = set([
 
 
 async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Literal["tool_node", "__end__"]]:
-    print(f"state: {state}")
+
+    logger.info(f"[chatnode][start] ==== start chatnode ====")
+
     """
     Standard chat node based on the ReAct design pattern. It handles:
     - The model to use (and binds in CopilotKit actions and the tools defined above)
@@ -249,7 +260,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     # # Load DSL if not already loaded
     # dsl_content = state.get("dsl", {})
     # if not dsl_content:
-    dsl_content = load_game_dsl()
+    dsl_content = await load_game_dsl()
     game_schema = (
         "GAME COMPONENT SCHEMA (authoritative):\n"
         "- character_card.data:\n"
@@ -386,39 +397,40 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     # 4.1 If the latest message contains unresolved FRONTEND tool calls, do not call the LLM yet.
     #     End the turn and wait for the client to execute tools and append ToolMessage responses.
     full_messages = state.get("messages", []) or []
-    # try:
-    #     if full_messages:
-    #         last_msg = full_messages[-1]
-    #         if isinstance(last_msg, AIMessage):
-    #             pending_frontend_call = False
-    #             for tc in getattr(last_msg, "tool_calls", []) or []:
-    #                 name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-    #                 if name and name not in backend_tool_names:
-    #                     pending_frontend_call = True
-    #                     break
-    #         if pending_frontend_call:
-    #             try:
-    #                 print("[TRACE] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
-    #             except Exception:
-    #                 pass
-    #                 return Command(
-    #                     goto=END,
-    #                     update={
-    #                         # no changes; just wait for the client to respond with ToolMessage(s)
-    #                         "items": state.get("items", []),
-    #                         "itemsCreated": state.get("itemsCreated", 0),
-    #                         "lastAction": state.get("lastAction", ""),
-    #                         "planSteps": state.get("planSteps", []),
-    #                         "currentStepIndex": state.get("currentStepIndex", -1),
-    #                         "planStatus": state.get("planStatus", ""),
-    #                         # persist game dm fields
-    #                         "phase": state.get("phase", ""),
-    #                         "events": state.get("events", []),
-    #                         "characters": state.get("characters", []),
-    #                     },
-    #                 )
-    # except Exception:
-    #     pass
+    try:
+        if full_messages:
+            last_msg = full_messages[-1]
+            if isinstance(last_msg, AIMessage):
+                pending_frontend_call = False
+                for tc in getattr(last_msg, "tool_calls", []) or []:
+                    name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+                    if name and name not in backend_tool_names:
+                        pending_frontend_call = True
+                        break
+            if pending_frontend_call:
+                try:
+                    # print("[TRACE] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
+                    logger.info("[chatnode][end] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
+                except Exception:
+                    pass
+                    return Command(
+                        goto=END,
+                        update={
+                            # no changes; just wait for the client to respond with ToolMessage(s)
+                            "items": state.get("items", []),
+                            "itemsCreated": state.get("itemsCreated", 0),
+                            "lastAction": state.get("lastAction", ""),
+                            "planSteps": state.get("planSteps", []),
+                            "currentStepIndex": state.get("currentStepIndex", -1),
+                            "planStatus": state.get("planStatus", ""),
+                            # persist game dm fields
+                            "phase": state.get("phase", ""),
+                            "events": state.get("events", []),
+                            "characters": state.get("characters", []),
+                        },
+                    )
+    except Exception:
+        pass
 
     # 4.2 Trim long histories to reduce stale context influence and suppress typing flicker
     trimmed_messages = full_messages[-12:]
@@ -445,11 +457,44 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         )
     )
 
+    # Log input plan steps, status, and recent history before invoking LLM
+    try:
+        logger.info(f"[LLM][plan] planStatus={plan_status} currentStepIndex={current_step_index}")
+        logger.info(f"[LLM][plan] planSteps={plan_steps}")
+        logger.info(f"[LLM][history] history_count={len(trimmed_messages)}")
+        if trimmed_messages:
+            m = trimmed_messages[-1]
+            m_type = getattr(m, "type", None) or m.__class__.__name__
+            m_content = getattr(m, "content", None)
+            preview = m_content[:400] if isinstance(m_content, str) else "(non-text)"
+            logger.info(f"[LLM][history] last_history {m_type}: {preview}")
+    except Exception:
+        pass
+
     response = await model_with_tools.ainvoke([
         system_message,
         *trimmed_messages,
         latest_state_system,
     ], config)
+
+    # Log LLM output content and planned tool calls (not just the last turn)
+    try:
+        content_preview = getattr(response, "content", None)
+        if isinstance(content_preview, str):
+            logger.info(f"[LLM][OUTPUT] content: {content_preview[:400]}")
+        else:
+            logger.info(f"[LLM][OUTPUT] content: (non-text)")
+        tool_calls = getattr(response, "tool_calls", []) or []
+        if tool_calls:
+            for tc in tool_calls:
+                name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+                args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
+                logger.info(f"[LLM][TOOL_CALL] tool_call name={name} args={args}")
+        else:
+            logger.info("[LLM][TOOL_CALL] tool_calls: none")
+    except Exception:
+        pass
+    
 
     # Predictive plan/game state updates based on imminent tool calls (for UI rendering)
     try:
@@ -537,7 +582,15 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
 
     # only route to tool node if tool is not in the tools list
     if route_to_tool_node(response):
-        print("routing to tool node")
+        tool_calls = getattr(response, "tool_calls", []) or []
+        logger.info(f"[chatnode][end] === OUTPUT: ROUTING TO TOOL_NODE ===")
+        # for tc in tool_calls:
+        #     tool_name = tc.get("name", "unknown")
+        #     tool_args = tc.get("args", {})
+        #     logger.info(f"[CHAT_NODE] Tool: {tool_name}")
+        #     logger.info(f"[CHAT_NODE] Args: {tool_args}")
+        # logger.info(f"[CHAT_NODE] === END OUTPUT ===")
+        # print("routing to tool node")
         return Command(
             goto="tool_node",
             update={
@@ -567,6 +620,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             (s.get("status") not in ("completed", "failed")) for s in effective_steps
         )
         if effective_plan_status in ("completed", "failed"):
+            logger.info(f"[chatnode][end] === OUTPUT: PLAN STATUS IS COMPLETED OR FAILED ===")
             return Command(
                 goto=END,
                 update={
@@ -594,6 +648,11 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     # If the model produced FRONTEND tool calls, deliver them to the client and stop the turn.
     # The client will execute and post ToolMessage(s), after which the next run can resume.
     if has_frontend_tool_calls:
+        frontend_tools = [tc.get("name", "unknown") for tc in tool_calls if tc.get("name") not in backend_tool_names]
+        logger.info(f"[chatnode][end] === OUTPUT: ENDING WITH FRONTEND TOOLS ===")
+        # logger.info(f"[CHAT_NODE] Frontend tools: {frontend_tools}")
+        # logger.info(f"[CHAT_NODE] Waiting for client execution")
+        # logger.info(f"[CHAT_NODE] === END OUTPUT ===")
         return Command(
             goto=END,
             update={
@@ -616,6 +675,10 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         )
 
     if has_remaining and effective_plan_status != "completed":
+        current_step = effective_steps[current_step_index] if 0 <= current_step_index < len(effective_steps) else {}
+        step_title = current_step.get("title", "unknown")
+        logger.info(f"[chatnode][end] === OUTPUT: CONTINUING TO NEXT chatnode ===")
+
         # Auto-continue; include response only if it carries frontend tool calls
         return Command(
             goto="chat_node",
@@ -650,6 +713,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         plan_marked_completed = False
 
     if all_steps_completed and not plan_marked_completed:
+        logger.info(f"[chatnode][end] === OUTPUT: ALL STEPS ARE COMPLETED BUT PLAN IS NOT MARKED AS COMPLETED ===")
         return Command(
             goto="chat_node",
             update={
@@ -676,6 +740,8 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     # Only show chat messages when not actively in progress; always deliver frontend tool calls
     currently_in_progress = (plan_updates.get("planStatus", plan_status) == "in_progress")
     final_messages = [response] if (has_frontend_tool_calls or not currently_in_progress) else ([])
+    
+    logger.info(f"[chatnode][end] === ENDING ===")
     return Command(
         goto=END,
         update={
@@ -720,12 +786,12 @@ workflow.set_entry_point("chat_node")
 graph = workflow.compile()
 
 
-if __name__ == "__main__":
-    import asyncio
-    from langchain_core.messages import HumanMessage
+# if __name__ == "__main__":
+#     import asyncio
+#     from langchain_core.messages import HumanMessage
 
-    async def main():
-        out = await graph.ainvoke({"messages": [HumanMessage(content="start game")]})
-        print(out)
+#     async def main():
+#         out = await graph.ainvoke({"messages": [HumanMessage(content="start game")]})
+#         print(out)
 
-    asyncio.run(main())
+#     asyncio.run(main())
