@@ -9,7 +9,6 @@ running diverse game types from DSL descriptions.
 import sys
 import yaml
 import os
-import asyncio
 from dotenv import load_dotenv
 
 # Load environment variables with absolute path
@@ -92,21 +91,6 @@ def load_game_dsl() -> dict:
         return dsl_content
     except Exception as e:
         print(f"Failed to load DSL: {e}")
-        return {}
-
-async def load_game_dsl_async() -> dict:
-    """Async wrapper to load the game DSL without blocking the event loop."""
-    dsl_path = '/home/lee/canvas-with-langgraph-python/games/simple_choice_game.yaml'
-    def _read_yaml() -> dict:
-        try:
-            with open(dsl_path, 'r', encoding='utf-8') as f:
-                return yaml.safe_load(f) or {}
-        except Exception as e:
-            print(f"Failed to load DSL: {e}")
-            return {}
-    try:
-        return await asyncio.to_thread(_read_yaml)
-    except Exception:
         return {}
 
 # Debug environment variables loading
@@ -262,10 +246,10 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     current_step_index = state.get("currentStepIndex", -1)
     plan_status = state.get("planStatus", "")
     
-    # Load DSL if not already loaded (non-blocking)
-    dsl_content = state.get("dsl", {})
-    if not dsl_content:
-        dsl_content = await load_game_dsl_async()
+    # # Load DSL if not already loaded
+    # dsl_content = state.get("dsl", {})
+    # if not dsl_content:
+    dsl_content = load_game_dsl()
     game_schema = (
         "GAME COMPONENT SCHEMA (authoritative):\n"
         "- character_card.data:\n"
@@ -324,19 +308,8 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
 
     game_summary = _summarize_game_state(state)
 
-    # Include concise DSL summary to reduce trace payload
-    def _summarize_dsl(d: dict) -> str:
-        try:
-            phases = list((d.get('phases') or {}).keys())
-            start_phase = ((d.get('flow') or {}).get('start')) or ((d.get('initial_state') or {}).get('current_phase'))
-            return (
-                "DSL SUMMARY:\n"
-                f"- start: {start_phase}\n"
-                f"- phases: {', '.join(phases) if phases else '(none)'}\n"
-            )
-        except Exception:
-            return "DSL SUMMARY: (unavailable)\n"
-    dsl_info = _summarize_dsl(dsl_content) if dsl_content else "DSL SUMMARY: (none)\n"
+    # Include DSL in system message
+    dsl_info = f"LOADED GAME DSL:\n{dsl_content}\n" if dsl_content else "No DSL loaded.\n"
 
     system_message = SystemMessage(
         content=(
@@ -643,11 +616,13 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         )
 
     if has_remaining and effective_plan_status != "completed":
-        # End the turn to avoid graph recursion; client re-triggers next step on next activation
+        # Auto-continue; include response only if it carries frontend tool calls
         return Command(
-            goto=END,
+            goto="chat_node",
             update={
+                # At this point there should be no frontend tool calls; ensure we don't pass any unresolved ones back to the model
                 "messages": ([]),
+                # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "itemsCreated": state.get("itemsCreated", 0),
                 "lastAction": state.get("lastAction", ""),
@@ -655,11 +630,13 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 "currentStepIndex": state.get("currentStepIndex", -1),
                 "planStatus": state.get("planStatus", ""),
                 **plan_updates,
+                # persist game dm fields
                 "phase": state.get("phase", ""),
                 "events": state.get("events", []),
                 "characters": state.get("characters", []),
                 "__last_tool_guidance": (
-                    "Plan is in progress. Continue with the next step on the next activation."
+                    "Plan is in progress. Proceed to the next step automatically. "
+                    "Update the step status to in_progress, call necessary tools, and mark it completed when done."
                 ),
             }
         )
@@ -673,11 +650,11 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         plan_marked_completed = False
 
     if all_steps_completed and not plan_marked_completed:
-        # End the turn and instruct to call complete_plan on next activation
         return Command(
-            goto=END,
+            goto="chat_node",
             update={
-                "messages": ([]),
+                "messages": [response] if has_frontend_tool_calls else ([]),
+                # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "itemsCreated": state.get("itemsCreated", 0),
                 "lastAction": state.get("lastAction", ""),
@@ -685,11 +662,13 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 "currentStepIndex": state.get("currentStepIndex", -1),
                 "planStatus": state.get("planStatus", ""),
                 **plan_updates,
+                # persist game dm fields
                 "phase": state.get("phase", ""),
                 "events": state.get("events", []),
                 "characters": state.get("characters", []),
                 "__last_tool_guidance": (
-                    "All steps are completed. Call complete_plan on the next activation."
+                    "All steps are completed. Call complete_plan to mark the plan as finished, "
+                    "then present a concise summary of outcomes."
                 ),
             }
         )
