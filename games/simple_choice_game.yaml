@@ -1,0 +1,48 @@
+game:
+  name: "Simple Choice Game"
+  description: "A basic choice-based game to test the engine"
+
+flow:
+  start: introduction
+
+phases:
+  introduction:
+    description: "Introduce the world: show 'Introduction' phase indicator at the top and a large narrative text in the center (Welcome to the new world...); no player action required; automatically proceed to role_selection after 3000ms."
+    tools: [phase_indicator, text_display]
+    auto_next:
+      after_ms: 3000
+      to: role_selection
+
+  role_selection:
+    description: "Role selection: show 'Role Selection' phase indicator and the prompt 'Choose Your Path'; present two character cards, and two action buttons — 'Ronin' and 'Witch'; clicking triggers select_ronin/select_witch, sets player_choice, then proceeds to game_result."
+    tools: [phase_indicator, text_display, character_card(ronin), character_card(witch), action_button(select_ronin), action_button(select_witch)]
+    logic:
+      - when: event == select_ronin
+        set: { player_choice: ronin }
+        next: game_result
+      - when: event == select_witch
+        set: { player_choice: witch }
+        next: game_result
+
+  game_result:
+    description: "Result: show 'Result' phase indicator; based on player_choice, display result text (title, content, type) and a character card (role and status from mapping); this is the final phase and ends after display."
+    tools: [phase_indicator, text_display, character_card]
+    cases:
+      from: player_choice
+      ronin:
+        result_title: "Victory!"
+        result_content: "You chose Ronin! A wise choice leads you to victory!"
+        result_type: success
+        final_status: alive
+        character_description: "A wise wandering warrior"
+      witch:
+        result_title: "Defeat"
+        result_content: "You chose Witch! The path of magic is perilous, and you were defeated..."
+        result_type: error
+        final_status: dead
+        character_description: "A fallen magic user"
+    final: true
+
+initial_state:
+  player_choice: null
+  current_phase: introduction

@@ -17,10 +17,10 @@ export function NewItemMenu({ onSelect, align = "end", className }: { onSelect: 
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align={align} className="min-w-0 w-fit bg-background">
-        <DropdownMenuItem onClick={() => onSelect("project")}>Project</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSelect("entity")}>Entity</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSelect("note")}>Note</DropdownMenuItem>
-        <DropdownMenuItem onClick={() => onSelect("chart")}>Chart</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("character_card")}>Character Card</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("action_button")}>Action Button</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("phase_indicator")}>Phase Indicator</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("text_display")}>Text Display</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

@@ -1,14 +1,18 @@
-import { AgentState, CardType, ChartData, EntityData, ItemData, NoteData, ProjectData } from "@/lib/canvas/types";
+import { AgentState, CardType, ItemData } from "@/lib/canvas/types";
 
 export const initialState: AgentState = {
   items: [],
-  globalTitle: "",
-  globalDescription: "",
   lastAction: "",
   itemsCreated: 0,
   planSteps: [],
   currentStepIndex: -1,
   planStatus: "",
+  // Game Engine initial state
+  phase: "",
+  characters: [],
+  gameState: {},
+  events: [],
+  dsl: undefined,
 };
 
 export function isNonEmptyAgentState(value: unknown): value is AgentState {
@@ -19,27 +23,33 @@ export function isNonEmptyAgentState(value: unknown): value is AgentState {
 
 export function defaultDataFor(type: CardType): ItemData {
   switch (type) {
-    case "project":
+    case "character_card":
       return {
-        field1: "",
-        field2: "",
-        field3: "",
-        field4: [],
-        field4_id: 0,
-      } as ProjectData;
-    case "entity":
+        role: "",
+        position: "center",
+      };
+    case "action_button":
       return {
-        field1: "",
-        field2: "",
-        field3: [],
-        field3_options: ["Tag 1", "Tag 2", "Tag 3"],
-      } as EntityData;
-    case "note":
-      return { field1: "" } as NoteData;
-    case "chart":
-      return { field1: [], field1_id: 0 } as ChartData;
+        label: "Action",
+        action: "",
+        enabled: true,
+        position: "center",
+      };
+    case "phase_indicator":
+      return {
+        currentPhase: "",
+        position: "top-center",
+      };
+    case "text_display":
+      return {
+        content: "",
+        position: "center",
+      };
     default:
-      return { field1: "" } as NoteData;
+      return {
+        content: "",
+        position: "center",
+      };
   }
 }
 

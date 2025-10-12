@@ -13,11 +13,11 @@ import ShikiHighlighter from "react-shiki/web";
 import { motion, useScroll, useTransform, useMotionValueEvent } from "motion/react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
-import type { AgentState, PlanStep, Item, ItemData, ProjectData, EntityData, NoteData, ChartData, CardType } from "@/lib/canvas/types";
-import { initialState, isNonEmptyAgentState } from "@/lib/canvas/state";
-import { projectAddField4Item, projectSetField4ItemText, projectSetField4ItemDone, projectRemoveField4Item, chartAddField1Metric, chartSetField1Label, chartSetField1Value, chartRemoveField1Metric } from "@/lib/canvas/updates";
+import type { AgentState, PlanStep, Item, ItemData, CardType, GamePosition, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, ComponentSize } from "@/lib/canvas/types";
+import { GAME_GRID_STYLE } from "@/lib/canvas/types";
+import { initialState, isNonEmptyAgentState, defaultDataFor } from "@/lib/canvas/state";
+// import { projectAddField4Item, projectSetField4ItemText, projectSetField4ItemDone, projectRemoveField4Item, chartAddField1Metric, chartSetField1Label, chartSetField1Value, chartRemoveField1Metric } from "@/lib/canvas/updates";
 import useMediaQuery from "@/hooks/use-media-query";
-import ItemHeader from "@/components/canvas/ItemHeader";
 import NewItemMenu from "@/components/canvas/NewItemMenu";
 
 export default function CopilotKitPage() {
@@ -42,12 +42,8 @@ export default function CopilotKitPage() {
   const { scrollY } = useScroll({ container: scrollAreaRef });
   const headerScrollThreshold = 64;
   const headerOpacity = useTransform(scrollY, [0, headerScrollThreshold], [1, 0]);
-  const [headerDisabled, setHeaderDisabled] = useState<boolean>(false);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const descTextareaRef = useRef<HTMLInputElement | null>(null);
-  const lastCreationRef = useRef<{ type: CardType; name: string; id: string; ts: number } | null>(null);
-  const lastChecklistCreationRef = useRef<Record<string, { text: string; id: string; ts: number }>>({});
-  const lastMetricCreationRef = useRef<Record<string, { label: string; value: number | ""; id: string; ts: number }>>({});
   // Strong idempotency during plan execution: allow only one creation per type while plan runs
   const createdByTypeRef = useRef<Partial<Record<CardType, string>>>({});
   const prevPlanStatusRef = useRef<string | null>(null);
@@ -66,7 +62,6 @@ export default function CopilotKitPage() {
 
   useMotionValueEvent(scrollY, "change", (y) => {
     const disable = y >= headerScrollThreshold;
-    setHeaderDisabled(disable);
     if (disable) {
       titleInputRef.current?.blur();
       descTextareaRef.current?.blur();
@@ -142,10 +137,8 @@ export default function CopilotKitPage() {
 
   const getStatePreviewJSON = (s: AgentState | undefined): Record<string, unknown> => {
     const snapshot = (s ?? initialState) as AgentState;
-    const { globalTitle, globalDescription, items } = snapshot;
+    const { items } = snapshot;
     return {
-      globalTitle: globalTitle ?? initialState.globalTitle,
-      globalDescription: globalDescription ?? initialState.globalDescription,
       items: items ?? initialState.items,
     };
   };
@@ -156,44 +149,52 @@ export default function CopilotKitPage() {
   useCopilotAdditionalInstructions({
     instructions: (() => {
       const items = viewState.items ?? initialState.items;
-      const gTitle = viewState.globalTitle ?? "";
-      const gDesc = viewState.globalDescription ?? "";
+      const gTitle = "Game Engine";
+      const gDesc = "AI-Powered Game Engine";
       const summary = items
         .slice(0, 5)
         .map((p: Item) => `id=${p.id} • name=${p.name} • type=${p.type}`)
         .join("\n");
       const fieldSchema = [
-        "FIELD SCHEMA (authoritative):",
-        "- project.data:",
-        "  - field1: string (text)",
-        "  - field2: string (select: 'Option A' | 'Option B' | 'Option C'; empty string means unset)",
-        "  - field3: string (date 'YYYY-MM-DD')",
-        "  - field4: ChecklistItem[] where ChecklistItem={id: string, text: string, done: boolean, proposed: boolean}",
-        "- entity.data:",
-        "  - field1: string",
-        "  - field2: string (select: 'Option A' | 'Option B' | 'Option C'; empty string means unset)",
-        "  - field3: string[] (selected tags; subset of field3_options)",
-        "  - field3_options: string[] (available tags)",
-        "- note.data:",
-        "  - field1: string (textarea)",
-        "- chart.data:",
-        "  - field1: Array<{id: string, label: string, value: number | ''}> with value in [0..100] or ''",
+        "GAME COMPONENT SCHEMA (authoritative):",
+        "- character_card.data:",
+        "  - role: string (character role e.g., 'werewolf', 'seer', 'villager')",
+        "  - characterName: string (display name)",
+        "  - status: string (select: 'alive' | 'dead' | 'unknown'; empty string means unset)",
+        "  - position: string (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')",
+        "  - size: string (select: 'small' | 'medium' | 'large'; default: 'medium')",
+        "  - description: string (optional character description)",
+        "- action_button.data:",
+        "  - label: string (button text)",
+        "  - action: string (action identifier when clicked)",
+        "  - enabled: boolean (whether button is clickable)",
+        "  - variant: string (select: 'primary' | 'secondary' | 'danger'; default: 'primary')",
+        "  - position: string (grid position; same options as character_card)",
+        "  - size: string (component size; same options as character_card)",
+        "- phase_indicator.data:",
+        "  - currentPhase: string (current game phase)",
+        "  - description: string (optional phase description)",
+        "  - timeRemaining: number (optional seconds remaining in phase)",
+        "  - position: string (grid position; same options as character_card)",
+        "  - size: string (component size; same options as character_card)",
+        "- text_display.data:",
+        "  - content: string (main text content)",
+        "  - title: string (optional title text)",
+        "  - type: string (select: 'info' | 'warning' | 'error' | 'success'; default: 'info')",
+        "  - position: string (grid position; same options as character_card)",
+        "  - size: string (component size; same options as character_card)",
+        "- game state:",
+        "  - phase: string (current DSL phase e.g., 'introduction', 'role_selection', 'game_result')",
+        "  - dsl: object (loaded game definition with phases, components, flow)",
+        "  - events: Array<{type: string, payload: any, timestamp: number}> (game events)",
       ].join("\n");
       const toolUsageHints = [
-        "TOOL USAGE HINTS:",
-        "- Prefer calling specific actions: setProjectField1, setProjectField2, setProjectField3, addProjectChecklistItem, setProjectChecklistItem, removeProjectChecklistItem.",
-        "- field2 values: 'Option A' | 'Option B' | 'Option C' | '' (empty clears).",
-        "- field3 accepts natural dates (e.g., 'tomorrow', '2025-01-30'); it will be normalized to YYYY-MM-DD.",
-        "- Checklist edits accept either the generated id (e.g., '001') or a numeric index (e.g., '1', 1-based).",
-        "- For charts, values are clamped to [0..100]; use clearChartField1Value to clear an existing metric value.",
-        "- Card subtitle/description keywords (description, overview, summary, caption, blurb) map to setItemSubtitleOrDescription. Never write these to data.field1 for non-note items.",
+        "GAME TOOL USAGE HINTS:",
         "LOOP CONTROL: When asked to 'add a couple' items, add at most 2 and stop. Avoid repeated calls to the same mutating tool in one turn.",
-        "RANDOMIZATION: If the user specifically asks for random/mock values, you MAY generate and set them right away using the tools (do not block for more details).",
         "VERIFICATION: After tools run, re-read the latest state and confirm what actually changed.",
       ].join("\n");
       return [
         "ALWAYS ANSWER FROM SHARED STATE (GROUND TRUTH).",
-        "If a command does not specify which item to change, ask the user to clarify before proceeding.",
         `Global Title: ${gTitle || "(none)"}`,
         `Global Description: ${gDesc || "(none)"}`,
         "Items (sample):",
@@ -276,10 +277,10 @@ export default function CopilotKitPage() {
     },
     render: ({ event, resolve }) => {
       const options: { id: CardType; label: string }[] = [
-        { id: "project", label: "Project" },
-        { id: "entity", label: "Entity" },
-        { id: "note", label: "Note" },
-        { id: "chart", label: "Chart" },
+        { id: "character_card", label: "Character Card" },
+        { id: "action_button", label: "Action Button" },
+        { id: "phase_indicator", label: "Phase Indicator" },
+        { id: "text_display", label: "Text Display" },
       ];
       let selected: CardType | "" = "";
       return (
@@ -348,48 +349,18 @@ export default function CopilotKitPage() {
 
   // Checklist item local helper removed; Copilot actions handle checklist CRUD
 
-  const toggleTag = useCallback((itemId: string, tag: string) => {
-    updateItemData(itemId, (prev) => {
-      const anyPrev = prev as { field3?: string[] };
-      if (Array.isArray(anyPrev.field3)) {
-        const selected = new Set<string>(anyPrev.field3 ?? []);
-        if (selected.has(tag)) selected.delete(tag); else selected.add(tag);
-        return { ...anyPrev, field3: Array.from(selected) } as ItemData;
-      }
-      return prev;
-    });
-  }, [updateItemData]);
+
 
   // Remove checklist item local helper removed; use Copilot action instead
 
-  // Helper to generate default data by type
-  const defaultDataFor = useCallback((type: CardType): ItemData => {
-    switch (type) {
-      case "project":
-        return {
-          field1: "",
-          field2: "",
-          field3: "",
-          field4: [],
-          field4_id: 0,
-        } as ProjectData;
-      case "entity":
-        return {
-          field1: "",
-          field2: "",
-          field3: [],
-          field3_options: ["Tag 1", "Tag 2", "Tag 3"],
-        } as EntityData;
-      case "note":
-        return { field1: "" } as NoteData;
-      case "chart":
-        return { field1: [], field1_id: 0 } as ChartData;
-      default:
-        return { content: "" } as NoteData;
-    }
+  // Dummy function for game engine (no tags needed)
+  const toggleTag = useCallback(() => {
+    // Game components don't use tags, so this is a no-op
   }, []);
 
-  const addItem = useCallback((type: CardType, name?: string) => {
+  // Helper to generate default data by type
+
+  const addItem = useCallback((type: CardType, name?: string, customData?: ItemData) => {
     const t: CardType = type;
     let createdId = "";
     setState((prev) => {
@@ -408,7 +379,7 @@ export default function CopilotKitPage() {
         type: t,
         name: name && name.trim() ? name.trim() : "",
         subtitle: "",
-        data: defaultDataFor(t),
+        data: customData || defaultDataFor(t),
       };
       const nextItems = [...items, item];
       // clamp to one per type when plan is active
@@ -427,7 +398,7 @@ export default function CopilotKitPage() {
       return { ...base, items: deduped, itemsCreated: nextNumber, lastAction: `created:${createdId}` } as AgentState;
     });
     return createdId;
-  }, [defaultDataFor, setState]);
+  }, [setState]);
 
 
 
@@ -485,474 +456,180 @@ export default function CopilotKitPage() {
   });
 
 
-  // Note-specific field updates (field numbering)
-  useCopilotAction({
-    name: "setNoteField1",
-    description: "Update note content (note.data.field1).",
-    available: "remote",
-    parameters: [
-      { name: "value", type: "string", required: true, description: "New content for note.data.field1." },
-      { name: "itemId", type: "string", required: true, description: "Target item id (note)." },
-    ],
-    handler: ({ value, itemId }: { value: string; itemId: string }) => {
-      updateItemData(itemId, (prev) => {
-        const nd = prev as NoteData;
-        if (Object.prototype.hasOwnProperty.call(nd, "field1")) {
-          return { ...(nd as NoteData), field1: value } as NoteData;
-        }
-        return prev;
-      });
-    },
-  });
 
   useCopilotAction({
-    name: "appendNoteField1",
-    description: "Append text to note content (note.data.field1).",
+    name: "createCharacterCard",
+    description: "Create a character card for the game.",
     available: "remote",
     parameters: [
-      { name: "value", type: "string", required: true, description: "Text to append to note.data.field1." },
-      { name: "itemId", type: "string", required: true, description: "Target item id (note)." },
-      { name: "withNewline", type: "boolean", required: false, description: "If true, prefix with a newline." },
+      { name: "name", type: "string", required: true, description: "Item name"},
+      { name: "role", type: "string", required: true, description: "Character role (e.g., werewolf, seer, villager)" },
+      { name: "characterName", type: "string", required: true, description: "Character name (for display)" },
+      { name: "status", type: "string", required: true, description: "Character status: alive, dead, or unknown" },
+      { name: "position", type: "string", required: true, description: "Grid position: top-left, top-center, top-right, middle-left, center, middle-right, bottom-left, bottom-center, bottom-right" },
+      { name: "size", type: "string", required: false, description: "Card size: small, medium, or large (default: medium)" },
+      { name: "description", type: "string", required: false, description: "Optional character description" },
     ],
-    handler: ({ value, itemId, withNewline }: { value: string; itemId: string; withNewline?: boolean }) => {
-      updateItemData(itemId, (prev) => {
-        const nd = prev as NoteData;
-        if (Object.prototype.hasOwnProperty.call(nd, "field1")) {
-          const existing = (nd.field1 ?? "");
-          const next = existing + (withNewline ? "\n" : "") + value;
-          return { ...(nd as NoteData), field1: next } as NoteData;
-        }
-        return prev;
-      });
-    },
-  });
-
-  useCopilotAction({
-    name: "clearNoteField1",
-    description: "Clear note content (note.data.field1).",
-    available: "remote",
-    parameters: [
-      { name: "itemId", type: "string", required: true, description: "Target item id (note)." },
-    ],
-    handler: ({ itemId }: { itemId: string }) => {
-      updateItemData(itemId, (prev) => {
-        const nd = prev as NoteData;
-        if (Object.prototype.hasOwnProperty.call(nd, "field1")) {
-          return { ...(nd as NoteData), field1: "" } as NoteData;
-        }
-        return prev;
-      });
-    },
-  });
-
-  useCopilotAction({
-    name: "setProjectField1",
-    description: "Update project field1 (text).",
-    available: "remote",
-    parameters: [
-      { name: "value", type: "string", required: true, description: "New value for field1." },
-      { name: "itemId", type: "string", required: true, description: "Target item id." },
-    ],
-    handler: ({ value, itemId }: { value: string; itemId: string }) => {
-      const safeValue = String((value as unknown as string) ?? "");
-      updateItemData(itemId, (prev) => {
-        const anyPrev = prev as { field1?: string };
-        if (typeof anyPrev.field1 === "string") {
-          return { ...anyPrev, field1: safeValue } as ItemData;
-        }
-        return prev;
-      });
-    },
-  });
-
-  // Project-specific field updates
-  useCopilotAction({
-    name: "setProjectField2",
-    description: "Update project field2 (select).",
-    available: "remote",
-    parameters: [
-      { name: "value", type: "string", required: true, description: "New value for field2." },
-      { name: "itemId", type: "string", required: true, description: "Target item id." },
-    ],
-    handler: ({ value, itemId }: { value: string; itemId: string }) => {
-      const safeValue = String((value as unknown as string) ?? "");
-      updateItemData(itemId, (prev) => {
-        const anyPrev = prev as { field2?: string };
-        if (typeof anyPrev.field2 === "string") {
-          return { ...anyPrev, field2: safeValue } as ItemData;
-        }
-        return prev;
-      });
-    },
-  });
-
-  useCopilotAction({
-    name: "setProjectField3",
-    description: "Update project field3 (date, YYYY-MM-DD).",
-    available: "remote",
-    parameters: [
-      { name: "date", type: "string", required: true, description: "Date in YYYY-MM-DD format." },
-      { name: "itemId", type: "string", required: true, description: "Target item id." },
-    ],
-    handler: (args: { date?: string; itemId: string } & Record<string, unknown>) => {
-      const itemId = String(args.itemId);
-      const dictArgs = args as Record<string, unknown>;
-      const rawInput = (dictArgs["date"]) ?? (dictArgs["value"]) ?? (dictArgs["val"]) ?? (dictArgs["text"]);
-      const normalizeDate = (input: unknown): string | null => {
-        if (input == null) return null;
-        if (input instanceof Date && !isNaN(input.getTime())) {
-          const yyyy = input.getUTCFullYear();
-          const mm = String(input.getUTCMonth() + 1).padStart(2, "0");
-          const dd = String(input.getUTCDate()).padStart(2, "0");
-          return `${yyyy}-${mm}-${dd}`;
-        }
-        const asString = String(input);
-        // Already in YYYY-MM-DD
-        if (/^\d{4}-\d{2}-\d{2}$/.test(asString)) return asString;
-        const parsed = new Date(asString);
-        if (!isNaN(parsed.getTime())) {
-          const yyyy = parsed.getUTCFullYear();
-          const mm = String(parsed.getUTCMonth() + 1).padStart(2, "0");
-          const dd = String(parsed.getUTCDate()).padStart(2, "0");
-          return `${yyyy}-${mm}-${dd}`;
-        }
-        return null;
-      };
-      const normalized = normalizeDate(rawInput);
-      if (!normalized) return;
-      updateItemData(itemId, (prev) => {
-        const anyPrev = prev as { field3?: string };
-        if (typeof anyPrev.field3 === "string") {
-          return { ...anyPrev, field3: normalized } as ItemData;
-        }
-        return prev;
-      });
-    },
-  });
-
-  // Clear project field3 (date)
-  useCopilotAction({
-    name: "clearProjectField3",
-    description: "Clear project field3 (date).",
-    available: "remote",
-    parameters: [
-      { name: "itemId", type: "string", required: true, description: "Target item id." },
-    ],
-    handler: ({ itemId }: { itemId: string }) => {
-      updateItemData(itemId, (prev) => {
-        const anyPrev = prev as { field3?: string };
-        if (typeof anyPrev.field3 === "string") {
-          return { ...anyPrev, field3: "" } as ItemData;
-        }
-        return prev;
-      });
-    },
-  });
-
-  // Project field4 (checklist) CRUD
-  useCopilotAction({
-    name: "addProjectChecklistItem",
-    description: "Add a new checklist item to a project.",
-    available: "remote",
-    parameters: [
-      { name: "itemId", type: "string", required: true, description: "Target item id (project)." },
-      { name: "text", type: "string", required: false, description: "Initial checklist text (optional)." },
-    ],
-    handler: ({ itemId, text }: { itemId: string; text?: string }) => {
-      const norm = (text ?? "").trim();
-      // 1) If a checklist item with same text exists, return its id
-      const project = (viewState.items ?? initialState.items).find((it) => it.id === itemId);
-      if (project && project.type === "project") {
-        const list = ((project.data as ProjectData).field4 ?? []);
-        const dup = norm ? list.find((c) => (c.text ?? "").trim() === norm) : undefined;
-        if (dup) return dup.id;
-      }
-      // 2) Per-project throttle to avoid rapid duplicates
-      const now = Date.now();
-      const key = `${itemId}`;
-      const recent = lastChecklistCreationRef.current[key];
-      if (recent && recent.text === norm && now - recent.ts < 800) {
-        return recent.id;
-      }
-      let createdId = "";
-      updateItemData(itemId, (prev) => {
-        const { next, createdId: id } = projectAddField4Item(prev as ProjectData, text);
-        createdId = id;
-        return next;
-      });
-      lastChecklistCreationRef.current[key] = { text: norm, id: createdId, ts: now };
-      return createdId;
-    },
-  });
-
-  useCopilotAction({
-    name: "setProjectChecklistItem",
-    description: "Update a project's checklist item text and/or done state.",
-    available: "remote",
-    parameters: [
-      { name: "itemId", type: "string", required: true, description: "Target item id (project)." },
-      { name: "checklistItemId", type: "string", required: true, description: "Checklist item id." },
-      { name: "text", type: "string", required: false, description: "New text (optional)." },
-      { name: "done", type: "boolean", required: false, description: "Done status (optional)." },
-    ],
-    handler: (args) => {
-      const itemId = String(args.itemId ?? "");
-      const target = args.checklistItemId ?? args.itemId;
-      let targetId = target != null ? String(target) : "";
-      const maybeDone = args.done;
-      const text: string | undefined = args.text != null ? String(args.text) : undefined;
-      const toBool = (v: unknown): boolean | undefined => {
-        if (typeof v === "boolean") return v;
-        if (typeof v === "string") {
-          const s = v.trim().toLowerCase();
-          if (s === "true") return true;
-          if (s === "false") return false;
-        }
-        return undefined;
-      };
-      const done = toBool(maybeDone);
-      updateItemData(itemId, (prev) => {
-        let next = prev as ProjectData;
-        const list = (next.field4 ?? []);
-        // If a plain numeric was provided, allow using it as index (0- or 1-based)
-        if (!list.some((c) => c.id === targetId) && /^\d+$/.test(targetId)) {
-          const n = parseInt(targetId, 10);
-          let idx = -1;
-          if (n >= 0 && n < list.length) idx = n; // 0-based
-          else if (n > 0 && n - 1 < list.length) idx = n - 1; // 1-based
-          if (idx >= 0) targetId = list[idx].id;
-        }
-        if (typeof text === "string") next = projectSetField4ItemText(next, targetId, text);
-        if (typeof done === "boolean") next = projectSetField4ItemDone(next, targetId, done);
-        return next;
-      });
-    },
-  });
-
-  useCopilotAction({
-    name: "removeProjectChecklistItem",
-    description: "Remove a checklist item from a project by id.",
-    available: "remote",
-    parameters: [
-      { name: "itemId", type: "string", required: true, description: "Target item id (project)." },
-      { name: "checklistItemId", type: "string", required: true, description: "Checklist item id to remove." },
-    ],
-    handler: ({ itemId, checklistItemId }: { itemId: string; checklistItemId: string }) => {
-      updateItemData(itemId, (prev) => projectRemoveField4Item(prev as ProjectData, checklistItemId));
-    },
-  });
-
-  // Entity field updates and field3 (tags)
-  useCopilotAction({
-    name: "setEntityField1",
-    description: "Update entity field1 (text).",
-    available: "remote",
-    parameters: [
-      { name: "value", type: "string", required: true, description: "New value for field1." },
-      { name: "itemId", type: "string", required: true, description: "Target item id (entity)." },
-    ],
-    handler: ({ value, itemId }: { value: string; itemId: string }) => {
-      updateItemData(itemId, (prev) => {
-        const anyPrev = prev;
-        if (typeof anyPrev.field1 === "string") {
-          return { ...anyPrev, field1: value } as ItemData;
-        }
-        return prev;
-      });
-    },
-  });
-
-  useCopilotAction({
-    name: "setEntityField2",
-    description: "Update entity field2 (select).",
-    available: "remote",
-    parameters: [
-      { name: "value", type: "string", required: true, description: "New value for field2." },
-      { name: "itemId", type: "string", required: true, description: "Target item id (entity)." },
-    ],
-    handler: ({ value, itemId }: { value: string; itemId: string }) => {
-      updateItemData(itemId, (prev) => {
-        const anyPrev = prev as { field2?: string };
-        if (typeof anyPrev.field2 === "string") {
-          return { ...anyPrev, field2: value } as ItemData;
-        }
-        return prev;
-      });
-    },
-  });
-
-  useCopilotAction({
-    name: "addEntityField3",
-    description: "Add a tag to entity field3 (tags) if not present.",
-    available: "remote",
-    parameters: [
-      { name: "tag", type: "string", required: true, description: "Tag to add." },
-      { name: "itemId", type: "string", required: true, description: "Target item id (entity)." },
-    ],
-    handler: ({ tag, itemId }: { tag: string; itemId: string }) => {
-      updateItemData(itemId, (prev) => {
-        const e = prev as EntityData;
-        const current = new Set<string>((e.field3 ?? []) as string[]);
-        current.add(tag);
-        return { ...e, field3: Array.from(current) } as EntityData;
-      });
-    },
-  });
-
-  useCopilotAction({
-    name: "removeEntityField3",
-    description: "Remove a tag from entity field3 (tags) if present.",
-    available: "remote",
-    parameters: [
-      { name: "tag", type: "string", required: true, description: "Tag to remove." },
-      { name: "itemId", type: "string", required: true, description: "Target item id (entity)." },
-    ],
-    handler: ({ tag, itemId }: { tag: string; itemId: string }) => {
-      updateItemData(itemId, (prev) => {
-        const e = prev as EntityData;
-        return { ...e, field3: ((e.field3 ?? []) as string[]).filter((t) => t !== tag) } as EntityData;
-      });
-    },
-  });
-
-  // Chart field1 (metrics) CRUD
-  useCopilotAction({
-    name: "addChartField1",
-    description: "Add a new metric (field1 entries).",
-    available: "remote",
-    parameters: [
-      { name: "itemId", type: "string", required: true, description: "Target item id (chart)." },
-      { name: "label", type: "string", required: false, description: "Metric label (optional)." },
-      { name: "value", type: "number", required: false, description: "Metric value 0..100 (optional)." },
-    ],
-    handler: ({ itemId, label, value }: { itemId: string; label?: string; value?: number }) => {
-      const normLabel = (label ?? "").trim();
-      // 1) If a metric with same label exists, return its id
-      const item = (viewState.items ?? initialState.items).find((it) => it.id === itemId);
-      if (item && item.type === "chart") {
-        const list = ((item.data as ChartData).field1 ?? []);
-        const dup = normLabel ? list.find((m) => (m.label ?? "").trim() === normLabel) : undefined;
-        if (dup) return dup.id;
-      }
-      // 2) Per-chart throttle to avoid rapid duplicates
-      const now = Date.now();
-      const key = `${itemId}`;
-      const recent = lastMetricCreationRef.current[key];
-      const valKey: number | "" = typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : "";
-      if (recent && recent.label === normLabel && recent.value === valKey && now - recent.ts < 800) {
-        return recent.id;
-      }
-      let createdId = "";
-      updateItemData(itemId, (prev) => {
-        const { next, createdId: id } = chartAddField1Metric(prev as ChartData, label, value);
-        createdId = id;
-        return next;
-      });
-      lastMetricCreationRef.current[key] = { label: normLabel, value: valKey, id: createdId, ts: now };
-      return createdId;
-    },
-  });
-
-  useCopilotAction({
-    name: "setChartField1Label",
-    description: "Update chart field1 entry label by index.",
-    available: "remote",
-    parameters: [
-      { name: "itemId", type: "string", required: true, description: "Target item id (chart)." },
-      { name: "index", type: "number", required: true, description: "Metric index (0-based)." },
-      { name: "label", type: "string", required: true, description: "New metric label." },
-    ],
-    handler: ({ itemId, index, label }: { itemId: string; index: number; label: string }) => {
-      updateItemData(itemId, (prev) => chartSetField1Label(prev as ChartData, index, label));
-    },
-  });
-
-  useCopilotAction({
-    name: "setChartField1Value",
-    description: "Update chart field1 entry value by index (0..100).",
-    available: "remote",
-    parameters: [
-      { name: "itemId", type: "string", required: true, description: "Target item id (chart)." },
-      { name: "index", type: "number", required: true, description: "Metric index (0-based)." },
-      { name: "value", type: "number", required: true, description: "Metric value 0..100." },
-    ],
-    handler: ({ itemId, index, value }: { itemId: string; index: number; value: number }) => {
-      updateItemData(itemId, (prev) => chartSetField1Value(prev as ChartData, index, value));
-    },
-  });
-
-  // Clear chart metric value by index
-  useCopilotAction({
-    name: "clearChartField1Value",
-    description: "Clear chart field1 entry value by index (sets to empty).",
-    available: "remote",
-    parameters: [
-      { name: "itemId", type: "string", required: true, description: "Target item id (chart)." },
-      { name: "index", type: "number", required: true, description: "Metric index (0-based)." },
-    ],
-    handler: ({ itemId, index }: { itemId: string; index: number }) => {
-      updateItemData(itemId, (prev) => chartSetField1Value(prev as ChartData, index, ""));
-    },
-  });
-
-  useCopilotAction({
-    name: "removeChartField1",
-    description: "Remove a chart field1 entry by index.",
-    available: "remote",
-    parameters: [
-      { name: "itemId", type: "string", required: true, description: "Target item id (chart)." },
-      { name: "index", type: "number", required: true, description: "Metric index (0-based)." },
-    ],
-    handler: ({ itemId, index }: { itemId: string; index: number }) => {
-      updateItemData(itemId, (prev) => chartRemoveField1Metric(prev as ChartData, index));
-    },
-  });
-
-  useCopilotAction({
-    name: "createItem",
-    description: "Create a new item.",
-    available: "remote",
-    parameters: [
-      { name: "type", type: "string", required: true, description: "One of: project, entity, note, chart." },
-      { name: "name", type: "string", required: false, description: "Optional item name." },
-    ],
-    handler: ({ type, name }: { type: string; name?: string }) => {
-      const t = (type as CardType);
+    handler: ({ name, role, position, size, description }: { 
+      name: string;
+      role: string; 
+      characterName: string; 
+      status: string; 
+      position: string; 
+      size?: string; 
+      description?: string; 
+    }) => {
       const normalized = (name ?? "").trim();
-      const planStatus = String(viewState?.planStatus ?? "");
-
-      // Per-plan strict idempotency: during an active plan, only one creation per type
-      if (planStatus === "in_progress") {
-        // If any item of this type already exists, return its id instead of creating another
-        const existingOfType = (viewState.items ?? initialState.items).find((it) => it.type === t);
-        if (existingOfType) {
-          createdByTypeRef.current[t] = existingOfType.id;
-          return existingOfType.id;
-        }
-        const existingCreatedId = createdByTypeRef.current[t];
-        if (existingCreatedId) {
-          return existingCreatedId;
-        }
-      }
-      // 1) Name-based idempotency: if an item with same type+name exists, return it
+      
+      // Name-based idempotency: if an item with same type+name exists, return it
       if (normalized) {
-        const existing = (viewState.items ?? initialState.items).find((it) => it.type === t && (it.name ?? "").trim() === normalized);
+        const existing = (viewState.items ?? initialState.items).find((it) => 
+          it.type === "character_card" && (it.name ?? "").trim() === normalized
+        );
         if (existing) {
           return existing.id;
         }
       }
-      // 2) Per-run throttle: avoid duplicate creations within a short window for identical type+name
-      const now = Date.now();
-      const recent = lastCreationRef.current;
-      if (recent && recent.type === t && (recent.name ?? "") === normalized && now - recent.ts < 5000) {
-        return recent.id;
+      
+      const data: CharacterCardData = {
+        role,
+        position: position as GamePosition,
+        size: size as ComponentSize,
+        description
+      };
+      return addItem("character_card", name, data);
+    },
+  });
+
+  useCopilotAction({
+    name: "createActionButton",
+    description: "Create an action button for player interactions.",
+    available: "remote",
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "label", type: "string", required: true, description: "Button text" },
+      { name: "action", type: "string", required: true, description: "Action identifier when clicked" },
+      { name: "enabled", type: "boolean", required: true, description: "Whether button is clickable" },
+      { name: "position", type: "string", required: true, description: "Grid position" },
+      { name: "size", type: "string", required: false, description: "Button size: small, medium, or large" },
+      { name: "variant", type: "string", required: false, description: "Button style: primary, secondary, or danger" },
+    ],
+    handler: ({ name, label, action, enabled, position, size, variant }: {
+      name: string;
+      label: string;
+      action: string;
+      enabled: boolean;
+      position: string;
+      size?: string;
+      variant?: string;
+    }) => {
+      const normalized = (name ?? "").trim();
+      
+      // Name-based idempotency
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => 
+          it.type === "action_button" && (it.name ?? "").trim() === normalized
+        );
+        if (existing) {
+          return existing.id;
+        }
       }
-      const id = addItem(t, name);
-      lastCreationRef.current = { type: t, name: normalized, id, ts: now };
-      if (planStatus === "in_progress") {
-        createdByTypeRef.current[t] = id;
+      
+      const data: ActionButtonData = {
+        label,
+        action,
+        enabled,
+        position: position as GamePosition,
+        size: size as ComponentSize,
+        variant: variant as "primary" | "secondary" | "danger"
+      };
+      return addItem("action_button", name, data);
+    },
+  });
+
+  useCopilotAction({
+    name: "createPhaseIndicator",
+    description: "Create a phase indicator to show current game phase.",
+    available: "remote",
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "currentPhase", type: "string", required: true, description: "Current game phase" },
+      { name: "position", type: "string", required: true, description: "Grid position" },
+      { name: "size", type: "string", required: false, description: "Indicator size" },
+      { name: "description", type: "string", required: false, description: "Optional phase description" },
+      { name: "timeRemaining", type: "number", required: false, description: "Seconds remaining in phase" },
+    ],
+    handler: ({ name, currentPhase, position, size, description, timeRemaining }: {
+      name: string;
+      currentPhase: string;
+      position: string;
+      size?: string;
+      description?: string;
+      timeRemaining?: number;
+    }) => {
+      const normalized = (name ?? "").trim();
+      
+      // Name-based idempotency
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => 
+          it.type === "phase_indicator" && (it.name ?? "").trim() === normalized
+        );
+        if (existing) {
+          return existing.id;
+        }
       }
-      return id;
+      
+      const data: PhaseIndicatorData = {
+        currentPhase,
+        position: position as GamePosition,
+        size: size as ComponentSize,
+        description,
+        timeRemaining
+      };
+      return addItem("phase_indicator", name, data);
+    },
+  });
+
+  useCopilotAction({
+    name: "createTextDisplay",
+    description: "Create a text display for game information.",
+    available: "remote",
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "content", type: "string", required: true, description: "Main text content" },
+      { name: "position", type: "string", required: true, description: "Grid position" },
+      { name: "size", type: "string", required: false, description: "Display size" },
+      { name: "title", type: "string", required: false, description: "Optional title text" },
+      { name: "type", type: "string", required: false, description: "Display type: info, warning, error, or success" },
+    ],
+    handler: ({ name, content, position, size, title, type }: {
+      name: string;
+      content: string;
+      position: string;
+      size?: string;
+      title?: string;
+      type?: string;
+    }) => {
+      const normalized = (name ?? "").trim();
+      
+      // Name-based idempotency
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => 
+          it.type === "text_display" && (it.name ?? "").trim() === normalized
+        );
+        if (existing) {
+          return existing.id;
+        }
+      }
+      
+      const data: TextDisplayData = {
+        content,
+        position: position as GamePosition,
+        size: size as ComponentSize,
+        title,
+        type: type as "info" | "warning" | "error" | "success"
+      };
+      return addItem("text_display", name, data);
     },
   });
 
@@ -1073,26 +750,14 @@ export default function CopilotKitPage() {
               <CopilotChat
                 className="flex-1 overflow-auto w-full"
                 labels={{
-                  title: "Agent",
+                  title: "Game Master",
                   initial:
-                    "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
+                    "🎲 Welcome to the AI Game Engine! Click 'Start' to begin a game, or I'll broadcast updates during gameplay.",
                 }}
                 suggestions={[
                   {
-                    title: "Add a Project",
-                    message: "Create a new project.",
-                  },
-                  {
-                    title: "Add an Entity",
-                    message: "Create a new entity.",
-                  },
-                  {
-                    title: "Add a Note",
-                    message: "Create a new note.",
-                  },
-                  {
-                    title: "Add a Chart",
-                    message: "Create a new chart.",
+                    title: "Start",
+                    message: "Start game.",
                   },
                 ]}
               />
@@ -1109,26 +774,12 @@ export default function CopilotKitPage() {
               {/* Global Title & Description (hidden in JSON view) */}
               {!showJsonView && (
                 <motion.div style={{ opacity: headerOpacity }} className="sticky top-0 mb-6">
-                  <input
-                    ref={titleInputRef}
-                    disabled={headerDisabled}
-                    value={viewState?.globalTitle ?? initialState.globalTitle}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setState((prev) => ({ ...(prev ?? initialState), globalTitle: e.target.value }))
-                    }
-                    placeholder="Canvas title..."
-                    className={cn(titleClasses, "text-2xl font-semibold")}
-                  />
-                  <input
-                    ref={descTextareaRef}
-                    disabled={headerDisabled}
-                    value={viewState?.globalDescription ?? initialState.globalDescription}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setState((prev) => ({ ...(prev ?? initialState), globalDescription: e.target.value }))
-                    }
-                    placeholder="Canvas description..."
-                    className={cn(titleClasses, "mt-2 text-sm leading-6 resize-none overflow-hidden")}
-                  />
+                  <div className={cn(titleClasses, "text-2xl font-semibold")}>
+                    Game Engine
+                  </div>
+                  <div className={cn(titleClasses, "mt-2 text-sm leading-6")}>
+                    AI-Powered Game Engine
+                  </div>
                 </motion.div>
               )}
               
@@ -1153,31 +804,37 @@ export default function CopilotKitPage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="grid gap-6 lg:grid-cols-2 pb-20">
-                      {(viewState.items ?? []).map((item) => (
-                        <article key={item.id} className="relative rounded-2xl border p-5 shadow-sm transition-colors ease-out bg-card hover:border-accent/40 focus-within:border-accent/60">
-                          <button
-                            type="button"
-                            aria-label="Delete card"
-                            className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-card text-gray-400 hover:bg-accent/10 hover:text-accent transition-colors"
-                            onClick={() => deleteItem(item.id)}
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                          <ItemHeader
-                            id={item.id}
-                            name={item.name}
-                            subtitle={item.subtitle}
-                            description={""}
-                            onNameChange={(v) => updateItem(item.id, { name: v })}
-                            onSubtitleChange={(v) => updateItem(item.id, { subtitle: v })}
-                          />
+                    <div style={GAME_GRID_STYLE} className="pb-20">
+                      {/* Render all 9 region containers */}
+                      {(["top-left", "top-center", "top-right", "middle-left", "center", "middle-right", "bottom-left", "bottom-center", "bottom-right"] as GamePosition[]).map(position => {
+                        const itemsInRegion = (viewState.items ?? []).filter(item => {
+                          const itemData = item.data as ItemData;
+                          return (itemData as { position?: GamePosition })?.position === position;
+                        });
 
-                          <div className="mt-6">
-                            <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={(tag) => toggleTag(item.id, tag)} />
+                        return (
+                          <div
+                            key={position}
+                            style={{ gridArea: position }}
+                            className={`flex flex-col items-center justify-center gap-4 p-2 rounded-lg min-h-[100px] ${itemsInRegion.length === 0 ? 'border border-dashed border-gray-200' : ''}`}
+                          >
+                            {itemsInRegion.map((item) => (
+                              <div key={item.id} className="relative group">
+                                <button
+                                  type="button"
+                                  aria-label="Delete card"
+                                  className="absolute -right-2 -top-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-opacity"
+                                  onClick={() => deleteItem(item.id)}
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                                
+                                <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={() => toggleTag()} />
+                              </div>
+                            ))}
                           </div>
-                        </article>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1222,26 +879,14 @@ export default function CopilotKitPage() {
           <CopilotPopup
             Header={PopupHeader}
             labels={{
-              title: "Agent",
+              title: "Game Master", 
               initial:
-                "👋 Share a brief or ask to extract fields. Changes will sync with the canvas in real time.",
+                "🎲 Welcome to the AI Game Engine! Click 'Start' to begin a game, or I'll broadcast updates during gameplay.",
             }}
             suggestions={[
               {
-                title: "Add a Project",
-                message: "Create a new project.",
-              },
-              {
-                title: "Add an Entity",
-                message: "Create a new entity.",
-              },
-              {
-                title: "Add a Note",
-                message: "Create a new note.",
-              },
-              {
-                title: "Add a Chart",
-                message: "Create a new chart.",
+                title: "Start",
+                message: "Start game.",
               },
             ]}
           />
