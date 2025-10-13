@@ -224,33 +224,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     current_phase_id = state.get("current_phase_id", "")
     dsl_info = f"LOADED GAME DSL:\n{dsl_content}\n" if dsl_content else "No DSL loaded.\n"
     
-    game_schema = (
-        "GAME COMPONENT SCHEMA (authoritative):\n"
-        "- character_card.data:\n"
-        "  - role: string (character role e.g., 'werewolf', 'seer', 'villager')\n"
-        "  - position: string (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')\n"
-        "  - size: string (select: 'small' | 'medium' | 'large'; default: 'medium')\n"
-        "  - description: string (optional character description)\n"
-        "- action_button.data:\n"
-        "  - label: string (button text)\n"
-        "  - action: string (action identifier when clicked)\n"
-        "  - enabled: boolean (whether button is clickable)\n"
-        "  - variant: string (select: 'primary' | 'secondary' | 'danger'; default: 'primary')\n"
-        "  - position: string (grid position; same options as character_card)\n"
-        "  - size: string (component size; same options as character_card)\n"
-        "- phase_indicator.data:\n"
-        "  - currentPhase: string (current game phase)\n"
-        "  - description: string (optional phase description)\n"
-        "  - timeRemaining: number (optional seconds remaining in phase)\n"
-        "  - position: string (grid position; same options as character_card)\n"
-        "  - size: string (component size; same options as character_card)\n"
-        "- text_display.data:\n"
-        "  - content: string (main text content)\n"
-        "  - title: string (optional title text)\n"
-        "  - type: string (select: 'info' | 'warning' | 'error' | 'success'; default: 'info')\n"
-        "  - position: string (grid position; same options as character_card)\n"
-        "  - size: string (component size; same options as character_card)\n"
-    )
+    game_schema = ""
 
     system_message = SystemMessage(
         content=(

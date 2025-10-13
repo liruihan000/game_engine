@@ -7,12 +7,7 @@ export const initialState: AgentState = {
   planSteps: [],
   currentStepIndex: -1,
   planStatus: "",
-  // Game Engine initial state
-  phase: "",
-  characters: [],
-  gameState: {},
-  events: [],
-  dsl: undefined,
+  
 };
 
 export function isNonEmptyAgentState(value: unknown): value is AgentState {

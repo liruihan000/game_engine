@@ -56,6 +56,7 @@ interface GameEngineState {
 2. **DSL-First**: All game behavior defined in external DSL files  
 3. **Atomic Tools**: Both backend operations and frontend actions are atomic
 4. **Generic Prompts**: All system prompts work across diverse game types
+5. **Simplest Logic**: Always use the most direct approach - prefer `setState` over helper functions when possible
 
 ## File Structure
 
@@ -277,3 +278,161 @@ This ensures architectural consistency and prevents breaking changes to the reus
 - >90% game completion rate across game types  
 - Real-time bidirectional state synchronization
 - Seamless Agent tool execution and UI feedback
+
+
+
+## 添加新UI组件需要更新的位置
+
+基于代码分析，要添加一个新的UI组件需要更新以下位置：
+
+1. 类型定义 (src/lib/canvas/types.ts)
+
+// 添加新的数据类型
+export interface NewComponentData {
+property1: string;
+property2?: boolean;
+position: GamePosition;
+size?: ComponentSize;
+}
+
+// 更新 ItemData 联合类型
+export type ItemData =
+| CharacterCardData
+| ActionButtonData
+| PhaseIndicatorData
+| TextDisplayData
+| NewComponentData;  // ← 添加新类型
+
+// 更新 CardType 联合类型
+export type CardType =
+| "character_card"
+| "action_button"
+| "phase_indicator"
+| "text_display"
+| "new_component";  // ← 添加新类型
+
+1. 默认数据 (src/lib/canvas/state.ts)
+
+export const defaultDataFor = (type: CardType): ItemData => {
+switch (type) {
+case "character_card": return { /* ... */ };
+case "action_button": return { /* ... */ };
+case "phase_indicator": return { /* ... */ };
+case "text_display": return { /* ... */ };
+case "new_component": return {  // ← 添加新组件默认数据
+property1: "",
+property2: false,
+position: "center",
+size: "medium"
+};
+default: return { position: "center" };
+}
+};
+
+1. 渲染组件 (src/components/canvas/CardRenderer.tsx)
+
+// 在 CardRenderer 函数中添加新的渲染逻辑
+if (item.type === "new_component") {
+const d = item.data as NewComponentData;
+const getSizeClasses = (size: string = 'medium') => {
+const sizeMap: Record<string, string> = {
+small: "w-30 h-20",
+medium: "w-50 h-30",
+large: "w-70 h-40"
+};
+return sizeMap[size] || sizeMap.medium;
+};
+
+```
+return (
+  <div className={`${getSizeClasses(d.size)} bg-card border rounded-lg p-3`}>
+    {/* 新组件的UI实现 */}
+    <div>{d.property1}</div>
+  </div>
+);
+
+```
+
+}
+
+1. Agent工具注册 (src/app/page.tsx)
+
+useCopilotAction({
+name: "createNewComponent",
+description: "Create a new component for the game.",
+available: "remote",
+parameters: [
+{ name: "name", type: "string", required: true, description: "Component name"
+},
+{ name: "property1", type: "string", required: true, description: "Property
+description" },
+{ name: "position", type: "string", required: true, description: "Grid
+position" },
+// ... 其他参数
+],
+handler: ({ name, property1, position, /* 其他参数 */ }: {
+name: string;
+property1: string;
+position: string;
+// ... 其他类型
+}) => {
+const normalized = (name ?? "").trim();
+
+```
+  // 重复性检查
+  if (normalized) {
+    const existing = (viewState.items ?? initialState.items).find((it) =>
+      it.type === "new_component" && (it.name ?? "").trim() === normalized
+    );
+    if (existing) {
+      return existing.id;
+    }
+  }
+
+  const data: NewComponentData = {
+    property1,
+    position: position as GamePosition,
+    // ... 其他属性
+  };
+  return addItem("new_component", name, data);
+},
+
+```
+
+});
+
+1. NewItemMenu (src/components/canvas/NewItemMenu.tsx)
+
+// 如果需要手动创建菜单，添加新选项
+const options: { id: CardType; label: string }[] = [
+{ id: "character_card", label: "Character Card" },
+{ id: "action_button", label: "Action Button" },
+{ id: "phase_indicator", label: "Phase Indicator" },
+{ id: "text_display", label: "Text Display" },
+{ id: "new_component", label: "New Component" },  // ← 添加
+];
+
+🎯 总结
+
+必须更新的核心位置 (4个):
+
+1. 类型定义 - types.ts
+2. 默认数据 - state.ts
+3. 渲染组件 - CardRenderer.tsx
+4. Agent工具 - page.tsx (useCopilotAction)
+
+可选更新的位置 (2个):
+5. 创建菜单 - NewItemMenu.tsx
+
+1. Agent文件 (agent/agent_no_loop.py)
+
+FRONTEND_TOOL_ALLOWLIST = set([
+# Game component creation tools
+"createCharacterCard",
+"createActionButton",
+"createPhaseIndicator",
+"createTextDisplay",
+"createNewComponent",  # ← 添加新工具
+# Component management tools
+"deleteItem"
+])

@@ -62,8 +62,8 @@
     - description: "Display final character card showing chosen role and status (Ronin: alive, wise warrior; Witch: dead, fallen magic user)"
       tools: [character_card]
   completion_criteria:
-    type: "final"
-    message: "Game completed"
+    type: "UI_Displayed"
+    message: "The game results UI have been displayed"
   next_phase:
     id: 3
     name: "Game End"
@@ -75,6 +75,6 @@
     - description: "Display game end message thanking player"
       tools: [text_display]
   completion_criteria:
-    type: "final"
-    message: "Session ended"
+    type: "UI_Displayed"
+    message: "The game end UI have been displayed"
   next_phase: null

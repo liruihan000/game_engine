@@ -98,15 +98,6 @@ export interface AgentState {
   items: Item[];
   lastAction?: string;
   itemsCreated: number;
-  planSteps: PlanStep[];
-  currentStepIndex: number;
-  planStatus: string;
-  // Game Engine fields
-  phase?: string;
-  characters?: Record<string, string | number | boolean>[];
-  gameState?: Record<string, string | number | boolean>;
-  events?: Record<string, string | number>[];
-  dsl?: string;
 }
 
 

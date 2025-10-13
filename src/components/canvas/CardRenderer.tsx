@@ -6,6 +6,7 @@ export function CardRenderer(props: {
   item: Item;
   onUpdateData: (updater: (prev: ItemData) => ItemData) => void;
   onToggleTag: (tag: string) => void;
+  onButtonClick?: (item: Item) => void;
 }) {
   const { item } = props;
 
@@ -214,6 +215,11 @@ export function CardRenderer(props: {
       <button 
         className={`${getSizeClasses(d.size)} ${d.variant === 'primary' ? 'bg-primary text-primary-foreground' : d.variant === 'danger' ? 'bg-destructive text-destructive-foreground' : 'bg-secondary text-secondary-foreground'} rounded-md font-medium ${!d.enabled ? 'opacity-50 cursor-not-allowed' : 'hover:opacity-90'}`}
         disabled={!d.enabled}
+        onClick={() => {
+          if (d.enabled && props.onButtonClick) {
+            props.onButtonClick(item);
+          }
+        }}
       >
         {d.label}
       </button>

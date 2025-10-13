@@ -1,7 +1,8 @@
 "use client";
 
-import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAdditionalInstructions, useLangGraphInterrupt } from "@copilotkit/react-core";
+import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAdditionalInstructions, useLangGraphInterrupt, useCopilotChat } from "@copilotkit/react-core";
 import { CopilotKitCSSProperties, CopilotChat, CopilotPopup } from "@copilotkit/react-ui";
+import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,21 @@ export default function CopilotKitPage() {
     name: "sample_agent",
     initialState,
   });
+
+  const { appendMessage } = useCopilotChat();
+
+  // Handle action button clicks
+  const handleButtonClick = useCallback(async (item: Item) => {
+    const buttonData = item.data as ActionButtonData;
+    
+    // Send message to CopilotChat
+    await appendMessage(
+      new TextMessage({
+        role: MessageRole.User,
+        content: `Button "${item.name}" (ID: ${item.id}) has been clicked. Action: ${buttonData.action}`
+      })
+    );
+  }, [appendMessage]);
 
   // Global cache for the last non-empty agent state
   const cachedStateRef = useRef<AgentState>(state ?? initialState);
@@ -155,39 +171,7 @@ export default function CopilotKitPage() {
         .slice(0, 5)
         .map((p: Item) => `id=${p.id} • name=${p.name} • type=${p.type}`)
         .join("\n");
-      const fieldSchema = [
-        "GAME COMPONENT SCHEMA (authoritative):",
-        "- character_card.data:",
-        "  - role: string (character role e.g., 'werewolf', 'seer', 'villager')",
-        "  - characterName: string (display name)",
-        "  - status: string (select: 'alive' | 'dead' | 'unknown'; empty string means unset)",
-        "  - position: string (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')",
-        "  - size: string (select: 'small' | 'medium' | 'large'; default: 'medium')",
-        "  - description: string (optional character description)",
-        "- action_button.data:",
-        "  - label: string (button text)",
-        "  - action: string (action identifier when clicked)",
-        "  - enabled: boolean (whether button is clickable)",
-        "  - variant: string (select: 'primary' | 'secondary' | 'danger'; default: 'primary')",
-        "  - position: string (grid position; same options as character_card)",
-        "  - size: string (component size; same options as character_card)",
-        "- phase_indicator.data:",
-        "  - currentPhase: string (current game phase)",
-        "  - description: string (optional phase description)",
-        "  - timeRemaining: number (optional seconds remaining in phase)",
-        "  - position: string (grid position; same options as character_card)",
-        "  - size: string (component size; same options as character_card)",
-        "- text_display.data:",
-        "  - content: string (main text content)",
-        "  - title: string (optional title text)",
-        "  - type: string (select: 'info' | 'warning' | 'error' | 'success'; default: 'info')",
-        "  - position: string (grid position; same options as character_card)",
-        "  - size: string (component size; same options as character_card)",
-        "- game state:",
-        "  - phase: string (current DSL phase e.g., 'introduction', 'role_selection', 'game_result')",
-        "  - dsl: object (loaded game definition with phases, components, flow)",
-        "  - events: Array<{type: string, payload: any, timestamp: number}> (game events)",
-      ].join("\n");
+      const fieldSchema = "";
       const toolUsageHints = [
         "GAME TOOL USAGE HINTS:",
         "LOOP CONTROL: When asked to 'add a couple' items, add at most 2 and stop. Avoid repeated calls to the same mutating tool in one turn.",
@@ -464,17 +448,13 @@ export default function CopilotKitPage() {
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name"},
       { name: "role", type: "string", required: true, description: "Character role (e.g., werewolf, seer, villager)" },
-      { name: "characterName", type: "string", required: true, description: "Character name (for display)" },
-      { name: "status", type: "string", required: true, description: "Character status: alive, dead, or unknown" },
-      { name: "position", type: "string", required: true, description: "Grid position: top-left, top-center, top-right, middle-left, center, middle-right, bottom-left, bottom-center, bottom-right" },
-      { name: "size", type: "string", required: false, description: "Card size: small, medium, or large (default: medium)" },
+      { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
+      { name: "size", type: "string", required: false, description: "Card size (select: 'small' | 'medium' | 'large'; default: 'medium')" },
       { name: "description", type: "string", required: false, description: "Optional character description" },
     ],
     handler: ({ name, role, position, size, description }: { 
       name: string;
       role: string; 
-      characterName: string; 
-      status: string; 
       position: string; 
       size?: string; 
       description?: string; 
@@ -510,9 +490,9 @@ export default function CopilotKitPage() {
       { name: "label", type: "string", required: true, description: "Button text" },
       { name: "action", type: "string", required: true, description: "Action identifier when clicked" },
       { name: "enabled", type: "boolean", required: true, description: "Whether button is clickable" },
-      { name: "position", type: "string", required: true, description: "Grid position" },
-      { name: "size", type: "string", required: false, description: "Button size: small, medium, or large" },
-      { name: "variant", type: "string", required: false, description: "Button style: primary, secondary, or danger" },
+      { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
+      { name: "size", type: "string", required: false, description: "Button size (select: 'small' | 'medium' | 'large')" },
+      { name: "variant", type: "string", required: false, description: "Button style (select: 'primary' | 'secondary' | 'danger')" },
     ],
     handler: ({ name, label, action, enabled, position, size, variant }: {
       name: string;
@@ -554,8 +534,8 @@ export default function CopilotKitPage() {
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "currentPhase", type: "string", required: true, description: "Current game phase" },
-      { name: "position", type: "string", required: true, description: "Grid position" },
-      { name: "size", type: "string", required: false, description: "Indicator size" },
+      { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
+      { name: "size", type: "string", required: false, description: "Indicator size (select: 'small' | 'medium' | 'large')" },
       { name: "description", type: "string", required: false, description: "Optional phase description" },
       { name: "timeRemaining", type: "number", required: false, description: "Seconds remaining in phase" },
     ],
@@ -597,10 +577,10 @@ export default function CopilotKitPage() {
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "content", type: "string", required: true, description: "Main text content" },
-      { name: "position", type: "string", required: true, description: "Grid position" },
-      { name: "size", type: "string", required: false, description: "Display size" },
+      { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
+      { name: "size", type: "string", required: false, description: "Display size (select: 'small' | 'medium' | 'large')" },
       { name: "title", type: "string", required: false, description: "Optional title text" },
-      { name: "type", type: "string", required: false, description: "Display type: info, warning, error, or success" },
+      { name: "type", type: "string", required: false, description: "Display type (select: 'info' | 'warning' | 'error' | 'success')" },
     ],
     handler: ({ name, content, position, size, title, type }: {
       name: string;
@@ -829,7 +809,7 @@ export default function CopilotKitPage() {
                                   <X className="h-3 w-3" />
                                 </button>
                                 
-                                <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={() => toggleTag()} />
+                                <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={() => toggleTag()} onButtonClick={handleButtonClick} />
                               </div>
                             ))}
                           </div>
