@@ -1,0 +1,132 @@
+game:
+  name: "Ronin Kill"
+  description: "4-player hidden-role elimination game with atomic steps"
+
+players:
+  count: 4
+  names: [P1, P2, P3, P4]
+
+roles:
+  ronin: 1
+  seer: 1
+  guardian: 1
+  villager: 1
+
+flow:
+  start: setup_init
+
+phases:
+  setup_init:
+    description: "初始化玩家与回合：设置4名玩家、回合=1、全部存活"
+    set:
+      round: 1
+      alive: [P1, P2, P3, P4]
+    next: setup_assign_roles
+
+  setup_assign_roles:
+    description: "随机分配身份：浪人1、预言家1、守护1、村民1"
+    set:
+      roles: "random({ronin:1,seer:1,guardian:1,villager:1})"
+    next: setup_reveal_roles
+
+  setup_reveal_roles:
+    description: "分别私下告知每位玩家自己的身份"
+    next: night_ronin_choose
+
+  night_ronin_choose:
+    description: "夜晚（步骤1/4）：浪人选择击杀目标 -> ronin_target"
+    wait_for_input: true
+    on_input:
+      set: { ronin_target: "{{player_id}}" }
+    next: night_guardian_save
+
+  night_guardian_save:
+    description: "夜晚（步骤2/4）：守护选择守护目标 -> guardian_save"
+    wait_for_input: true
+    on_input:
+      set: { guardian_save: "{{player_id}}" }
+    next: night_seer_peek
+
+  night_seer_peek:
+    description: "夜晚（步骤3/4）：预言家选择查看对象 -> peek_target 与 peek_result"
+    wait_for_input: true
+    on_input:
+      set:
+        peek_target: "{{player_id}}"
+        peek_result: "{{role_of(peek_target)}}"
+    next: night_resolve
+
+  night_resolve:
+    description: "夜晚（步骤4/4）：结算夜晚（若未被守护且目标存活则死亡）"
+    logic:
+      - when: ronin_target and (ronin_target != guardian_save) and (ronin_target in alive)
+        set:
+          last_night_killed: "{{ronin_target}}"
+          alive: "{{alive - [ronin_target]}}"
+      - when: else
+        set:
+          last_night_killed: null
+    next: day_announce
+
+  day_announce:
+    description: "白天（步骤1/4）：公告夜晚结果，清理夜晚临时变量"
+    set:
+      ronin_target: null
+      guardian_save: null
+      peek_target: null
+    next: day_vote_start
+
+  day_vote_start:
+    description: "白天（步骤2/4）：开始投票（每位存活玩家各投一票）"
+    wait_for_input: true
+    on_input:
+      append_vote: { from: "{{player_id}}", to: "{{target_id}}" }
+    next: day_collect_votes
+
+  day_collect_votes:
+    description: "白天（步骤3/4）：收集投票直到所有存活玩家都投票"
+    logic:
+      - when: votes_count == len(alive)
+        next: day_resolve_vote
+      - when: else
+        next: day_vote_start
+
+  day_resolve_vote:
+    description: "白天（步骤4/4）：结算投票（最高票出局；平票则无人出局）"
+    logic:
+      - when: top_vote_unique
+        set:
+          last_day_executed: "{{top_voted}}"
+          alive: "{{alive - [top_voted]}}"
+      - when: else
+        set: { last_day_executed: null }
+    next: check_win
+
+  check_win:
+    description: "胜负判定：浪人死→好人胜；浪人与好人数量相等→浪人胜；否则进入下一夜"
+    logic:
+      - when: ronin not in alive
+        set: { winner: village }
+        final: true
+      - when: len(alive_of_faction('ronin')) >= len(alive_of_faction('non_ronin'))
+        set: { winner: ronin }
+        final: true
+      - when: else
+        next: prepare_next_round
+
+  prepare_next_round:
+    description: "准备下一回合：回合+1，清空投票"
+    set:
+      round: "{{round + 1}}"
+      votes: {}
+    next: night_ronin_choose
+
+initial_state:
+  players: [P1, P2, P3, P4]
+  alive: [P1, P2, P3, P4]
+  roles: {}
+  round: 1
+  votes: {}
+  winner: null
+  phase: setup_init
+

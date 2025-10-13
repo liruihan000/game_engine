@@ -1,48 +1,80 @@
-game:
-  name: "Simple Choice Game"
-  description: "A basic choice-based game to test the engine"
+0:
+  name: "Introduction"
+  description: "Welcome players to the game world and set the scene for their adventure."
+  actions:
+    - description: "Display phase indicator showing 'Introduction' at top-center"
+      tools: [phase_indicator]
+    - description: "Show welcome narrative text in center with game introduction"
+      tools: [text_display]
+  completion_criteria:
+    type: "timer"
+    wait_seconds: 3
+  next_phase:
+    id: 1
+    name: "Role Selection"
 
-flow:
-  start: introduction
+1:
+  name: "Role Selection"
+  description: "Players choose between two character paths: Ronin (warrior) or Witch (magic user)."
+  actions:
+    - description: "Clear previous phase UI elements"
+      tools: [clear_canvas]
+    - description: "Display phase indicator showing 'Role Selection' at top-center"
+      tools: [phase_indicator]
+    - description: "Show instruction text 'Choose Your Path' in center"
+      tools: [text_display]
+    - description: "Display Ronin character card on the left side"
+      tools: [character_card]
+    - description: "Display Witch character card on the right side"
+      tools: [character_card]
+    - description: "Add 'Select Ronin' action button below left card"
+      tools: [action_button]
+    - description: "Add 'Select Witch' action button below right card"
+      tools: [action_button]
+  completion_criteria:
+    type: "player_action"
+    wait_for: "single_player_choice"
+    valid_actions: ["select_ronin", "select_witch"]
+  logic:
+    - condition: "player_action == 'select_ronin'"
+      set_state:
+        player_choice: "ronin"
+      next_phase:
+        id: 2
+        name: "Game Result"
+    - condition: "player_action == 'select_witch'"
+      set_state:
+        player_choice: "witch"
+      next_phase:
+        id: 2
+        name: "Game Result"
 
-phases:
-  introduction:
-    description: "Introduce the world: show 'Introduction' phase indicator at the top and a large narrative text in the center (Welcome to the new world...); no player action required; automatically proceed to role_selection after 3000ms."
-    tools: [phase_indicator, text_display]
-    auto_next:
-      after_ms: 3000
-      to: role_selection
+2:
+  name: "Game Result"
+  description: "Show the outcome based on player's character choice and conclude the game."
+  actions:
+    - description: "Clear previous phase UI elements"
+      tools: [clear_canvas]
+    - description: "Display phase indicator showing 'Result' at top-center"
+      tools: [phase_indicator]
+    - description: "Show result text with title and content based on player_choice (Ronin: Victory message with success type; Witch: Defeat message with error type)"
+      tools: [text_display]
+    - description: "Display final character card showing chosen role and status (Ronin: alive, wise warrior; Witch: dead, fallen magic user)"
+      tools: [character_card]
+  completion_criteria:
+    type: "final"
+    message: "Game completed"
+  next_phase:
+    id: 3
+    name: "Game End"
 
-  role_selection:
-    description: "Role selection: show 'Role Selection' phase indicator and the prompt 'Choose Your Path'; present two character cards, and two action buttons — 'Ronin' and 'Witch'; clicking triggers select_ronin/select_witch, sets player_choice, then proceeds to game_result."
-    tools: [phase_indicator, text_display, character_card(ronin), character_card(witch), action_button(select_ronin), action_button(select_witch)]
-    logic:
-      - when: event == select_ronin
-        set: { player_choice: ronin }
-        next: game_result
-      - when: event == select_witch
-        set: { player_choice: witch }
-        next: game_result
-
-  game_result:
-    description: "Result: show 'Result' phase indicator; based on player_choice, display result text (title, content, type) and a character card (role and status from mapping); this is the final phase and ends after display."
-    tools: [phase_indicator, text_display, character_card]
-    cases:
-      from: player_choice
-      ronin:
-        result_title: "Victory!"
-        result_content: "You chose Ronin! A wise choice leads you to victory!"
-        result_type: success
-        final_status: alive
-        character_description: "A wise wandering warrior"
-      witch:
-        result_title: "Defeat"
-        result_content: "You chose Witch! The path of magic is perilous, and you were defeated..."
-        result_type: error
-        final_status: dead
-        character_description: "A fallen magic user"
-    final: true
-
-initial_state:
-  player_choice: null
-  current_phase: introduction
+3:
+  name: "Game End"
+  description: "Final phase marking the end of the game session."
+  actions:
+    - description: "Display game end message thanking player"
+      tools: [text_display]
+  completion_criteria:
+    type: "final"
+    message: "Session ended"
+  next_phase: null

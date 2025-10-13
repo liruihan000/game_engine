@@ -50,3 +50,4 @@ bun.lockb
 
 # LangGraph API
 .langgraph_api
+.logs/

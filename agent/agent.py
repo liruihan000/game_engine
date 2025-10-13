@@ -675,15 +675,10 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         )
 
     if has_remaining and effective_plan_status != "completed":
-        current_step = effective_steps[current_step_index] if 0 <= current_step_index < len(effective_steps) else {}
-        step_title = current_step.get("title", "unknown")
-        logger.info(f"[chatnode][end] === OUTPUT: CONTINUING TO NEXT chatnode ===")
-
-        # Auto-continue; include response only if it carries frontend tool calls
+        # Stop here; do not auto-loop back into chat_node. Let the next activation drive further steps.
         return Command(
-            goto="chat_node",
+            goto=END,
             update={
-                # At this point there should be no frontend tool calls; ensure we don't pass any unresolved ones back to the model
                 "messages": ([]),
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
@@ -697,10 +692,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 "phase": state.get("phase", ""),
                 "events": state.get("events", []),
                 "characters": state.get("characters", []),
-                "__last_tool_guidance": (
-                    "Plan is in progress. Proceed to the next step automatically. "
-                    "Update the step status to in_progress, call necessary tools, and mark it completed when done."
-                ),
+                "__last_tool_guidance": None,
             }
         )
 
@@ -713,11 +705,11 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         plan_marked_completed = False
 
     if all_steps_completed and not plan_marked_completed:
-        logger.info(f"[chatnode][end] === OUTPUT: ALL STEPS ARE COMPLETED BUT PLAN IS NOT MARKED AS COMPLETED ===")
+        # Do not auto-loop; end and rely on external trigger for any wrap-up.
         return Command(
-            goto="chat_node",
+            goto=END,
             update={
-                "messages": [response] if has_frontend_tool_calls else ([]),
+                "messages": ([]),
                 # persist shared state keys so UI edits survive across runs
                 "items": state.get("items", []),
                 "itemsCreated": state.get("itemsCreated", 0),
@@ -730,10 +722,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 "phase": state.get("phase", ""),
                 "events": state.get("events", []),
                 "characters": state.get("characters", []),
-                "__last_tool_guidance": (
-                    "All steps are completed. Call complete_plan to mark the plan as finished, "
-                    "then present a concise summary of outcomes."
-                ),
+                "__last_tool_guidance": None,
             }
         )
 
