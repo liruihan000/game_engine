@@ -81,6 +81,26 @@ from langgraph.types import Command
 from copilotkit import CopilotKitState
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
+try:
+    # Prefer absolute import when package context is available
+    from agent.state_ops import (
+        add_item,
+        update_item,
+        update_item_data_merge,
+        delete_item as delete_item_state,
+    )
+except Exception:
+    # Fallback: executed as a loose module (no package); import from same dir
+    import os as _os
+    import sys as _sys
+    _sys.path.append(_os.path.dirname(_os.path.abspath(__file__)))
+    from state_ops import (
+        add_item,
+        update_item,
+        update_item_data_merge,
+        delete_item as delete_item_state,
+    )
+from pydantic import BaseModel, Field
 
 class AgentState(CopilotKitState):
     """
@@ -130,13 +150,224 @@ def summarize_items_for_prompt(state: AgentState) -> str:
 
 
 
-# @tool
-# def your_tool_here(your_arg: str):
-#     """Your tool description here."""
-#     print(f"Your tool logic here")
-#     return "Your tool response here."
+class CreateActionButtonArgs(BaseModel):
+    name: str = Field(..., description="Item name")
+    label: str = Field(..., description="Button text")
+    action: str = Field(..., description="Action identifier when clicked")
+    enabled: bool = Field(..., description="Whether button is clickable")
+    position: str = Field(
+        ..., description="Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+    )
+    size: Optional[str] = Field(None, description="Button size (select: 'small' | 'medium' | 'large')")
+    variant: Optional[str] = Field(None, description="Button style (select: 'primary' | 'secondary' | 'danger')")
 
-backend_tools = []
+
+@tool("createActionButton", args_schema=CreateActionButtonArgs)
+def createActionButton(
+    name: str,
+    label: str,
+    action: str,
+    enabled: bool,
+    position: str,
+    size: Optional[str] = None,
+    variant: Optional[str] = None,
+) -> str:
+    """Create an action button for player interactions."""
+    return "queued"
+
+
+class CreateCharacterCardArgs(BaseModel):
+    name: str = Field(..., description="Item name")
+    role: str = Field(..., description="Character role (e.g., werewolf, seer, villager)")
+    position: str = Field(
+        ..., description="Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+    )
+    size: Optional[str] = Field(None, description="Card size (select: 'small' | 'medium' | 'large'; default: 'medium')")
+    description: Optional[str] = Field(None, description="Optional character description")
+
+
+@tool("createCharacterCard", args_schema=CreateCharacterCardArgs)
+def createCharacterCard(
+    name: str,
+    role: str,
+    position: str,
+    size: Optional[str] = None,
+    description: Optional[str] = None,
+) -> str:
+    """Create a character card for the game."""
+    return "queued"
+
+class CreatePhaseIndicatorArgs(BaseModel):
+    name: str = Field(..., description="Item name")
+    currentPhase: str = Field(..., description="Current game phase")
+    position: str = Field(
+        ..., description="Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+    )
+    size: Optional[str] = Field(None, description="Indicator size (select: 'small' | 'medium' | 'large')")
+    description: Optional[str] = Field(None, description="Optional phase description")
+    timeRemaining: Optional[int] = Field(None, description="Seconds remaining in phase")
+
+
+@tool("createPhaseIndicator", args_schema=CreatePhaseIndicatorArgs)
+def createPhaseIndicator(
+    name: str,
+    currentPhase: str,
+    position: str,
+    size: Optional[str] = None,
+    description: Optional[str] = None,
+    timeRemaining: Optional[int] = None,
+) -> str:
+    """Create a phase indicator to show current game phase."""
+    return "queued"
+
+
+class CreateTextDisplayArgs(BaseModel):
+    name: str = Field(..., description="Item name")
+    content: str = Field(..., description="Main text content")
+    position: str = Field(
+        ..., description="Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+    )
+    size: Optional[str] = Field(None, description="Display size (select: 'small' | 'medium' | 'large')")
+    title: Optional[str] = Field(None, description="Optional title text")
+    type: Optional[str] = Field(None, description="Display type (select: 'info' | 'warning' | 'error' | 'success')")
+
+
+@tool("createTextDisplay", args_schema=CreateTextDisplayArgs)
+def createTextDisplay(
+    name: str,
+    content: str,
+    position: str,
+    size: Optional[str] = None,
+    title: Optional[str] = None,
+    type: Optional[str] = None,
+) -> str:
+    """Create a text display for game information."""
+    return "queued"
+
+
+class DeleteItemArgs(BaseModel):
+    itemId: str = Field(..., description="Target item id.")
+
+
+@tool("deleteItem", args_schema=DeleteItemArgs)
+def deleteItem(itemId: str) -> str:
+    """Delete an item by id."""
+    return "queued"
+
+
+class SetItemNameArgs(BaseModel):
+    name: str = Field(..., description="The new item name/title.")
+    itemId: str = Field(..., description="Target item id.")
+
+
+@tool("setItemName", args_schema=SetItemNameArgs)
+def setItemName(itemId: str, name: str) -> str:
+    """Set an item's name/title."""
+    return "queued"
+
+
+class SetItemSubtitleArgs(BaseModel):
+    subtitle: str = Field(..., description="The new item description/subtitle.")
+    itemId: str = Field(..., description="Target item id.")
+
+
+@tool("setItemSubtitleOrDescription", args_schema=SetItemSubtitleArgs)
+def setItemSubtitleOrDescription(itemId: str, subtitle: str) -> str:
+    """Set an item's description/subtitle (short description or subtitle)."""
+    return "queued"
+
+
+backend_tools = [
+    createActionButton,
+    createCharacterCard,
+    createPhaseIndicator,
+    createTextDisplay,
+    deleteItem,
+    setItemName,
+    setItemSubtitleOrDescription,
+]
+
+# Backend tool dispatcher registry (reduce per-tool boilerplate)
+def _build_button_data(args: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "label": args.get("label"),
+        "action": args.get("action"),
+        "enabled": bool(args.get("enabled", True)),
+        "position": args.get("position"),
+        "size": args.get("size"),
+        "variant": args.get("variant"),
+    }
+
+
+def _build_phase_indicator_data(args: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "currentPhase": args.get("currentPhase"),
+        "position": args.get("position"),
+        "size": args.get("size"),
+        "description": args.get("description"),
+        "timeRemaining": args.get("timeRemaining"),
+    }
+
+
+# text_display data builder
+def _build_text_display_data(args: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "content": args.get("content"),
+        "position": args.get("position"),
+        "size": args.get("size"),
+        "title": args.get("title"),
+        "type": args.get("type"),
+    }
+
+
+# character_card data builder
+def _build_character_card_data(args: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "role": args.get("role"),
+        "position": args.get("position"),
+        "size": args.get("size"),
+        "description": args.get("description"),
+    }
+
+
+# Map tool name -> operation spec
+BACKEND_TOOL_REGISTRY: Dict[str, Dict[str, Any]] = {
+    # addItem ops（与前端一致：统一按 name 幂等）
+    "createActionButton": {
+        "op": "addItem",
+        "item_type": "action_button",
+        "build_data": _build_button_data,
+    },
+    "createPhaseIndicator": {
+        "op": "addItem",
+        "item_type": "phase_indicator",
+        "build_data": _build_phase_indicator_data,
+    },
+    "createCharacterCard": {
+        "op": "addItem",
+        "item_type": "character_card",
+        "build_data": _build_character_card_data,
+    },
+    # Optionally support createTextDisplay alias
+    "createTextDisplay": {
+        "op": "addItem",
+        "item_type": "text_display",
+        "build_data": _build_text_display_data,
+    },
+    # deleteItem op
+    "deleteItem": {
+        "op": "deleteItem",
+    },
+    # updateItem ops (top-level fields)
+    "setItemName": {
+        "op": "updateItem",
+        "build_updates": lambda a: {"name": str(a.get("name", "")).strip()},
+    },
+    "setItemSubtitleOrDescription": {
+        "op": "updateItem",
+        "build_updates": lambda a: {"subtitle": a.get("subtitle")},
+    },
+}
 
 # Extract tool names from backend_tools for comparison
 backend_tool_names = [tool.name for tool in backend_tools]
@@ -210,8 +441,9 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     if len(deduped_frontend_tools) > MAX_FRONTEND_TOOLS:
         deduped_frontend_tools = deduped_frontend_tools[:MAX_FRONTEND_TOOLS]
 
+    combined_tools = [ *deduped_frontend_tools]
     model_with_tools = model.bind_tools(
-        deduped_frontend_tools,
+        combined_tools,
         parallel_tool_calls=True,  # Allow multiple tool calls in single response
     )
 
@@ -237,12 +469,11 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "ACTION EXECUTOR INSTRUCTION:\n"
             f"- You have the following actions to execute: {actions_to_execute}\n"
             "- **CRITICAL**: You MUST call ALL required tools in THIS SINGLE response. Do NOT return until you have made ALL tool calls.\n"
-            "- For each action in the list, call its specified tools. If an action has tools: [A, B], you must call both A and B.\n"
+            "- If a referenced tool name is unavailable, SUBSTITUTE it with the closest available backend tool that achieves the same effect (use your best judgment).\n"
             "- Make MULTIPLE tool calls in this single response to complete all actions at once.\n"
             "- Use the game schema above to ensure proper data structure for each tool call.\n"
             "- After making ALL tool calls, include a brief, friendly message about what phase/stage is ready.\n"
             "- Keep the message concise and game-narrative style (e.g., 'The game scene is ready. Please choose your character.').\n"
-            f"- Total tools to call this turn: {sum(len(action.get('tools', [])) for action in actions_to_execute if isinstance(action, dict))}\n"
         )
     )
 
@@ -344,44 +575,99 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     except Exception:
         pass
 
-    # Check if this response contains frontend tool calls that need to be delivered to the client
+    # Check tool calls and handle BACKEND tools by mutating shared state directly
     try:
         tool_calls = getattr(response, "tool_calls", []) or []
     except Exception:
         tool_calls = []
-    
-    # has_frontend_tool_calls = False
-    # for tc in tool_calls:
-    #     name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-    #     if name and name not in backend_tool_names:
-    #         has_frontend_tool_calls = True
-    #         break
 
-    # # If the model produced FRONTEND tool calls, deliver them to the client and stop the turn.
-    # # The client will execute and post ToolMessage(s), after which the next run can resume.
-    # if has_frontend_tool_calls:
-    #     logger.info(f"[ActionExecutor][end] === ENDING WITH FRONTEND TOOLS ===")
-    #     return Command(
-    #         goto=END,
-    #         update={
-    #             "messages": [response],
-    #             "items": state.get("items", []),
-    #             "itemsCreated": state.get("itemsCreated", 0),
-    #             "lastAction": state.get("lastAction", ""),
-    #             "current_phase_id": state.get("current_phase_id", ""),
-    #             "actions": state.get("actions", []),  # Keep actions until tools are executed
-    #             "__last_tool_guidance": (
-    #                 "Frontend tool calls issued. Waiting for client tool results before continuing."
-    #             ),
-    #         }
-    #     )
+    backend_calls = []
+    for tc in tool_calls:
+        tc_name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+        if tc_name and tc_name in backend_tool_names:
+            backend_calls.append(tc)
+
+    if backend_calls:
+        # Apply backend tool effects server-side so UI renders without frontend actions
+        items = (state.get("items", []) or []).copy()
+        try:
+            # Derive counter consistently using helper
+            counter = state.get("itemsCreated", 0) or 0
+
+            last_created_id = None
+            last_deleted_id = None
+            last_not_found_id = None
+            for tc in backend_calls:
+                tc_name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+                args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
+                if not isinstance(args, dict):
+                    continue
+
+                spec = BACKEND_TOOL_REGISTRY.get(tc_name or "")
+                if not spec:
+                    continue
+
+                op = spec.get("op")
+                if op == "addItem":
+                    item_type = spec.get("item_type")
+                    build_data = spec.get("build_data")
+                    normalized = str(args.get("name", "")).strip()  # 与前端保持 name 幂等
+                    data = build_data(args) if callable(build_data) else {}
+                    items, counter, created_id, existing_id = add_item(
+                        items=items,
+                        items_created=counter,
+                        item_type=str(item_type),
+                        name=normalized,
+                        data=data,
+                    )
+                    last_created_id = created_id or existing_id
+                elif op == "deleteItem":
+                    item_id = str(args.get("itemId", ""))
+                    items, existed = delete_item_state(items, item_id)
+                    if existed:
+                        last_deleted_id = item_id
+                    else:
+                        last_not_found_id = item_id
+                elif op == "updateItem":
+                    item_id = str(args.get("itemId", ""))
+                    build_updates = spec.get("build_updates")
+                    updates = build_updates(args) if callable(build_updates) else {}
+                    items, changed = update_item(items, item_id, updates)
+                    # 前端 update 不写 lastAction，这里保持一致：不更新 lastAction
+                elif op == "updateItemData":
+                    item_id = str(args.get("itemId", ""))
+                    build_patch = spec.get("build_data_patch")
+                    patch = build_patch(args) if callable(build_patch) else {}
+                    items, changed = update_item_data_merge(items, item_id, patch)
+                    # 同上，保持与前端一致：不更新 lastAction
+
+            return Command(
+                goto=END,
+                update={
+                    "messages": [],
+                    "items": items,
+                    "itemsCreated": counter,
+                    "lastAction": (
+                        f"deleted:{last_deleted_id}" if last_deleted_id else (
+                            f"not_found:{last_not_found_id}" if last_not_found_id else (
+                                f"created:{last_created_id}" if last_created_id else state.get("lastAction", "")
+                            )
+                        )
+                    ),
+                    "current_phase_id": state.get("current_phase_id", ""),
+                    "actions": [],
+                    "__last_tool_guidance": None,
+                },
+            )
+        except Exception as e:
+            logger.error(f"[ActionExecutor][backend_tools] failed to apply backend tool calls: {e}")
 
     # No frontend tool calls, actions completed
     logger.info(f"[ActionExecutor][end] === ENDING (NO TOOLS) ===")
     return Command(
         goto=END,
         update={
-            "messages": [response],
+            "messages": [],
             "items": state.get("items", []),
             "itemsCreated": state.get("itemsCreated", 0),
             "lastAction": state.get("lastAction", ""),
