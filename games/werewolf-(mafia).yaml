@@ -1,0 +1,227 @@
+declaration:
+  description: A social deduction game where players have secret roles as villagers
+    or werewolves. During the night, werewolves choose a target to eliminate, the
+    detective investigates a player, and the doctor can protect someone from harm.
+    Actions resolve with the elimination attempt first, followed by protection checks
+    and investigations. Results are revealed in the morning.
+  is_multiplayer: true
+  roles:
+  - name: Villager
+    description: Goal is to identify and eliminate the werewolves.
+  - name: Werewolf
+    description: Chooses a player to eliminate each night. Wins if werewolves equal
+      or outnumber villagers.
+  - name: Detective
+    description: Investigates one player each night to determine their role.
+  - name: Doctor
+    description: Can protect one player each night from being eliminated.
+  player_states:
+    name:
+      type: string
+      example: Player X
+      description: The player's display name used throughout the game.
+    role:
+      type: string
+      example: Detective
+      description: The role assigned to the player, determining their abilities and
+        win conditions.
+    is_alive:
+      type: boolean
+      example: true
+      description: Indicates if the player is still participating in the game (true=alive;
+        false=eliminated).
+  players_example:
+    players:
+      1:
+        name: Alpha
+        role: Werewolf
+        is_alive: true
+      2:
+        name: Beta
+        role: Detective
+        is_alive: true
+      3:
+        name: Gamma
+        role: Villager
+        is_alive: true
+phases:
+  0:
+    name: Game Introduction
+    description: Introduce the game rules, setup, and objectives to all players.
+    actions:
+    - description: Display game rules and objectives
+      tools:
+      - display_game_intro
+    - description: Show player list and game configuration
+      tools:
+      - display_player_setup
+    completion_criteria:
+      type: UI_displayed
+      description: Game introduction has been displayed to all players.
+    next_phase:
+      id: 1
+      name: Role Assignment
+  1:
+    name: Role Assignment
+    description: Randomly assign roles to players according to game configuration.
+    actions:
+    - description: Randomly assign all roles to players based on game setup
+      tools:
+      - assign_roles_randomly
+    - description: Notify each player of their role privately
+      tools:
+      - notify_player_roles
+    completion_criteria:
+      type: UI_displayed
+      description: All roles have been assigned and players have been notified.
+    next_phase:
+      id: 2
+      name: Werewolf Night Action
+  2:
+    name: Werewolf Night Action
+    description: Werewolves secretly select a target to eliminate.
+    actions:
+    - description: Display elimination target options to werewolves
+      tools:
+      - display_target_selection
+    completion_criteria:
+      type: player_action
+      description: Werewolves have chosen a target, and relevant player state (player_states)
+        has been updated.
+      wait_for: multiple_players_action
+      target_players:
+        description: All players with role 'Werewolf'
+        condition: player.role == 'Werewolf' and player.is_alive == true
+    next_phase:
+      id: 3
+      name: Doctor Night Action
+  3:
+    name: Doctor Night Action
+    description: The doctor chooses one player to protect during the night.
+    actions:
+    - description: Display protection options to the doctor
+      tools:
+      - display_protection_selection
+    completion_criteria:
+      type: player_action
+      description: Doctor has selected a protection target, and relevant player state
+        (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Player with role 'Doctor'
+        condition: player.role == 'Doctor' and player.is_alive == true
+    next_phase:
+      id: 4
+      name: Detective Night Action
+  4:
+    name: Detective Night Action
+    description: The detective selects a player to investigate.
+    actions:
+    - description: Display investigation options to the detective
+      tools:
+      - display_investigation_selection
+    completion_criteria:
+      type: player_action
+      description: Detective has selected a player to investigate, and relevant player
+        state (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Player with role 'Detective'
+        condition: player.role == 'Detective' and player.is_alive == true
+    next_phase:
+      id: 5
+      name: Reveal Night Results
+  5:
+    name: Reveal Night Results
+    description: Reveal the results of the night's actions to all players.
+    actions:
+    - description: 'Display the outcome of the night actions: who was eliminated,
+        protected, and investigated.'
+      tools:
+      - display_night_results
+    completion_criteria:
+      type: UI_displayed
+      description: Night results have been displayed to all players.
+    next_phase:
+      id: 6
+      name: Day Discussion
+  6:
+    name: Day Discussion
+    description: Players discuss the events of last night and decide on a course of
+      action.
+    actions:
+    - description: Allow players to discuss openly about the night's events
+      tools:
+      - enable_communication
+    completion_criteria:
+      type: timer
+      description: Discussion time is over after a set period.
+    next_phase:
+      id: 7
+      name: Voting
+  7:
+    name: Voting
+    description: All surviving players vote to decide who they suspect of being a
+      werewolf.
+    actions:
+    - description: Create and display voting UI for all surviving players
+      tools:
+      - create_voting_ui
+    completion_criteria:
+      type: player_action
+      description: Votes have been received from all surviving players, and relevant
+        player state (player_states) has been updated.
+      wait_for: all_players_action
+      target_players:
+        description: All surviving players
+        condition: player.is_alive == true
+    next_phase:
+      id: 8
+      name: Announce Voting Results
+  8:
+    name: Announce Voting Results
+    description: Announce the outcome of the voting and eliminate the voted player
+      if necessary.
+    actions:
+    - description: Display the voting results and eliminate the player if necessary
+      tools:
+      - display_voting_results
+    completion_criteria:
+      type: UI_displayed
+      description: Voting results have been displayed to all players.
+    next_phase:
+      id: 9
+      name: Check Win Conditions
+  9:
+    name: Check Win Conditions
+    description: Evaluate if any win condition has been met, otherwise continue the
+      game.
+    actions:
+    - description: Calculate the remaining werewolves and villagers to determine if
+        a team has won.
+      tools:
+      - evaluate_win_conditions
+    completion_criteria:
+      type: UI_displayed
+      description: Win conditions have been evaluated and the state has been updated.
+    next_phase:
+      If werewolves equal or outnumber villagers:
+        id: 10
+        name: Game Over – Werewolves Win
+      If no werewolves remain:
+        id: 10
+        name: Game Over – Villagers Win
+      Otherwise, proceed to the next night:
+        id: 2
+        name: Werewolf Night Action
+  10:
+    name: Game Over
+    description: The game concludes with the announcement of the winning team.
+    actions:
+    - description: Display the winning team and final player roles
+      tools:
+      - display_game_over
+    completion_criteria:
+      type: UI_displayed
+      description: Final game results have been displayed to all players.
+    next_phase: null

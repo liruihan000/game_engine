@@ -643,7 +643,7 @@ export default function CopilotKitPage() {
   return (
     <div
       style={{ "--copilot-kit-primary-color": "#2563eb" } as CopilotKitCSSProperties}
-      className="h-screen flex flex-col"
+      className="h-[calc(100vh-3.5rem)] flex flex-col"
     >
       {/* Main Layout */}
       <div className="flex flex-1 overflow-hidden">

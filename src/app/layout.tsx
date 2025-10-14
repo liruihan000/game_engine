@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
 import { GeistMono } from "geist/font/mono";
 import { CopilotKit } from "@copilotkit/react-core";
+import { Nav } from "@/components/ui/nav";
 import "./globals.css";
 import "@copilotkit/react-ui/styles.css";
 
@@ -31,6 +32,7 @@ export default function RootLayout({
           showDevConsole={false}
           publicApiKey={process.env.COPILOT_CLOUD_PUBLIC_API_KEY}
         >
+          <Nav />
           {children}
         </CopilotKit>
       </body>

@@ -3,7 +3,8 @@
   "dockerfile_lines": [],
   "dependencies": ["."],
   "graphs": {
-    "sample_agent": "./agent_no_loop.py:graph"
+    "sample_agent": "./agent_no_loop.py:graph",
+    "dsl_agent": "./dsl_agent.py:graph"
   },
   "env": ".env"
 }
