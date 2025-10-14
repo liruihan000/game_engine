@@ -22,8 +22,20 @@ import useMediaQuery from "@/hooks/use-media-query";
 import NewItemMenu from "@/components/canvas/NewItemMenu";
 
 export default function CopilotKitPage() {
+  // Get room context from sessionStorage for agent isolation
+  const [agentName, setAgentName] = useState("sample_agent");
+  
+  useEffect(() => {
+    const gameContext = sessionStorage.getItem('gameContext');
+    if (gameContext) {
+      const context = JSON.parse(gameContext);
+      const roomBasedAgentName = `agent_${context.roomId}`;
+      setAgentName(roomBasedAgentName);
+    }
+  }, []);
+
   const { state, setState } = useCoAgent<AgentState>({
-    name: "sample_agent",
+    name: agentName,
     initialState,
   });
 
@@ -96,6 +108,43 @@ export default function CopilotKitPage() {
     }
   }, [viewState?.items, showJsonView]);
 
+  // Initialize player_states from sessionStorage when game starts
+  useEffect(() => {
+    console.log('🔍 Checking for initialized player states in sessionStorage...');
+    
+    // Get current room context
+    const gameContext = sessionStorage.getItem('gameContext');
+    if (!gameContext) {
+      console.log('No game context found');
+      return;
+    }
+    
+    const context = JSON.parse(gameContext);
+    const playerStatesKey = `playerStates_${context.roomId}`;
+    const playerStatesData = sessionStorage.getItem(playerStatesKey);
+    
+    if (playerStatesData) {
+      try {
+        const parsedData = JSON.parse(playerStatesData);
+        console.log('📥 Found player states for room:', context.roomId, parsedData);
+        
+        // Initialize player_states in AgentState with clean initial state
+        setState(() => ({
+          ...initialState, // Start completely fresh
+          player_states: parsedData
+        }));
+        
+        // Clear room-specific sessionStorage to prevent re-initialization
+        sessionStorage.removeItem(playerStatesKey);
+        console.log('✅ Player states initialized and sessionStorage cleared for room:', context.roomId);
+        
+      } catch (error) {
+        console.error('❌ Failed to parse player states from sessionStorage:', error);
+        sessionStorage.removeItem(playerStatesKey); // Clear invalid data
+      }
+    }
+  }, [setState]); // Include setState dependency
+
   // Use cached viewState to derive plan-related fields
   const planStepsMemo = (viewState?.planSteps ?? initialState.planSteps) as PlanStep[];
   const planStatusMemo = viewState?.planStatus ?? initialState.planStatus;
@@ -103,7 +152,7 @@ export default function CopilotKitPage() {
 
   // One-time final summary renderer in chat when plan completes or fails
   useCoAgentStateRender<AgentState>({
-    name: "sample_agent",
+    name: agentName,
     nodeName: "plan-final-summary",
     render: ({ state }) => {
       const status = String(state?.planStatus ?? "");
@@ -153,9 +202,10 @@ export default function CopilotKitPage() {
 
   const getStatePreviewJSON = (s: AgentState | undefined): Record<string, unknown> => {
     const snapshot = (s ?? initialState) as AgentState;
-    const { items } = snapshot;
+    const { items, player_states } = snapshot;
     return {
       items: items ?? initialState.items,
+      player_states: player_states,
     };
   };
 

@@ -43,7 +43,8 @@ This section defines the core rules and data structures of the game, loaded befo
 - **player_states** (object): Defines the structure, type, examples, and descriptions of each player's state, including only states directly related to this game.
     - Each key represents a state attribute (e.g., `name`, `role`, `is_alive`).
     - Each attribute's value is an object containing `type` (string), `example` (any), and `description` (any).
-- **players_example** (object): Provides a complete example of the `players` data dictionary. In this dictionary, the primary key must be the player's unique numeric ID (`player_id`), starting from 1 only.
+- **player_states_template** (object): Provides an empty but complete template of the `player_states` data structure with default player (ID: 1) containing all required state fields initialized to default values. This template will be used to initialize actual players when the game starts.
+- **players_example** (object): Provides a complete example of the `player_states` data dictionary. In this dictionary, the primary key must be the player's unique numeric ID (`player_id`), starting from 1 only.
 
 ### `declaration` Examples
 
@@ -75,8 +76,15 @@ declaration:
       example: true
       description: "Whether the player is still in the game (true=alive; false=eliminated). Eliminated players do not participate in subsequent votes and night actions."
 
+  player_states_template:
+    player_states:
+      1:
+        name: ""
+        role: ""
+        is_alive: true
+
   players_example:
-    players:
+    player_states:
       1:
         name: "Alpha"
         role: "Killer"
@@ -116,8 +124,15 @@ declaration:
       example: 2
       description: "Player's health points, maximum of 5"
 
+  player_states_template:
+    player_states:
+      1:
+        name: ""
+        cards: {}
+        health: 5
+
   players_example:
-    players:
+    player_states:
       1:
         name: "Arnold"
         cards: {"Attack card": 2, "Dodge Card": 3}

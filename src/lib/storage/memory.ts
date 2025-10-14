@@ -111,6 +111,21 @@ class MemoryStorage {
     return MemoryStorage.instance;
   }
 
+  // 获取房间数据（确保从文件加载）
+  public getRoom(roomId: string): { room: RoomData; players: PlayerData[] } | null {
+    // 确保数据是最新的
+    this.loadFromFile();
+    
+    const room = this.rooms.get(roomId);
+    const players = this.players.get(roomId) || [];
+    
+    if (!room) {
+      return null;
+    }
+    
+    return { room, players };
+  }
+
   // 调试方法
   public getDebugInfo() {
     return {

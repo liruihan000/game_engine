@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import { Manrope } from "next/font/google";
 import { GeistMono } from "geist/font/mono";
-import { CopilotKit } from "@copilotkit/react-core";
+import DynamicCopilotProvider from "@/components/providers/DynamicCopilotProvider";
 import { Nav } from "@/components/ui/nav";
 import "./globals.css";
 import "@copilotkit/react-ui/styles.css";
@@ -26,15 +26,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${manrope.variable} ${GeistMono.variable}`}>
       <body className="subpixel-antialiased">
-        <CopilotKit
-          runtimeUrl="/api/copilotkit"
-          agent="sample_agent"
-          showDevConsole={false}
-          publicApiKey={process.env.COPILOT_CLOUD_PUBLIC_API_KEY}
-        >
+        <DynamicCopilotProvider>
           <Nav />
           {children}
-        </CopilotKit>
+        </DynamicCopilotProvider>
       </body>
     </html>
   );

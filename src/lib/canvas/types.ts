@@ -98,6 +98,10 @@ export interface AgentState {
   items: Item[];
   lastAction?: string;
   itemsCreated: number;
+  player_states?: Record<string, Record<string, unknown>>; // Dictionary of all game players: {"1": {name: "Alice", ...}, "2": {name: "Bob", ...}}
+  planSteps?: PlanStep[];
+  currentStepIndex?: number;
+  planStatus?: string;
 }
 
 

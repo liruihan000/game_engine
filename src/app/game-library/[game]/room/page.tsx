@@ -192,6 +192,18 @@ export default function GameRoom() {
       sessionStorage.setItem('playerSession', JSON.stringify(updatedSession));
       console.log('💾 Session updated:', updatedSession);
       
+      // 🔑 触发房间切换事件（加入房间时）
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('roomChanged', { 
+          detail: { 
+            roomId: data.roomId,
+            threadId: data.threadId,
+            action: 'joinRoom'
+          }
+        }));
+        console.log('🏠 Dispatched roomChanged event for room join, threadId:', data.threadId);
+      }
+      
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -199,10 +211,49 @@ export default function GameRoom() {
     }
   };
 
-  const startGame = () => {
-    // Navigate to the main game engine with room context
-    if (roomData && playerSession) {
-      // Store game context and navigate to main game
+  const startGame = async () => {
+    if (!roomData || !playerSession) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // First, initialize player states with real player data
+      console.log('🎮 Initializing player states...');
+      const initResponse = await fetch('/api/games/initialize-players', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomId: roomData.roomId,
+          gameName: playerSession.gameName,
+        }),
+      });
+      
+      if (!initResponse.ok) {
+        const errorData = await initResponse.json();
+        throw new Error(errorData.error || 'Failed to initialize player states');
+      }
+      
+      const playerStatesData = await initResponse.json();
+      console.log('✅ Player states initialized:', playerStatesData);
+      
+      // Store player_states with room-specific key for proper isolation
+      const playerStatesKey = `playerStates_${roomData.roomId}`;
+      sessionStorage.setItem(playerStatesKey, JSON.stringify(playerStatesData.player_states));
+      
+      // Clear any previous player states from other rooms
+      Object.keys(sessionStorage).forEach(key => {
+        if (key.startsWith('playerStates_') && key !== playerStatesKey) {
+          sessionStorage.removeItem(key);
+        }
+      });
+      
+      // Also clear legacy key if it exists
+      sessionStorage.removeItem('initializedPlayerStates');
+      
+      // Store game context
       const gameContext = {
         roomId: roomData.roomId,
         threadId: roomData.threadId,
@@ -211,7 +262,28 @@ export default function GameRoom() {
         gameName: playerSession.gameName
       };
       sessionStorage.setItem('gameContext', JSON.stringify(gameContext));
+      
+      // 🔑 触发房间切换事件，通知 DynamicCopilotProvider 更新 threadId
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('roomChanged', { 
+          detail: { 
+            roomId: roomData.roomId,
+            threadId: roomData.threadId,
+            action: 'startGame'
+          }
+        }));
+        console.log('🏠 Dispatched roomChanged event for threadId:', roomData.threadId);
+      }
+      console.log('💾 Game context and player states stored');
+      
+      // Navigate to the main game engine
       router.push(`/?room=${roomData.roomId}&game=${playerSession.gameName}`);
+      
+    } catch (err) {
+      console.error('❌ Failed to start game:', err);
+      setError(err instanceof Error ? err.message : 'Failed to start game');
+    } finally {
+      setLoading(false);
     }
   };
 

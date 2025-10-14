@@ -4,10 +4,10 @@ export const initialState: AgentState = {
   items: [],
   lastAction: "",
   itemsCreated: 0,
+  player_states: undefined,
   planSteps: [],
   currentStepIndex: -1,
   planStatus: "",
-  
 };
 
 export function isNonEmptyAgentState(value: unknown): value is AgentState {

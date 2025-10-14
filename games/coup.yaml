@@ -1,115 +1,776 @@
 declaration:
-  description: 'A fast-paced bluffing and deduction game where each player starts
-    with 2 hidden influence cards and 2 coins. On their turn, players declare actions
-    to gain coins, manipulate others, or eliminate opponents—some actions require
-    specific characters, but players may bluff. Opponents can challenge claimed characters
-    or counter-actions; incorrect bluffs cause the bluffer to lose an influence, while
-    correct claims punish the challenger. Actions include Income (1 coin), Foreign
-    Aid (2 coins, blockable by Duke), Coup (7 coins, force target to lose an influence,
-    unblockable), Tax (Duke: gain 3 coins), Assassinate (Assassin: pay 3 coins to
-    eliminate an influence), Exchange (Ambassador: swap with deck), and Steal (Captain:
-    take 2 coins, blockable by Captain or Ambassador). Last player with at least one
-    unrevealed influence wins.'
+  description: A bluffing and deduction game where players use hidden character influences
+    to gain coins, challenge claims, block actions, and eliminate opponents. Each
+    player starts with two hidden influence cards and 2 coins. Players may claim characters
+    to perform powerful actions or blocks; opponents can challenge those claims. If
+    a challenge reveals a false claim, the claimant loses an influence; if the claim
+    is true, the challenger loses an influence. Last player with at least one unrevealed
+    influence wins.
   is_multiplayer: true
   min_players: 2
   roles:
   - name: Duke
-    description: May take Tax (gain 3 coins) and blocks Foreign Aid.
+    description: Claims Tax to take 3 coins; can block Foreign Aid.
   - name: Assassin
-    description: May pay 3 coins to Assassinate, forcing the target to lose one influence.
+    description: Can Assassinate by paying 3 coins to force a target to reveal and
+      lose an influence.
   - name: Ambassador
-    description: May Exchange influence cards with the deck and blocks Steal.
+    description: Can Exchange influence cards with the deck; can block Steal.
   - name: Captain
-    description: May Steal 2 coins from a target and blocks Steal.
+    description: Can Steal 2 coins from a target; can block Steal.
   - name: Contessa
-    description: Blocks Assassination attempts.
+    description: Can block Assassination.
   player_states:
     name:
       type: string
       example: Player A
-      description: Player's display name for announcements, targeting, and turn order.
+      description: Player's display name used in prompts and announcements.
     coins:
       type: num
       example: 2
-      description: Current coin total. Players start with 2 coins; 7 coins required
-        to Coup (unblockable).
+      description: Player's coin count. Income = 1, Foreign Aid = 2 (blockable by
+        Duke), Tax = 3 (Duke), Coup costs 7, Assassinate costs 3.
     influences:
-      type: list
+      type: dict
       example:
-      - Duke
-      - Assassin
-      description: Hidden influence cards this player currently holds and may claim.
-        Typically starts with 2.
-    revealed_influences:
-      type: list
-      example:
-      - Assassin
-      description: Influence cards this player has revealed (lost). When both are
-        revealed, the player is eliminated.
-    is_eliminated:
+        '1':
+          character: Duke
+          revealed: false
+        '2':
+          character: Assassin
+          revealed: false
+      description: Two hidden influence cards in slots "1" and "2". Each slot stores
+        a character name and whether it is revealed (lost). A player is eliminated
+        when both are revealed.
+    is_alive:
       type: boolean
-      example: false
-      description: True if the player has no unrevealed influences remaining (i.e.,
-        both influences revealed).
-    claimed_character:
-      type: string
-      example: Duke
-      description: Character the player is currently claiming for an action or block
-        during the turn; empty string if none.
+      example: true
+      description: True if the player has at least one unrevealed influence; false
+        when all influences are revealed.
     claimed_action:
       type: string
       example: Tax
-      description: Action the player has declared on their turn (e.g., "Income", "Foreign
-        Aid", "Tax", "Coup", "Assassinate", "Exchange", "Steal"); empty string if
-        none.
-    targeted_player_id:
+      description: The action the player most recently declared on their turn (e.g.,
+        "Income", "Foreign Aid", "Coup", "Tax", "Assassinate", "Exchange", "Steal").
+    claimed_character:
+      type: string
+      example: Duke
+      description: The character the player is claiming to justify an action or a
+        block (if any). Blank when no claim is active.
+    target_player_id:
       type: num
       example: 2
-      description: The target player's numeric ID for targeted actions (Coup, Assassinate,
-        Steal); use 0 if not applicable.
+      description: The numeric ID of the targeted opponent for actions that require
+        a target (e.g., Steal, Assassinate, Coup). Use 0 when there is no target.
+    last_action_outcome:
+      type: string
+      example: success
+      description: Result of the player's last resolved action, such as "success",
+        "blocked", "challenged_and_won", or "challenged_and_lost".
+  player_states_template:
+    player_states:
+      1:
+        name: ''
+        coins: 2
+        influences:
+          '1':
+            character: ''
+            revealed: false
+          '2':
+            character: ''
+            revealed: false
+        is_alive: true
+        claimed_action: ''
+        claimed_character: ''
+        target_player_id: 0
+        last_action_outcome: ''
   players_example:
-    players:
+    player_states:
       1:
         name: Aria
         coins: 2
         influences:
-        - Duke
-        - Assassin
-        revealed_influences: []
-        is_eliminated: false
-        claimed_character: ''
+          '1':
+            character: Duke
+            revealed: false
+          '2':
+            character: Assassin
+            revealed: false
+        is_alive: true
         claimed_action: ''
-        targeted_player_id: 0
+        claimed_character: ''
+        target_player_id: 0
+        last_action_outcome: ''
       2:
-        name: Bryn
-        coins: 2
+        name: Blake
+        coins: 3
         influences:
-        - Captain
-        - Contessa
-        revealed_influences: []
-        is_eliminated: false
-        claimed_character: ''
+          '1':
+            character: Captain
+            revealed: false
+          '2':
+            character: Ambassador
+            revealed: false
+        is_alive: true
         claimed_action: ''
-        targeted_player_id: 0
+        claimed_character: ''
+        target_player_id: 0
+        last_action_outcome: ''
       3:
-        name: Cato
-        coins: 2
+        name: Casey
+        coins: 1
         influences:
-        - Ambassador
-        - Duke
-        revealed_influences: []
-        is_eliminated: false
-        claimed_character: ''
+          '1':
+            character: Contessa
+            revealed: false
+          '2':
+            character: Duke
+            revealed: false
+        is_alive: true
         claimed_action: ''
-        targeted_player_id: 0
-      4:
-        name: Dara
-        coins: 2
-        influences:
-        - Assassin
-        - Captain
-        revealed_influences: []
-        is_eliminated: false
         claimed_character: ''
-        claimed_action: ''
-        targeted_player_id: 0
+        target_player_id: 0
+        last_action_outcome: ''
+phases:
+  0:
+    name: Game Introduction
+    description: 'Introduce the game rules, setup, and objectives: gain coins, bluff
+      character claims, challenge/blocks, and eliminate opponents until one remains.'
+    actions:
+    - description: Clear any previous UI and prepare introduction screen
+      tools:
+      - clear_previous_ui
+    - description: Display rules summary, available character abilities/blocks, and
+        turn structure
+      tools:
+      - display_game_intro
+    - description: Show player list and initial configuration overview
+      tools:
+      - display_player_setup
+    completion_criteria:
+      type: UI_displayed
+      description: Game introduction has been displayed to all players.
+    next_phase:
+      id: 1
+      name: Initial Deal and Setup
+  1:
+    name: Initial Deal and Setup
+    description: Randomly deal two hidden influence cards to each player and set starting
+      coins to 2.
+    actions:
+    - description: Clear previous UI and prepare dealing interface
+      tools:
+      - clear_previous_ui
+    - description: Initialize influence deck (e.g., multiple copies of Duke, Assassin,
+        Ambassador, Captain, Contessa) and shuffle
+      tools:
+      - initialize_and_shuffle_deck
+    - description: Randomly deal two hidden influences to each player
+      tools:
+      - deal_influences_randomly
+    - description: Set each player's coins to 2 and is_alive to true
+      tools:
+      - initialize_player_coins_and_status
+    - description: Privately notify each player of their hidden influences
+      tools:
+      - notify_player_influences_privately
+    - description: Randomize and set initial turn order
+      tools:
+      - set_initial_turn_order
+    completion_criteria:
+      type: UI_displayed
+      description: All influences have been dealt and players have been notified.
+    next_phase:
+      id: 2
+      name: Start of Turn
+  2:
+    name: Start of Turn
+    description: Announce the current player, show coin counts, alive statuses, and
+      enforce the forced Coup rule (10+ coins).
+    actions:
+    - description: Clear previous UI and highlight the active player
+      tools:
+      - clear_previous_ui
+      - highlight_active_player
+    - description: 'Display public state: coins, alive statuses, and remaining players'
+      tools:
+      - display_public_state
+    - description: 'Display reminder: if the active player has 10+ coins, only Coup
+        is allowed'
+      tools:
+      - display_forced_coup_rule
+    completion_criteria:
+      type: UI_displayed
+      description: Start-of-turn information displayed.
+    next_phase:
+      id: 3
+      name: Action Declaration
+  3:
+    name: Action Declaration
+    description: Active player declares an action (and target if required). Deduct
+      costs for Coup (7) or Assassinate (3) immediately.
+    actions:
+    - description: Clear previous UI and show action options (restrict to Coup if
+        active player has 10+ coins)
+      tools:
+      - clear_previous_ui
+      - show_action_menu
+    - description: Prompt active player to choose an action and target (if required);
+        set claimed_character accordingly
+      tools:
+      - prompt_player_action_selection
+      - set_claimed_action_and_character
+    - description: Validate target legality and deduct action costs (Coup 7, Assassinate
+        3)
+      tools:
+      - validate_and_apply_action_costs
+    completion_criteria:
+      type: player_action
+      description: Active player has declared action/target, and relevant player state
+        (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Current active player
+        condition: player.id == current_turn.player_id and player.is_alive == true
+    next_phase:
+      If the declared action is Tax, Assassinate, Exchange, or Steal (claim-based):
+        id: 4
+        name: Action Challenge Window
+      If the declared action is Foreign Aid (no claim, blockable by Duke):
+        id: 10
+        name: Block Window — Foreign Aid
+      If the declared action is Income (no claim, not blockable):
+        id: 20
+        name: Resolve Action Effects
+      If the declared action is Coup (not challengeable/blockable):
+        id: 21
+        name: Target Loses Influence
+  4:
+    name: Action Challenge Window
+    description: Opponents may challenge the claim behind the declared action; collect
+      a single challenge or all passes.
+    actions:
+    - description: Clear previous UI and show declared action, target, and claimed
+        character (if any)
+      tools:
+      - clear_previous_ui
+      - display_declared_action
+    - description: Prompt all surviving opponents to either Challenge or Pass; accept
+        the first challenge if any
+      tools:
+      - collect_action_challenge_responses
+    completion_criteria:
+      type: player_action
+      description: All eligible opponents have responded, and relevant player state
+        (player_states) has been updated.
+      wait_for: all_players_action
+      target_players:
+        description: All surviving opponents of the active player
+        condition: player.id != current_turn.player_id and player.is_alive == true
+    next_phase:
+      If a challenge to the action was made:
+        id: 5
+        name: Evaluate Action Challenge
+      If no challenge and action is Assassinate (blockable by Contessa):
+        id: 11
+        name: Block Window — Assassination
+      If no challenge and action is Steal (blockable by Captain/Ambassador):
+        id: 12
+        name: Block Window — Steal
+      If no challenge and action is Tax (not blockable):
+        id: 20
+        name: Resolve Action Effects
+      If no challenge and action is Exchange (not blockable):
+        id: 22
+        name: Ambassador Exchange Decision
+  5:
+    name: Evaluate Action Challenge
+    description: Determine whether the active player actually holds the claimed character
+      to support their action.
+    actions:
+    - description: Clear previous UI and evaluate claimant's hand for the claimed
+        character
+      tools:
+      - clear_previous_ui
+      - evaluate_action_claim_truth
+    completion_criteria:
+      type: UI_displayed
+      description: Challenge outcome computed.
+    next_phase:
+      If the claimant has the claimed character (claim true):
+        id: 6
+        name: Claimant Reveals Proof
+      If the claimant does not have the claimed character (claim false):
+        id: 9
+        name: Claimant Loses Influence
+  6:
+    name: Claimant Reveals Proof
+    description: Claimant reveals a matching influence to prove their claim.
+    actions:
+    - description: Clear previous UI and prompt claimant to reveal one matching influence
+      tools:
+      - clear_previous_ui
+      - prompt_reveal_matching_influence
+    - description: Mark the selected influence as temporarily revealed for proof
+      tools:
+      - update_influence_reveal_for_proof
+    completion_criteria:
+      type: player_action
+      description: Claimant has revealed a matching influence for proof, and relevant
+        player state (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Claimant of the action who holds the claimed character
+        condition: player.id == current_turn.player_id and player.is_alive == true
+    next_phase:
+      id: 7
+      name: Replace Proof and Restore Hand
+  7:
+    name: Replace Proof and Restore Hand
+    description: Swap the revealed proof card with a new one from the deck, then return
+      the proof card to the deck and shuffle.
+    actions:
+    - description: Clear previous UI and replace the revealed proof with a random
+        unseen card from the deck
+      tools:
+      - clear_previous_ui
+      - replace_proof_with_deck_card
+    - description: Return the revealed proof to the deck, shuffle, and mark action
+        outcome as 'challenged_and_won'
+      tools:
+      - return_card_to_deck_and_shuffle
+      - set_action_outcome_challenged_and_won
+    completion_criteria:
+      type: UI_displayed
+      description: Proof replacement completed.
+    next_phase:
+      id: 8
+      name: Challenger Loses Influence
+  8:
+    name: Challenger Loses Influence
+    description: The challenger reveals and loses one influence.
+    actions:
+    - description: Clear previous UI and prompt the challenger to choose an influence
+        to reveal (lose)
+      tools:
+      - clear_previous_ui
+      - prompt_challenger_reveal_loss
+    - description: Update challenger state and elimination if applicable
+      tools:
+      - update_player_state_after_loss
+    completion_criteria:
+      type: player_action
+      description: Challenger has revealed a losing influence, and relevant player
+        state (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: The player who challenged the action
+        condition: player.id == challenge.challenger_id and player.is_alive == true
+    next_phase:
+      If the original action is Assassinate (blockable):
+        id: 11
+        name: Block Window — Assassination
+      If the original action is Steal (blockable):
+        id: 12
+        name: Block Window — Steal
+      If the original action is Tax (not blockable):
+        id: 20
+        name: Resolve Action Effects
+      If the original action is Exchange (not blockable):
+        id: 22
+        name: Ambassador Exchange Decision
+  9:
+    name: Claimant Loses Influence
+    description: The claimant failed the challenge and must reveal and lose one influence;
+      the action fails.
+    actions:
+    - description: Clear previous UI and prompt claimant to choose an influence to
+        reveal (lose)
+      tools:
+      - clear_previous_ui
+      - prompt_claimant_reveal_loss
+    - description: Update claimant state, set outcome 'challenged_and_lost', and cancel
+        action effects
+      tools:
+      - update_player_state_after_loss
+      - set_action_outcome_challenged_and_lost
+    completion_criteria:
+      type: player_action
+      description: Claimant has revealed a losing influence, and relevant player state
+        (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Claimant who lost the action challenge
+        condition: player.id == current_turn.player_id and player.is_alive == true
+    next_phase:
+      id: 23
+      name: Check Eliminations and Win
+  10:
+    name: Block Window — Foreign Aid
+    description: Opponents may block Foreign Aid by claiming Duke.
+    actions:
+    - description: Clear previous UI and prompt all surviving opponents to Block (claim
+        Duke) or Pass; accept first block if any
+      tools:
+      - clear_previous_ui
+      - collect_block_responses_foreign_aid
+    completion_criteria:
+      type: player_action
+      description: All eligible opponents have responded, and relevant player state
+        (player_states) has been updated.
+      wait_for: all_players_action
+      target_players:
+        description: All surviving opponents
+        condition: player.id != current_turn.player_id and player.is_alive == true
+    next_phase:
+      If a block was declared:
+        id: 13
+        name: Challenge Block Window
+      If no one blocked:
+        id: 20
+        name: Resolve Action Effects
+  11:
+    name: Block Window — Assassination
+    description: The target may block Assassination by claiming Contessa.
+    actions:
+    - description: Clear previous UI and prompt the target to Block (claim Contessa)
+        or Pass
+      tools:
+      - clear_previous_ui
+      - prompt_target_block_assassination
+    completion_criteria:
+      type: player_action
+      description: Target response to block prompt received, and relevant player state
+        (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Target of the Assassination
+        condition: player.id == current_turn.target_player_id and player.is_alive
+          == true
+    next_phase:
+      If the target declared a block:
+        id: 13
+        name: Challenge Block Window
+      If the target did not block:
+        id: 21
+        name: Target Loses Influence
+  12:
+    name: Block Window — Steal
+    description: The target may block Steal by claiming Captain or Ambassador.
+    actions:
+    - description: Clear previous UI and prompt the target to Block (claim Captain/Ambassador)
+        or Pass
+      tools:
+      - clear_previous_ui
+      - prompt_target_block_steal
+    completion_criteria:
+      type: player_action
+      description: Target response to block prompt received, and relevant player state
+        (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Target of the Steal
+        condition: player.id == current_turn.target_player_id and player.is_alive
+          == true
+    next_phase:
+      If the target declared a block:
+        id: 13
+        name: Challenge Block Window
+      If the target did not block:
+        id: 20
+        name: Resolve Action Effects
+  13:
+    name: Challenge Block Window
+    description: Opponents (excluding the blocker) may challenge the block claim;
+      collect a single challenge or all passes.
+    actions:
+    - description: Clear previous UI and announce the block and its claimed character
+      tools:
+      - clear_previous_ui
+      - display_block_announcement
+    - description: Prompt all surviving opponents except the blocker to Challenge
+        or Pass; accept the first challenge if any
+      tools:
+      - collect_block_challenge_responses
+    completion_criteria:
+      type: player_action
+      description: All eligible opponents have responded, and relevant player state
+        (player_states) has been updated.
+      wait_for: all_players_action
+      target_players:
+        description: All surviving opponents excluding the blocker
+        condition: player.id != block.blocker_id and player.is_alive == true
+    next_phase:
+      If the block was challenged:
+        id: 14
+        name: Evaluate Block Challenge
+      If the block was not challenged (stands):
+        id: 19
+        name: Block Successful Resolution
+  14:
+    name: Evaluate Block Challenge
+    description: Determine whether the blocker holds the claimed character for the
+      block.
+    actions:
+    - description: Clear previous UI and evaluate block claim truth against the blocker's
+        hand
+      tools:
+      - clear_previous_ui
+      - evaluate_block_claim_truth
+    completion_criteria:
+      type: UI_displayed
+      description: Block challenge outcome computed.
+    next_phase:
+      If the blocker has the claimed character (block true):
+        id: 15
+        name: Blocker Reveals Proof
+      If the blocker does not have the claimed character (block false):
+        id: 18
+        name: Blocker Loses Influence
+  15:
+    name: Blocker Reveals Proof
+    description: Blocker reveals a matching influence to prove the block claim.
+    actions:
+    - description: Clear previous UI and prompt blocker to reveal one matching influence
+      tools:
+      - clear_previous_ui
+      - prompt_blocker_reveal_matching_influence
+    - description: Mark the selected influence as temporarily revealed for proof
+      tools:
+      - update_influence_reveal_for_proof
+    completion_criteria:
+      type: player_action
+      description: Blocker has revealed a matching influence for proof, and relevant
+        player state (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Blocker who holds the claimed character
+        condition: player.id == block.blocker_id and player.is_alive == true
+    next_phase:
+      id: 16
+      name: Replace Block Proof and Restore Hand
+  16:
+    name: Replace Block Proof and Restore Hand
+    description: Swap the revealed proof card with a new one from the deck, then return
+      the proof card to the deck and shuffle.
+    actions:
+    - description: Clear previous UI and replace the revealed proof with a random
+        unseen card from the deck
+      tools:
+      - clear_previous_ui
+      - replace_proof_with_deck_card
+    - description: Return the revealed proof to the deck, shuffle
+      tools:
+      - return_card_to_deck_and_shuffle
+    completion_criteria:
+      type: UI_displayed
+      description: Proof replacement completed for the blocker.
+    next_phase:
+      id: 17
+      name: Block Challenger Loses Influence
+  17:
+    name: Block Challenger Loses Influence
+    description: The challenger to the block reveals and loses one influence.
+    actions:
+    - description: Clear previous UI and prompt the block challenger to choose an
+        influence to reveal (lose)
+      tools:
+      - clear_previous_ui
+      - prompt_block_challenger_reveal_loss
+    - description: Update challenger state and elimination if applicable
+      tools:
+      - update_player_state_after_loss
+    completion_criteria:
+      type: player_action
+      description: Block challenger has revealed a losing influence, and relevant
+        player state (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: The player who challenged the block
+        condition: player.id == block_challenge.challenger_id and player.is_alive
+          == true
+    next_phase:
+      id: 19
+      name: Block Successful Resolution
+  18:
+    name: Blocker Loses Influence
+    description: The block failed; the blocker must reveal and lose one influence.
+    actions:
+    - description: Clear previous UI and prompt blocker to choose an influence to
+        reveal (lose)
+      tools:
+      - clear_previous_ui
+      - prompt_blocker_reveal_loss
+    - description: Update blocker state and elimination if applicable; mark block
+        as failed
+      tools:
+      - update_player_state_after_loss
+      - mark_block_failed
+    completion_criteria:
+      type: player_action
+      description: Blocker has revealed a losing influence, and relevant player state
+        (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: The player who attempted the block and failed the challenge
+        condition: player.id == block.blocker_id and player.is_alive == true
+    next_phase:
+      If the original action was Foreign Aid (now unblocked):
+        id: 20
+        name: Resolve Action Effects
+      If the original action was Assassinate (now unblocked):
+        id: 21
+        name: Target Loses Influence
+      If the original action was Steal (now unblocked):
+        id: 20
+        name: Resolve Action Effects
+  19:
+    name: Block Successful Resolution
+    description: The block stands; the original action is prevented.
+    actions:
+    - description: 'Clear previous UI and mark the action as blocked; apply no action
+        effects (note: Assassination cost remains spent)'
+      tools:
+      - clear_previous_ui
+      - set_action_outcome_blocked
+    completion_criteria:
+      type: UI_displayed
+      description: Block success announced; state updated.
+    next_phase:
+      id: 23
+      name: Check Eliminations and Win
+  20:
+    name: Resolve Action Effects
+    description: Apply action effects (Income +1, Foreign Aid +2 if unblocked, Tax
+      +3, Steal transfer up to 2 from target; set outcome to success).
+    actions:
+    - description: Clear previous UI and compute/apply the effects of the declared
+        action
+      tools:
+      - clear_previous_ui
+      - apply_action_effects
+    - description: Set last_action_outcome to 'success' when effects are applied
+      tools:
+      - set_action_outcome_success
+    completion_criteria:
+      type: UI_displayed
+      description: Action effects applied.
+    next_phase:
+      id: 23
+      name: Check Eliminations and Win
+  21:
+    name: Target Loses Influence
+    description: Target of a successful Assassination or Coup reveals and loses one
+      influence.
+    actions:
+    - description: Clear previous UI and prompt target to choose an influence to reveal
+        (lose)
+      tools:
+      - clear_previous_ui
+      - prompt_target_reveal_loss
+    - description: Update target state and elimination if applicable; set last_action_outcome
+        to 'success'
+      tools:
+      - update_player_state_after_loss
+      - set_action_outcome_success
+    completion_criteria:
+      type: player_action
+      description: Target has revealed a losing influence, and relevant player state
+        (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Targeted player of Coup or successful Assassination
+        condition: player.id == current_turn.target_player_id and player.is_alive
+          == true
+    next_phase:
+      id: 23
+      name: Check Eliminations and Win
+  22:
+    name: Ambassador Exchange Decision
+    description: 'Active player exchanges with the deck: draw two, choose two to keep,
+      return extras.'
+    actions:
+    - description: Clear previous UI and deal two exchange cards to the active player
+        (hidden)
+      tools:
+      - clear_previous_ui
+      - deal_exchange_cards_to_player
+    - description: Prompt the active player to select two cards to keep from their
+        current unrevealed influences plus drawn cards
+      tools:
+      - prompt_exchange_selection
+    - description: Return extras to the deck and shuffle; clear claimed_character;
+        set last_action_outcome to 'success'
+      tools:
+      - finalize_exchange_and_shuffle
+      - clear_claimed_character
+      - set_action_outcome_success
+    completion_criteria:
+      type: player_action
+      description: Active player's exchange choices have been applied, and relevant
+        player state (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Current active player performing Exchange
+        condition: player.id == current_turn.player_id and player.is_alive == true
+    next_phase:
+      id: 23
+      name: Check Eliminations and Win
+  23:
+    name: Check Eliminations and Win
+    description: Update elimination statuses and evaluate if a single player remains;
+      otherwise continue.
+    actions:
+    - description: Clear previous UI and update is_alive flags based on revealed influences
+      tools:
+      - clear_previous_ui
+      - update_alive_statuses
+    - description: Announce any eliminations and check win condition (players with
+        at least one unrevealed influence > 1?)
+      tools:
+      - announce_eliminations
+      - check_and_set_win_state
+    completion_criteria:
+      type: UI_displayed
+      description: Elimination and win condition evaluation finished.
+    next_phase:
+      If only one player remains alive (win condition met):
+        id: 99
+        name: Game Over — Summary
+      Otherwise, proceed to the next turn:
+        id: 24
+        name: Advance Turn
+  24:
+    name: Advance Turn
+    description: Advance to the next living player and reset turn-specific fields.
+    actions:
+    - description: Clear previous UI and advance turn to the next living player
+      tools:
+      - clear_previous_ui
+      - advance_to_next_player
+    - description: Reset turn fields (claimed_action, claimed_character, target_player_id)
+        and show updated turn order
+      tools:
+      - reset_turn_fields
+      - display_turn_order
+    completion_criteria:
+      type: UI_displayed
+      description: Turn advanced and UI updated.
+    next_phase:
+      id: 2
+      name: Start of Turn
+  99:
+    name: Game Over — Summary
+    description: Display the winner and reveal final states.
+    actions:
+    - description: Clear previous UI and display winner announcement
+      tools:
+      - clear_previous_ui
+      - display_winner
+    - description: Reveal final influences and coins for all players
+      tools:
+      - reveal_final_states
+    completion_criteria:
+      type: UI_displayed
+      description: Game over screen displayed.
+    next_phase: null
