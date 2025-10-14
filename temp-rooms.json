@@ -1,0 +1,37 @@
+{
+  "rooms": {
+    "13096b61-c90d-41c2-b8ad-e996c244921c": {
+      "id": "13096b61-c90d-41c2-b8ad-e996c244921c",
+      "game_name": "bang!",
+      "thread_id": "thread_bang!_1760410148066_fnb0hnlsddv",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 2,
+      "created_at": "2025-10-14T02:49:08.066Z"
+    }
+  },
+  "players": {
+    "13096b61-c90d-41c2-b8ad-e996c244921c": [
+      {
+        "id": 1,
+        "room_id": "13096b61-c90d-41c2-b8ad-e996c244921c",
+        "name": "q11214",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T02:49:08.066Z"
+      },
+      {
+        "id": 2,
+        "room_id": "13096b61-c90d-41c2-b8ad-e996c244921c",
+        "name": "fdsgdfhg",
+        "player_order": 2,
+        "is_host": false,
+        "status": "active",
+        "joined_at": "2025-10-14T02:50:22.857Z"
+      }
+    ]
+  },
+  "nextPlayerId": 2
+}

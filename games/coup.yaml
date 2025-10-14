@@ -1,0 +1,115 @@
+declaration:
+  description: 'A fast-paced bluffing and deduction game where each player starts
+    with 2 hidden influence cards and 2 coins. On their turn, players declare actions
+    to gain coins, manipulate others, or eliminate opponents—some actions require
+    specific characters, but players may bluff. Opponents can challenge claimed characters
+    or counter-actions; incorrect bluffs cause the bluffer to lose an influence, while
+    correct claims punish the challenger. Actions include Income (1 coin), Foreign
+    Aid (2 coins, blockable by Duke), Coup (7 coins, force target to lose an influence,
+    unblockable), Tax (Duke: gain 3 coins), Assassinate (Assassin: pay 3 coins to
+    eliminate an influence), Exchange (Ambassador: swap with deck), and Steal (Captain:
+    take 2 coins, blockable by Captain or Ambassador). Last player with at least one
+    unrevealed influence wins.'
+  is_multiplayer: true
+  min_players: 2
+  roles:
+  - name: Duke
+    description: May take Tax (gain 3 coins) and blocks Foreign Aid.
+  - name: Assassin
+    description: May pay 3 coins to Assassinate, forcing the target to lose one influence.
+  - name: Ambassador
+    description: May Exchange influence cards with the deck and blocks Steal.
+  - name: Captain
+    description: May Steal 2 coins from a target and blocks Steal.
+  - name: Contessa
+    description: Blocks Assassination attempts.
+  player_states:
+    name:
+      type: string
+      example: Player A
+      description: Player's display name for announcements, targeting, and turn order.
+    coins:
+      type: num
+      example: 2
+      description: Current coin total. Players start with 2 coins; 7 coins required
+        to Coup (unblockable).
+    influences:
+      type: list
+      example:
+      - Duke
+      - Assassin
+      description: Hidden influence cards this player currently holds and may claim.
+        Typically starts with 2.
+    revealed_influences:
+      type: list
+      example:
+      - Assassin
+      description: Influence cards this player has revealed (lost). When both are
+        revealed, the player is eliminated.
+    is_eliminated:
+      type: boolean
+      example: false
+      description: True if the player has no unrevealed influences remaining (i.e.,
+        both influences revealed).
+    claimed_character:
+      type: string
+      example: Duke
+      description: Character the player is currently claiming for an action or block
+        during the turn; empty string if none.
+    claimed_action:
+      type: string
+      example: Tax
+      description: Action the player has declared on their turn (e.g., "Income", "Foreign
+        Aid", "Tax", "Coup", "Assassinate", "Exchange", "Steal"); empty string if
+        none.
+    targeted_player_id:
+      type: num
+      example: 2
+      description: The target player's numeric ID for targeted actions (Coup, Assassinate,
+        Steal); use 0 if not applicable.
+  players_example:
+    players:
+      1:
+        name: Aria
+        coins: 2
+        influences:
+        - Duke
+        - Assassin
+        revealed_influences: []
+        is_eliminated: false
+        claimed_character: ''
+        claimed_action: ''
+        targeted_player_id: 0
+      2:
+        name: Bryn
+        coins: 2
+        influences:
+        - Captain
+        - Contessa
+        revealed_influences: []
+        is_eliminated: false
+        claimed_character: ''
+        claimed_action: ''
+        targeted_player_id: 0
+      3:
+        name: Cato
+        coins: 2
+        influences:
+        - Ambassador
+        - Duke
+        revealed_influences: []
+        is_eliminated: false
+        claimed_character: ''
+        claimed_action: ''
+        targeted_player_id: 0
+      4:
+        name: Dara
+        coins: 2
+        influences:
+        - Assassin
+        - Captain
+        revealed_influences: []
+        is_eliminated: false
+        claimed_character: ''
+        claimed_action: ''
+        targeted_player_id: 0

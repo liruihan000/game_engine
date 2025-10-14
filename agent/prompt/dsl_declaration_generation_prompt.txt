@@ -53,6 +53,7 @@ Example1:
 declaration:
   description: "This is a social deduction game of factional combat. Players are secretly divided into two camps: the Werewolf faction and the Villager faction (including special roles such as Doctor and Detective). The game progresses in day-night cycles where night actions resolve followed by day discussions and voting."
   is_multiplayer: true
+  min_players: 4
   roles:
     - name: "Villager"
       description: "Has no special abilities. Goal is to vote out all killers."
@@ -96,6 +97,7 @@ Example2:
 declaration:
   description: "A Wild West shootout card game where players have hidden roles and use playing cards to attack, defend, and survive."
   is_multiplayer: true
+  min_players: 4
   roles:
     - name: "human"
       description: "Goal is to defeat other players"

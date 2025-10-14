@@ -11,6 +11,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { href: "/", label: "Game Engine" },
+  { href: "/game-library", label: "Game Library" },
   { href: "/dsl-generator", label: "DSL Generator" }
 ];
 

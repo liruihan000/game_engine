@@ -40,6 +40,7 @@ This section defines the core rules and data structures of the game, loaded befo
 
 - **Description** (string): Game overview.
 - **is_multiplayer** (boolean): Describes whether this is a multiplayer game.
+- **min_players** (number): Minimum number of players required to play this game.
 - **roles** (array): An array of objects defining all available roles. If there are no roles, this field is not needed.
     - `name` (string): Name of the role.
     - `description` (string): Description of the role's abilities.
