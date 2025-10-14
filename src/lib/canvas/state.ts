@@ -4,7 +4,7 @@ export const initialState: AgentState = {
   items: [],
   lastAction: "",
   itemsCreated: 0,
-  player_states: undefined,
+  player_states: {}, // Initialize as empty object instead of undefined
   vote: [], // Initialize empty vote records array
   deadPlayers: [], // Initialize empty dead players array
   planSteps: [],
@@ -16,6 +16,8 @@ export const initialState: AgentState = {
 export function isNonEmptyAgentState(value: unknown): value is AgentState {
   if (value == null || typeof value !== "object") return false;
   const keys = Object.keys(value as Record<string, unknown>);
+  // Always consider a state with basic AgentState fields as valid
+  // This prevents player_states from being lost during state transitions
   return keys.length > 0;
 }
 

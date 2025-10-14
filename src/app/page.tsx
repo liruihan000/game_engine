@@ -48,6 +48,30 @@ export default function CopilotKitPage() {
     return false; // No update needed
   }, [setState, state]);
 
+  // Continuously sync gameName from URL (but avoid infinite loops)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Only check if we're in browser and have a different gameName
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        const urlGameName = params.get('game');
+        const currentGameName = state?.gameName;
+        
+        // Only update if there's a real difference
+        if (urlGameName && urlGameName !== currentGameName) {
+          console.log('🔄 Periodic gameName sync:', urlGameName);
+          setState((prev) => {
+            const base = prev ?? initialState;
+            return { ...base, gameName: urlGameName } as AgentState;
+          });
+        }
+      }
+    }, 2000); // Check every 2 seconds
+
+    // Cleanup interval on unmount
+    return () => clearInterval(interval);
+  }, [setState, state?.gameName]); // Depend on gameName to avoid unnecessary updates
+
   // Handle action button clicks
   const handleButtonClick = useCallback(async (item: Item) => {
     const buttonData = item.data as ActionButtonData;
@@ -171,7 +195,7 @@ export default function CopilotKitPage() {
         
         // Initialize player_states in AgentState
         setState(prevState => {
-          if (prevState?.player_states) {
+          if (prevState?.player_states && Object.keys(prevState.player_states).length > 0) {
             console.log('⏭️ Player states already set, skipping...');
             return prevState;
           }
@@ -288,6 +312,27 @@ export default function CopilotKitPage() {
       
       const currentGameName = viewState.gameName || "(none)";
       
+      // Frontend-available tools and short descriptions (game_tool)
+      const gameTools = {
+        setGlobalTitle: "Set the global page title.",
+        setGlobalDescription: "Set the global page subtitle/description.",
+        setItemName: "Rename an existing item by id.",
+        setItemSubtitleOrDescription: "Set an item's subtitle/short description.",
+        createCharacterCard: "Create a character card (role, position, optional size, description).",
+        createActionButton: "Create an action button (label, action id, enabled, position).",
+        createPhaseIndicator: "Create a phase indicator (currentPhase, position, optional description, timer).",
+        createTextDisplay: "Create a text panel (content, optional title/type, position).",
+        createVotingPanel: "Create a voting panel (votingId, options, position, optional title).",
+        createAvatarSet: "Create player avatars overlay (avatarType).",
+        markPlayerDead: "Mark a player as dead (affects avatar display).",
+        createTimer: "Create a countdown timer that expires and notifies the agent.",
+        changeBackgroundColor: "Create background control and set initial color.",
+        createResultDisplay: "Create a large gradient-styled result display at a position.",
+        deleteItem: "Delete an item by id.",
+        clearCanvas: "Clear all canvas items except avatar sets."
+      } as const;
+      const gameToolsStr = JSON.stringify(gameTools, null, 2);
+      
       const fieldSchema = "";
       const toolUsageHints = [
         "GAME TOOL USAGE HINTS:",
@@ -307,6 +352,8 @@ export default function CopilotKitPage() {
         votesStr,
         "Dead Players:",
         deadPlayersStr,
+        "game_tool:",
+        gameToolsStr,
         fieldSchema,
         toolUsageHints,
       ].join("\n");
@@ -976,6 +1023,33 @@ export default function CopilotKitPage() {
     },
   });
 
+  useCopilotAction({
+    name: "clearCanvas",
+    description: "Clear all items from the canvas except avatar sets. This is useful when transitioning between game phases or starting fresh.",
+    available: "remote",
+    parameters: [],
+    handler: () => {
+      setState((prev) => {
+        const base = prev ?? initialState;
+        const items = base.items ?? [];
+        // Keep only avatar_set items
+        const avatarItems = items.filter(item => item.type === "avatar_set");
+        const removedCount = items.length - avatarItems.length;
+        console.log(`🧹 Clearing canvas: removed ${removedCount} items, kept ${avatarItems.length} avatars`);
+        return { 
+          ...base, 
+          items: avatarItems,
+          lastAction: `cleared_canvas:${removedCount}_removed`
+        } as AgentState;
+      });
+      
+      const originalCount = (viewState.items ?? []).length;
+      const avatarCount = (viewState.items ?? []).filter(item => item.type === "avatar_set").length;
+      const removedCount = originalCount - avatarCount;
+      return `Canvas cleared. Removed ${removedCount} items, kept ${avatarCount} avatar sets.`;
+    },
+  });
+
   const titleClasses = cn(
     /* base styles */
     "w-full outline-none rounded-md px-2 py-1",
@@ -1116,12 +1190,7 @@ export default function CopilotKitPage() {
                   <div className="mx-auto max-w-lg text-center">
                     <h2 className="text-lg font-semibold text-foreground">Ready to Play!</h2>
                     <p className="mt-2 text-sm text-muted-foreground">
-                      Click Start to begin your {(() => {
-                        if (typeof window === 'undefined') return 'game';
-                        const params = new URLSearchParams(window.location.search);
-                        const gameName = params.get('game') || 'game';
-                        return gameName;
-                      })()} game.
+                      Click Start to begin your game.
                     </p>
                     <div className="mt-6 flex justify-center">
                       <Button
@@ -1190,6 +1259,8 @@ export default function CopilotKitPage() {
                         const itemsInRegion = (viewState.items ?? []).filter(item => {
                           // Exclude avatar_set items as they render as overlay
                           if (item.type === "avatar_set") return false;
+                          // Exclude timer items as they use fixed positioning
+                          if (item.type === "timer") return false;
                           const itemData = item.data as ItemData;
                           return (itemData as { position?: GamePosition })?.position === position;
                         });
@@ -1218,12 +1289,50 @@ export default function CopilotKitPage() {
                         );
                       })}
                       </div>
+                      
+                      {/* Render timer components with fixed positioning */}
+                      {(viewState.items ?? []).filter(item => item.type === "timer").map((item) => (
+                        <CardRenderer 
+                          key={item.id}
+                          item={item} 
+                          onUpdateData={(updater) => updateItemData(item.id, updater)} 
+                          onToggleTag={() => toggleTag()} 
+                          onButtonClick={handleButtonClick} 
+                          onVote={handleVote} 
+                          playerStates={viewState.player_states} 
+                          deadPlayers={viewState.deadPlayers} 
+                        />
+                      ))}
                     </div>
                   )}
                 </div>
               )}
             </div>
           </div>
+          
+          {/* Continue button - shown when game has items */}
+          {(viewState.items ?? []).length > 0 && (
+            <div className="flex justify-center py-4">
+              <Button
+                variant="default" 
+                size="lg"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3"
+                onClick={async () => {
+                  // Ensure gameName is set
+                  ensureGameName();
+                  
+                  // Send continue message to Agent
+                  await appendMessage(new TextMessage({
+                    role: MessageRole.User,
+                    content: "Continue"
+                  }));
+                }}
+              >
+                Continue
+              </Button>
+            </div>
+          )}
+          
           {(viewState.items ?? []).length > 0 ? (
             <div className={cn(
               "absolute left-1/2 -translate-x-1/2 bottom-4",

@@ -211,6 +211,52 @@ export default function GameRoom() {
     }
   };
 
+  const addBots = async () => {
+    if (!roomData || !playerSession) return;
+    
+    setLoading(true);
+    setError(null);
+    
+    try {
+      console.log('🤖 Adding bots to reach minimum players...');
+      const response = await fetch('/api/rooms/add-bot', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomId: roomData.roomId,
+          gameName: playerSession.gameName,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add bots');
+      }
+
+      const result = await response.json();
+      console.log('🤖 Bots added successfully:', result);
+      
+      // Update room data with new player count
+      setRoomData(prev => prev ? {
+        ...prev,
+        currentPlayers: result.totalPlayers,
+        players: result.allPlayers.map((p: { id: number; name: string; is_host: boolean }) => ({
+          id: p.id,
+          name: p.name,
+          isHost: p.is_host
+        }))
+      } : null);
+      
+    } catch (error) {
+      console.error('❌ Error adding bots:', error);
+      setError(error instanceof Error ? error.message : 'Failed to add bots');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const startGame = async () => {
     if (!roomData || !playerSession) return;
     
@@ -497,6 +543,20 @@ export default function GameRoom() {
                             <Badge variant="secondary" className="text-xs">Host</Badge>
                           </div>
                         )}
+                        
+                        {roomData.isHost && (roomData.currentPlayers || 1) < 4 && (
+                          <Button
+                            onClick={addBots}
+                            variant="outline"
+                            size="sm"
+                            disabled={loading}
+                            className="w-full mt-3 text-xs border-dashed border-blue-300 text-blue-600 hover:bg-blue-50"
+                          >
+                            <UserPlus className="h-3 w-3 mr-1" />
+                            Add Bots (Need {Math.max(0, 4 - (roomData.currentPlayers || 1))} more)
+                          </Button>
+                        )}
+                        
                         <p className="text-xs text-slate-500 mt-2">
                           {roomData.currentPlayers || 1}/{roomData.maxPlayers || 8} players
                         </p>

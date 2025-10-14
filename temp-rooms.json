@@ -239,6 +239,156 @@
       "max_players": 8,
       "current_players": 1,
       "created_at": "2025-10-14T11:58:26.844Z"
+    },
+    "7f37bd1c-ea98-422a-9fdb-839ca0f13db7": {
+      "id": "7f37bd1c-ea98-422a-9fdb-839ca0f13db7",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "edc97ab8-d924-46e5-a72a-0d7c2ed0fee6",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 1,
+      "created_at": "2025-10-14T12:47:29.702Z"
+    },
+    "b273a2a3-213a-47da-8f8f-cddb3144f47c": {
+      "id": "b273a2a3-213a-47da-8f8f-cddb3144f47c",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "2154e079-5512-45b4-99d6-263ed1075b9a",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 1,
+      "created_at": "2025-10-14T12:49:31.907Z"
+    },
+    "f30e21f0-5930-42da-acf0-88da9f80ae1f": {
+      "id": "f30e21f0-5930-42da-acf0-88da9f80ae1f",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "32c413fc-0aa4-4163-8295-09c53add4da7",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 1,
+      "created_at": "2025-10-14T12:50:11.763Z"
+    },
+    "50561e29-df92-4298-93da-5331bc1abc01": {
+      "id": "50561e29-df92-4298-93da-5331bc1abc01",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "ae646ebe-e400-41d0-9fd6-42c9724bcca0",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 1,
+      "created_at": "2025-10-14T13:05:28.175Z"
+    },
+    "5479ff4c-698b-45f6-82fd-55042ac79ae3": {
+      "id": "5479ff4c-698b-45f6-82fd-55042ac79ae3",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "7446ee8e-6eea-4cbe-9605-913c9bfe85cd",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 1,
+      "created_at": "2025-10-14T13:06:02.667Z"
+    },
+    "c4884f39-294a-4187-804e-85c5286995a2": {
+      "id": "c4884f39-294a-4187-804e-85c5286995a2",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "994f90bd-6ce8-42c5-b3df-60afdb647107",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 1,
+      "created_at": "2025-10-14T13:13:18.354Z"
+    },
+    "7e40f302-adae-4b87-aa97-655b196a5645": {
+      "id": "7e40f302-adae-4b87-aa97-655b196a5645",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "a4d85aba-17d0-4335-a341-d6b570dc5e4b",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 1,
+      "created_at": "2025-10-14T13:21:42.595Z"
+    },
+    "2edb70e0-9754-4a4f-bb28-cc7cb01f43e5": {
+      "id": "2edb70e0-9754-4a4f-bb28-cc7cb01f43e5",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "a58f392a-49c2-45a2-8c46-1531c73e3327",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 1,
+      "created_at": "2025-10-14T13:27:41.528Z"
+    },
+    "3c7d60ab-4cdf-4325-af20-b7b7f73d0db2": {
+      "id": "3c7d60ab-4cdf-4325-af20-b7b7f73d0db2",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "f76a5536-1e7c-4b77-88e1-1b49ae451b75",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 1,
+      "created_at": "2025-10-14T13:33:52.443Z"
+    },
+    "546ef84c-07cb-41d6-91b9-2a46c9b49f01": {
+      "id": "546ef84c-07cb-41d6-91b9-2a46c9b49f01",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "a8287245-24fc-4691-8d3b-9e2183553aa3",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 1,
+      "created_at": "2025-10-14T13:34:08.936Z"
+    },
+    "5c6ff64e-8b23-4424-bdfa-01b62828ec38": {
+      "id": "5c6ff64e-8b23-4424-bdfa-01b62828ec38",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "4c95d374-e5df-4f81-8e67-8cc73fa6d054",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 4,
+      "created_at": "2025-10-14T13:34:40.020Z"
+    },
+    "60cc0b95-d297-4554-a028-51c9b4068014": {
+      "id": "60cc0b95-d297-4554-a028-51c9b4068014",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "28217e60-261f-44f7-9f8e-c861e35b0b0c",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 4,
+      "created_at": "2025-10-14T14:18:37.643Z"
+    },
+    "1fbd0f7a-c660-4e0e-bd46-9ae6fe0cb962": {
+      "id": "1fbd0f7a-c660-4e0e-bd46-9ae6fe0cb962",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "aa7f354a-92b3-426d-9c93-565b1b8c848c",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 4,
+      "created_at": "2025-10-14T14:21:33.620Z"
+    },
+    "ccb3b170-4237-4a62-95c2-9ba5009a3f40": {
+      "id": "ccb3b170-4237-4a62-95c2-9ba5009a3f40",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "09f26442-783a-4819-b5ab-bbb88c9ce09c",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 4,
+      "created_at": "2025-10-14T14:23:24.374Z"
+    },
+    "8b648888-1daa-435a-8986-c0d1086469e0": {
+      "id": "8b648888-1daa-435a-8986-c0d1086469e0",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "cd260703-da73-4181-a4f6-3ad398fe6dd2",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 4,
+      "created_at": "2025-10-14T15:00:13.636Z"
     }
   },
   "players": {
@@ -748,7 +898,307 @@
         "status": "active",
         "joined_at": "2025-10-14T11:58:26.844Z"
       }
+    ],
+    "7f37bd1c-ea98-422a-9fdb-839ca0f13db7": [
+      {
+        "id": 1,
+        "room_id": "7f37bd1c-ea98-422a-9fdb-839ca0f13db7",
+        "name": "ryan",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T12:47:29.702Z"
+      }
+    ],
+    "b273a2a3-213a-47da-8f8f-cddb3144f47c": [
+      {
+        "id": 1,
+        "room_id": "b273a2a3-213a-47da-8f8f-cddb3144f47c",
+        "name": "442",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T12:49:31.907Z"
+      }
+    ],
+    "f30e21f0-5930-42da-acf0-88da9f80ae1f": [
+      {
+        "id": 1,
+        "room_id": "f30e21f0-5930-42da-acf0-88da9f80ae1f",
+        "name": "gfdsgds",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T12:50:11.763Z"
+      }
+    ],
+    "50561e29-df92-4298-93da-5331bc1abc01": [
+      {
+        "id": 1,
+        "room_id": "50561e29-df92-4298-93da-5331bc1abc01",
+        "name": "dsagsgd",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T13:05:28.175Z"
+      }
+    ],
+    "5479ff4c-698b-45f6-82fd-55042ac79ae3": [
+      {
+        "id": 1,
+        "room_id": "5479ff4c-698b-45f6-82fd-55042ac79ae3",
+        "name": "sadgfsa",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T13:06:02.668Z"
+      }
+    ],
+    "c4884f39-294a-4187-804e-85c5286995a2": [
+      {
+        "id": 1,
+        "room_id": "c4884f39-294a-4187-804e-85c5286995a2",
+        "name": "fdgsd",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T13:13:18.354Z"
+      }
+    ],
+    "7e40f302-adae-4b87-aa97-655b196a5645": [
+      {
+        "id": 1,
+        "room_id": "7e40f302-adae-4b87-aa97-655b196a5645",
+        "name": "gds",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T13:21:42.595Z"
+      }
+    ],
+    "2edb70e0-9754-4a4f-bb28-cc7cb01f43e5": [
+      {
+        "id": 1,
+        "room_id": "2edb70e0-9754-4a4f-bb28-cc7cb01f43e5",
+        "name": "gagdf",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T13:27:41.528Z"
+      }
+    ],
+    "3c7d60ab-4cdf-4325-af20-b7b7f73d0db2": [
+      {
+        "id": 1,
+        "room_id": "3c7d60ab-4cdf-4325-af20-b7b7f73d0db2",
+        "name": "fhd",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T13:33:52.443Z"
+      }
+    ],
+    "546ef84c-07cb-41d6-91b9-2a46c9b49f01": [
+      {
+        "id": 1,
+        "room_id": "546ef84c-07cb-41d6-91b9-2a46c9b49f01",
+        "name": "fhd",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T13:34:08.936Z"
+      }
+    ],
+    "5c6ff64e-8b23-4424-bdfa-01b62828ec38": [
+      {
+        "id": 1,
+        "room_id": "5c6ff64e-8b23-4424-bdfa-01b62828ec38",
+        "name": "fhd",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T13:34:40.020Z"
+      },
+      {
+        "id": 13,
+        "room_id": "5c6ff64e-8b23-4424-bdfa-01b62828ec38",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T13:36:00.551Z"
+      },
+      {
+        "id": 14,
+        "room_id": "5c6ff64e-8b23-4424-bdfa-01b62828ec38",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T13:36:00.559Z"
+      },
+      {
+        "id": 15,
+        "room_id": "5c6ff64e-8b23-4424-bdfa-01b62828ec38",
+        "name": "player4",
+        "player_order": 4,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T13:36:00.561Z"
+      }
+    ],
+    "60cc0b95-d297-4554-a028-51c9b4068014": [
+      {
+        "id": 1,
+        "room_id": "60cc0b95-d297-4554-a028-51c9b4068014",
+        "name": "hahaha",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T14:18:37.643Z"
+      },
+      {
+        "id": 16,
+        "room_id": "60cc0b95-d297-4554-a028-51c9b4068014",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T14:18:38.623Z"
+      },
+      {
+        "id": 17,
+        "room_id": "60cc0b95-d297-4554-a028-51c9b4068014",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T14:18:38.631Z"
+      },
+      {
+        "id": 18,
+        "room_id": "60cc0b95-d297-4554-a028-51c9b4068014",
+        "name": "player4",
+        "player_order": 4,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T14:18:38.631Z"
+      }
+    ],
+    "1fbd0f7a-c660-4e0e-bd46-9ae6fe0cb962": [
+      {
+        "id": 1,
+        "room_id": "1fbd0f7a-c660-4e0e-bd46-9ae6fe0cb962",
+        "name": "fdgdfg",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T14:21:33.620Z"
+      },
+      {
+        "id": 19,
+        "room_id": "1fbd0f7a-c660-4e0e-bd46-9ae6fe0cb962",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T14:21:34.618Z"
+      },
+      {
+        "id": 20,
+        "room_id": "1fbd0f7a-c660-4e0e-bd46-9ae6fe0cb962",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T14:21:34.626Z"
+      },
+      {
+        "id": 21,
+        "room_id": "1fbd0f7a-c660-4e0e-bd46-9ae6fe0cb962",
+        "name": "player4",
+        "player_order": 4,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T14:21:34.627Z"
+      }
+    ],
+    "ccb3b170-4237-4a62-95c2-9ba5009a3f40": [
+      {
+        "id": 1,
+        "room_id": "ccb3b170-4237-4a62-95c2-9ba5009a3f40",
+        "name": "dstawertw",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T14:23:24.374Z"
+      },
+      {
+        "id": 22,
+        "room_id": "ccb3b170-4237-4a62-95c2-9ba5009a3f40",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T14:23:25.276Z"
+      },
+      {
+        "id": 23,
+        "room_id": "ccb3b170-4237-4a62-95c2-9ba5009a3f40",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T14:23:25.285Z"
+      },
+      {
+        "id": 24,
+        "room_id": "ccb3b170-4237-4a62-95c2-9ba5009a3f40",
+        "name": "player4",
+        "player_order": 4,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T14:23:25.285Z"
+      }
+    ],
+    "8b648888-1daa-435a-8986-c0d1086469e0": [
+      {
+        "id": 1,
+        "room_id": "8b648888-1daa-435a-8986-c0d1086469e0",
+        "name": "tghdfhg",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-14T15:00:13.636Z"
+      },
+      {
+        "id": 25,
+        "room_id": "8b648888-1daa-435a-8986-c0d1086469e0",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T15:00:14.655Z"
+      },
+      {
+        "id": 26,
+        "room_id": "8b648888-1daa-435a-8986-c0d1086469e0",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T15:00:14.664Z"
+      },
+      {
+        "id": 27,
+        "room_id": "8b648888-1daa-435a-8986-c0d1086469e0",
+        "name": "player4",
+        "player_order": 4,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-14T15:00:14.666Z"
+      }
     ]
   },
-  "nextPlayerId": 13
+  "nextPlayerId": 28
 }

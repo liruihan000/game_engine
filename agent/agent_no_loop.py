@@ -217,6 +217,7 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "createTimer",
     # Component management tools
     "deleteItem",
+    "clearCanvas",
     # Player state management
     "markPlayerDead"
 ])
@@ -244,7 +245,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
         logger.info(f"[ActionExecutor][DEBUG] NO player_states in received state")
 
     # 1. Define the model
-    model = init_chat_model("openai:gpt-4o")
+    model = init_chat_model("openai:gpt-4.1")
 
     # 2. Prepare and bind frontend tools to the model
     def _extract_tool_name(tool: Any) -> Optional[str]:
@@ -340,8 +341,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     else:
         logger.info(f"[ActionExecutor][DSL] Current phase ID: {current_phase_id} (not found in DSL phases)")
     if current_phase:
-        import json as _json
-        current_phase_str = f"Current phase (ID {current_phase_id}):\n{_json.dumps(current_phase, indent=2, ensure_ascii=False)}\n"
+        current_phase_str = f"Current phase (ID {current_phase_id}):\n{current_phase}\n"
     else:
         current_phase_str = f"Current phase ID: {current_phase_id} (not found in DSL phases)\n"
     
@@ -367,6 +367,10 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "- Tool names must match exactly (no 'functions.' prefix).\n"
             "- When you create items (e.g., via `createTextDisplay`), capture the returned id (e.g., '0002') and reuse it in later calls that require 'itemId' (e.g., 'deleteItem'). Do not pass the item name; always pass the exact id.\n"
             "- To delete multiple items, call 'deleteItem' once per 'itemId'.\n"
+            "LAYOUT PLACEMENT RULES:\n"
+            "- Prefer placing text tools (createTextDisplay, createResultDisplay) at grid position 'center' by default.\n"
+            "- If there are already 4 or more items on canvas, distribute subsequent items across: 'top-center', 'bottom-center', 'middle-left', 'middle-right', then 'top-left', 'top-right', 'bottom-left', 'bottom-right'.\n"
+            "- Keep related elements sensible (e.g., phase indicator near top-center; voting panels center/bottom-center).\n"
             f"- Total tools to call this turn: {sum(len(action.get('tools', [])) for action in actions_to_execute if isinstance(action, dict))}\n"
         )
     )
@@ -511,7 +515,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "itemsCreated": state.get("itemsCreated", 0),
             "lastAction": state.get("lastAction", ""),
             "player_states": state.get("player_states", {}),  # Persist player_states
-            "current_phase_id": state.get("current_phase_id", ""),
+            "current_phase_id": state.get("current_phase_id", 0),
             "actions": [],  # Clear actions after execution
             "__last_tool_guidance": None,
         }
@@ -544,7 +548,7 @@ async def PhaseEvaluator(state: AgentState, config: RunnableConfig) -> Command[L
         logger.info(f"[PhaseEvaluator][DEBUG] NO items in received state")
 
     # 1. Define the model
-    model = init_chat_model("openai:gpt-4o")
+    model = init_chat_model("openai:gpt-4.1")
 
 
 
@@ -588,33 +592,47 @@ async def PhaseEvaluator(state: AgentState, config: RunnableConfig) -> Command[L
     # Initialize player_states if empty and we have DSL
     current_player_states = state.get("player_states", {})
     if not current_player_states and dsl_content:
-        # Create dummy room players for initialization - in real usage this would come from the room
-        dummy_players = [{"name": "Player 1"}]  # Placeholder - should be replaced with actual room players
-        current_player_states = await initialize_player_states_from_dsl(dsl_content, dummy_players)
-        logger.info(f"[PhaseEvaluator] Initialized player_states: {current_player_states}")
+        logger.warning("[PhaseEvaluator] player_states is empty but DSL is loaded. This should not happen if initialize-players API was called correctly.")
+        logger.info("[PhaseEvaluator] Skipping player_states initialization - expecting frontend to provide initialized player_states")
     else:
         logger.info(f"[PhaseEvaluator] Using existing player_states: {len(current_player_states)} players")
     
     # Format DSL in readable YAML format for prompt
     if dsl_content:
-        import json as _json
-        dsl_info = f"LOADED GAME DSL (all phases):\n{_json.dumps(dsl_content, indent=2, ensure_ascii=False)}\n"
+        dsl_info = f"LOADED GAME DSL (all phases):{dsl_content}"
     else:
         dsl_info = "No DSL loaded.\n"
     
     # Get current phase details from phases (not declaration.phases)
     phases = dsl_content.get('phases', {}) if dsl_content else {}
     current_phase = phases.get(current_phase_id, {}) if phases else {}
+    # Frontend-available tools (allowlisted) with brief descriptions for the model (static JSON text)
+    game_tool_str = (
+        '{\n'
+        '  "createCharacterCard": "Create a character card (role, position, optional size/desc).",\n'
+        '  "createActionButton": "Create an action button (label, action id, enabled, position).",\n'
+        '  "createPhaseIndicator": "Show current phase indicator (phase, position, optional desc/timer).",\n'
+        '  "createTextDisplay": "Text panel for info (content, optional title/type, position).",\n'
+        '  "createVotingPanel": "Voting panel (votingId, options, position, optional title).",\n'
+        '  "createAvatarSet": "Overlay of player avatars around the canvas (avatarType).",\n'
+        '  "changeBackgroundColor": "Create background control and set initial color/theme.",\n'
+        '  "createResultDisplay": "Large gradient-styled result banner (content, position).",\n'
+        '  "createTimer": "Countdown timer that expires and notifies the agent.",\n'
+        '  "deleteItem": "Delete a canvas item by id.",\n'
+        '  "clearCanvas": "Clear all canvas items except avatar sets (phase reset).",\n'
+        '  "markPlayerDead": "Mark a player as dead (grays out their avatar)."\n'
+        '}\n'
+    )
     
     # Print current phase details
     if current_phase:
         logger.info(f"[PhaseEvaluator][DSL] Current phase ID: {current_phase_id}")
         logger.info(f"[PhaseEvaluator][DSL] Current phase: {current_phase}")
-        import json as _json
-        current_phase_str = f"Current phase (ID {current_phase_id}):\n{_json.dumps(current_phase, indent=2, ensure_ascii=False)}\n"
+        current_phase_str = f"Current phase (ID {current_phase_id}):\n{current_phase}\n"
     else:
         logger.info(f"[PhaseEvaluator][DSL] Current phase ID: {current_phase_id} (not found in DSL phases)")
         current_phase_str = f"Current phase ID: {current_phase_id} (not found in DSL)\n"
+    logger.info(f"[PhaseEvaluator][DSL] Current phase str: {current_phase_str}")
 
     system_message = SystemMessage(
         content=(
@@ -623,10 +641,16 @@ async def PhaseEvaluator(state: AgentState, config: RunnableConfig) -> Command[L
             f"lastAction (ground truth): {last_action}\n"
             f"All phases: {dsl_info}\n"
             f"{current_phase_str}"
+            f"game_tool:\n{game_tool_str}\n"
 
             # PhaseEvaluator-style instruction (JSON-only)
             "PHASE EVALUATION INSTRUCTION:\n"
             "STEP 1: PLAYER STATES - First, check if any player states need updating based on game events and messages.\n"
+            "BOT AUTOMATION RULES:\n"
+            "- Player \"1\" is the ONLY HUMAN player - update only based on their actual messages/actions\n" 
+            "- ALL other players (\"2\", \"3\", \"4\", etc.) are BOTS - automatically simulate their behavior\n"
+            "- For EVERY bot player in EVERY phase, you MUST simulate appropriate decisions and update their player_states accordingly\n"
+            "- Bot behavior examples: vote for random players, use night abilities, make game decisions\n"
             "- To update player states, include \"player_states_updates\" in your JSON response with complete player state objects.\n"
             "- IMPORTANT: Return the COMPLETE player state object for each player, but only update the specific field values that have changed based on game events. Keep all other existing field values unchanged.\n"
             "- Format: \"player_states_updates\": {\"1\": {\"name\": \"Alpha\", \"role\": \"Werewolf\", \"is_alive\": true, \"vote\": \"Beta\"}, \"2\": {\"name\": \"Beta\", \"role\": \"Detective\", \"is_alive\": true, \"vote\": \"Alpha\"}, \"3\": {\"name\": \"Gamma\", \"role\": \"Villager\", \"is_alive\": false, \"vote\": \"\"}}\n"
@@ -640,16 +664,87 @@ async def PhaseEvaluator(state: AgentState, config: RunnableConfig) -> Command[L
             "  - Check that ALL surviving players have cast their votes and relevant player_states.vote fields have been updated\n"
             "- IMPORTANT: You must ONLY choose actions from the current phase's actions list. Do NOT execute next-phase actions early.\n"
             "- IMPORTANT: Only when the current phase's completion criteria are satisfied should you set \"transition\": true with a VALID \"next_phase_id\" (existing phase id).\n"
+            
             "STEP 3: OUTPUT FORMAT - Provide JSON response:\n"
             "- If complete, OUTPUT JSON ONLY: {\"transition\": true, \"next_phase_id\": <number>, \"note\": <short>, \"player_states_updates\": {...}}\n"
             "- If not complete, OUTPUT JSON ONLY: {\"transition\": false, \"note\": <short why not>, \"actions\": [...], \"player_states_updates\": {...}}\n"
             "- Actions format: [{\"description\": \"what to do\", \"tools\": [\"tool_name1\", \"tool_name2\"]}, ...]\n"
             "  Example: [{\"description\": \"Create and display voting UI for all surviving players\", \"tools\": [\"createActionButton\"]}, {\"description\": \"Show current phase indicator\", \"tools\": [\"createPhaseIndicator\"]}]\n"
+            "- If next_phase is null, set transition=false and DO NOT include next_phase_id.\n"
             "- IMPORTANT: If there is NO valid next phase, set transition=false and DO NOT include next_phase_id.\n"
+            "- You MUST execute ALL tools listed in the current phase's actions, in this turn. Also consider any extra actions that improve UX (e.g., timers, UI cleanup) and include them.\n"
+            "- In most scenes, clear the canvas before laying out new UI. Include a 'clearCanvas' step as the first action when appropriate.\n"
+            "EXAMPLES1 \n"
+            "1) Phase 0 — Game Introduction (transition=false; execute all actions)\n"
+            "{\n"
+            "  \"transition\": false,\n"
+            "  \"note\": \"Display introduction, rules, win conditions; prepare next\",\n"
+            "  \"actions\": [\n"
+            "    { \"description\": \"Reset scene for a clean intro\", \"tools\": [\"clearCanvas\"] },\n"
+            "    { \"description\": \"Global title & description\", \"tools\": [\"setGlobalTitle\", \"setGlobalDescription\"] },\n"
+            "    { \"description\": \"Background control and theme\", \"tools\": [\"createBackgroundControl\", \"changeBackgroundColor\"] },\n"
+            "    { \"description\": \"Show player avatars\", \"tools\": [\"createAvatarSet\"] },\n"
+            "    { \"description\": \"Show current phase indicator\", \"tools\": [\"createPhaseIndicator\"] },\n"
+            "    { \"description\": \"Show game rules overview\", \"tools\": [\"createTextDisplay\"] },\n"
+            "    { \"description\": \"Show win conditions\", \"tools\": [\"createTextDisplay\"] }\n"
+            "  ],\n"
+            "  \"player_states_updates\": {}\n"
+            "}\n"
+            "EXAMPLES2 \n"
+            "2) Phase 0 complete → transition to Phase 1 (Role Assignment)\n"
+            "{\n"
+            "  \"transition\": true,\n"
+            "  \"next_phase_id\": 1,\n"
+            "  \"note\": \"Introduction displayed; moving to Role Assignment\",\n"
+            "  \"player_states_updates\": {}\n"
+            "}\n"
+            "EXAMPLES3 \n"
+            "3) Phase 2 — Night — Werewolves Choose Target (transition=false; prepare night UI)\n"
+            "{\n"
+            "  \"transition\": false,\n"
+            "  \"note\": \"Waiting for werewolves to choose a target\",\n"
+            "  \"actions\": [\n"
+            "    { \"description\": \"Reset scene for night\", \"tools\": [\"clearCanvas\"] },\n"
+            "    { \"description\": \"Night ambiance\", \"tools\": [\"changeBackgroundColor\"] },\n"
+            "    { \"description\": \"Phase indicator\", \"tools\": [\"createPhaseIndicator\"] },\n"
+            "    { \"description\": \"Night instructions for werewolves\", \"tools\": [\"createTextDisplay\"] },\n"
+            "    { \"description\": \"Optional: short timer to limit the night\", \"tools\": [\"createTimer\"] }\n"
+            "  ],\n"
+            "  \"player_states_updates\": {}\n"
+            "}\n"
+
+            "EXAMPLES4 \n"
+            "4) Phase 5 — Dawn — Night Resolution and Reveal (transition=false; resolve and reveal)\n"
+            "{\n"
+            "  \"transition\": false,\n"
+            "  \"note\": \"Reveal night results to all players\",\n"
+            "  \"actions\": [\n"
+            "    { \"description\": \"Reset scene for dawn\", \"tools\": [\"clearCanvas\"] },\n"
+            "    { \"description\": \"Dawn ambiance\", \"tools\": [\"changeBackgroundColor\"] },\n"
+            "    { \"description\": \"Phase indicator\", \"tools\": [\"createPhaseIndicator\"] },\n"
+            "    { \"description\": \"Mark dead player if any and show result\", \"tools\": [\"markPlayerDead\", \"createResultDisplay\", \"createTextDisplay\"] }\n"
+            "  ],\n"
+            "  \"player_states_updates\": {}\n"
+            "}\n"
+            "EXAMPLES5 \n"
+            "5) Phase 99 — Game Over (next_phase=null → transition=false)\n"
+            "{\n"
+            "  \"transition\": false,\n"
+            "  \"note\": \"Game Over — display final results\",\n"
+            "  \"actions\": [\n"
+            "    { \"description\": \"Reset scene for finale\", \"tools\": [\"clearCanvas\"] },\n"
+            "    { \"description\": \"Final background\", \"tools\": [\"changeBackgroundColor\"] },\n"
+            "    { \"description\": \"Show final results\", \"tools\": [\"createResultDisplay\", \"createTextDisplay\"] }\n"
+            "  ],\n"
+            "  \"player_states_updates\": {}\n"
+            "}\n"
             "TOOL USAGE RULES:\n"
             "- Tool names must match exactly (no 'functions.' prefix).\n"
             "- When you create items (e.g., via `createTextDisplay`), capture the returned id (e.g., '0002') and reuse it in later calls that require 'itemId' (e.g., 'deleteItem'). Do not pass the item name; always pass the exact id.\n"
             "- To delete multiple items, call 'deleteItem' once per 'itemId'.\n"
+            "LAYOUT PLACEMENT RULES:\n"
+            "- Prefer placing text tools (createTextDisplay, createResultDisplay) at grid position 'center'.\n"
+            "- If 'center' is crowded or you place multiple texts, use 'bottom-center' then 'top-center' as fallbacks.\n"
         )
     )
     
@@ -739,8 +834,7 @@ async def PhaseEvaluator(state: AgentState, config: RunnableConfig) -> Command[L
     # Print player states AFTER calling LLM  
     logger.info(f"[PhaseEvaluator][AFTER LLM CALL] Player States:")
     state_player_states_after = state.get("player_states", {})
-    logger.info(_json.dumps(state_player_states_after, indent=2, ensure_ascii=False))
-
+    logger.info(f"[PhaseEvaluator][AFTER LLM CALL] Player States: {state_player_states_after}")
     # Log LLM output content and planned tool calls (not just the last turn)
     try:
         content_preview = getattr(response, "content", None)
@@ -765,7 +859,7 @@ async def PhaseEvaluator(state: AgentState, config: RunnableConfig) -> Command[L
     # 尝试从 LLM JSON 输出中抽取：transition、next_phase_id、actions、player_states 更新
     actions_out = []
     transition = False
-    next_phase_id = state.get("current_phase_id", "")
+    next_phase_id = state.get("current_phase_id", 0)
     player_states_updates = {}
     
     try:
@@ -775,7 +869,7 @@ async def PhaseEvaluator(state: AgentState, config: RunnableConfig) -> Command[L
         if isinstance(parsed, dict):
             transition = parsed.get("transition", False)
             if transition and "next_phase_id" in parsed:
-                current_phase_id = parsed.get("next_phase_id")
+                next_phase_id = parsed.get("next_phase_id")
             if not transition and isinstance(parsed.get("actions"), list):
                 actions_out = parsed.get("actions")
             # Extract player_states updates if provided
@@ -805,38 +899,45 @@ async def PhaseEvaluator(state: AgentState, config: RunnableConfig) -> Command[L
     else:
         logger.info(f"[PhaseEvaluator] No player_states updates requested")
 
-    # 校验 next_phase_id 是否有效：仅当 transition=True 且 next_phase_id 存在于 DSL phases 时才允许跳转
-    def _is_valid_next_phase(pid, phases_dict):
-        """Validate next_phase_id against DSL phases.
-        - None -> invalid
-        - integer key in phases -> valid
-        - numeric string (e.g., "3") -> cast to int and check -> valid/invalid
-        - others -> invalid
-        """
-        if pid is None:
-            return False
-        if pid in phases_dict:
-            return True
-        if isinstance(pid, str) and pid.isdigit():
-            try:
-                return int(pid) in phases_dict
-            except Exception:
-                return False
-        return False
+    # Normalize next_phase_id to integer if it's a numeric string to prevent phase lookup failures
+    try:
+        if isinstance(next_phase_id, str) and next_phase_id.isdigit():
+            next_phase_id = int(next_phase_id)
+    except Exception:
+        pass
 
-    if transition:
-        phases = dsl_content.get('phases', {}) if dsl_content else {}
-        if not _is_valid_next_phase(next_phase_id, phases):
-            logger.warning(f"[PhaseEvaluator] Ignoring invalid next_phase_id={next_phase_id}; staying in current phase")
-            transition = False
-        else:
-            # 统一 current_phase_id 的类型为 int，以匹配 DSL phases 的整数键
-            if isinstance(next_phase_id, str) and next_phase_id.isdigit():
-                try:
-                    next_phase_id = int(next_phase_id)
-                except Exception:
-                    # 理论上不会走到这里，前面已校验 isdigit
-                    pass
+    # 校验 next_phase_id 是否有效：仅当 transition=True 且 next_phase_id 存在于 DSL phases 时才允许跳转
+    # def _is_valid_next_phase(pid, phases_dict):
+    #     """Validate next_phase_id against DSL phases.
+    #     - None -> invalid
+    #     - integer key in phases -> valid
+    #     - numeric string (e.g., "3") -> cast to int and check -> valid/invalid
+    #     - others -> invalid
+    #     """
+    #     if pid is None:
+    #         return False
+    #     if pid in phases_dict:
+    #         return True
+    #     if isinstance(pid, str) and pid.isdigit():
+    #         try:
+    #             return int(pid) in phases_dict
+    #         except Exception:
+    #             return False
+    #     return False
+
+    # if transition:
+    #     phases = dsl_content.get('phases', {}) if dsl_content else {}
+    #     if not _is_valid_next_phase(next_phase_id, phases):
+    #         logger.warning(f"[PhaseEvaluator] Ignoring invalid next_phase_id={next_phase_id}; staying in current phase")
+    #         transition = False
+    #     else:
+    #         # 统一 current_phase_id 的类型为 int，以匹配 DSL phases 的整数键
+    #         if isinstance(next_phase_id, str) and next_phase_id.isdigit():
+    #             try:
+    #                 next_phase_id = int(next_phase_id)
+    #             except Exception:
+    #                 # 理论上不会走到这里，前面已校验 isdigit
+    #                 pass
 
     # 根据最终 transition 决策路由
     if transition:
@@ -868,7 +969,7 @@ async def PhaseEvaluator(state: AgentState, config: RunnableConfig) -> Command[L
                 "lastAction": state.get("lastAction", ""),
                 "player_states": updated_player_states,  # Complete updated player_states
                 # persist game dm fields
-                "current_phase_id": state.get("current_phase_id", ""),
+                "current_phase_id": state.get("current_phase_id", 0),
                 "actions": actions_out,
                 "__last_tool_guidance": None,
             }
