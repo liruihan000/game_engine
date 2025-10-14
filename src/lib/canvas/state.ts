@@ -1,13 +1,16 @@
-import { AgentState, CardType, ItemData } from "@/lib/canvas/types";
+import { AgentState, CardType, ItemData, VotingPanelData, TextDisplayData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData } from "@/lib/canvas/types";
 
 export const initialState: AgentState = {
   items: [],
   lastAction: "",
   itemsCreated: 0,
   player_states: undefined,
+  vote: [], // Initialize empty vote records array
+  deadPlayers: [], // Initialize empty dead players array
   planSteps: [],
   currentStepIndex: -1,
   planStatus: "",
+  gameName: undefined, // No game selected initially
 };
 
 export function isNonEmptyAgentState(value: unknown): value is AgentState {
@@ -39,7 +42,32 @@ export function defaultDataFor(type: CardType): ItemData {
       return {
         content: "",
         position: "center",
-      };
+      } as TextDisplayData;
+    case "voting_panel":
+      return {
+        votingId: "",
+        title: "",
+        options: [],
+        position: "center",
+      } as VotingPanelData;
+    case "avatar_set":
+      return {
+        avatarType: "human",
+      } as AvatarSetData;
+    case "background_control":
+      return {
+        backgroundColor: "white",
+      } as BackgroundControlData;
+    case "result_display":
+      return {
+        content: "",
+        position: "center",
+      } as ResultDisplayData;
+    case "timer":
+      return {
+        duration: 5, // default 60 seconds
+        label: "",
+      } as TimerData;
     default:
       return {
         content: "",

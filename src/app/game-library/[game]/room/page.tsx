@@ -121,7 +121,7 @@ export default function GameRoom() {
       const data = await response.json();
       setRoomData({
         roomId: data.roomId,
-        threadId: '', // Will be retrieved from room info if needed
+        threadId: data.threadId, // 🔑 使用 API 返回的 threadId
         playerId: data.playerId,
         playerOrder: data.playerOrder,
         isHost: data.isHost,
@@ -276,6 +276,33 @@ export default function GameRoom() {
       }
       console.log('💾 Game context and player states stored');
       
+      // Send start game message to Agent before navigating
+      try {
+        const response = await fetch('/api/copilotkit', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Thread-ID': roomData.threadId
+          },
+          body: JSON.stringify({
+            messages: [{
+              role: 'user',
+              content: 'start game'
+            }],
+            // 提前传入 gameName，服务端仍会以内存为准覆盖/兜底
+            state: { gameName: playerSession.gameName }
+          })
+        });
+        
+        if (response.ok) {
+          console.log('🎮 Start game message sent successfully');
+        } else {
+          console.log('⚠️ Failed to send start game message, continuing anyway');
+        }
+      } catch (error) {
+        console.log('⚠️ Error sending start game message:', error, 'continuing anyway');
+      }
+
       // Navigate to the main game engine
       router.push(`/?room=${roomData.roomId}&game=${playerSession.gameName}`);
       

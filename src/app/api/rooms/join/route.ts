@@ -45,8 +45,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Add player to room
-    const newPlayerId = Math.max(...roomPlayers.map(p => p.id), 0) + 1;
+    // Add player to room - 房间内连续ID分配
+    const newPlayerId = roomPlayers.length > 0 ? 
+      Math.max(...roomPlayers.map(p => p.id)) + 1 : 1;
     const playerData = {
       id: newPlayerId,
       room_id: body.roomId,
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       roomId: body.roomId,
+      threadId: room.thread_id, // 🔑 添加 threadId 到响应
       playerId: newPlayerId,
       playerOrder: roomPlayers.length,
       isHost: false,

@@ -16,8 +16,13 @@ export type CardType =
   | "action_button"     // 按钮
   | "phase_indicator"   // 阶段指示器
   | "text_display"      // 文本展示板
+  | "voting_panel"      // 投票面板
+  | "avatar_set"        // 头像套装
+  | "background_control" // 背景颜色控制
+  | "result_display"    // 结果展示纯艺术字
+  | "timer"             // 定时器
   // Future components (commented for MVP)
-  // | "voting_panel" | "timer" | "player_list" | "score_board" 
+  // | "player_list" | "score_board" 
   // | "challenge_modal" | "elimination_display" | "game_log";
 
 // Preset position types for game components
@@ -29,7 +34,7 @@ export type GamePosition =
 // Universal size levels for all components (Agent-friendly)
 export type ComponentSize = "small" | "medium" | "large";
 
-// CSS Grid configuration for game canvas - center area is larger
+// CSS Grid configuration for game canvas - equal proportions
 export const GAME_GRID_STYLE = {
   display: 'grid',
   gridTemplateAreas: `
@@ -37,10 +42,10 @@ export const GAME_GRID_STYLE = {
     "middle-left center middle-right"
     "bottom-left bottom-center bottom-right"
   `,
-  gridTemplateColumns: '1fr 2fr 1fr',  // center column is 2x larger
-  gridTemplateRows: '1fr 2fr 1fr',     // center row is 2x larger
+  gridTemplateColumns: '1fr 1fr 1fr',  // equal proportions
+  gridTemplateRows: '1fr 1fr 1fr',     // equal proportions
   gap: '1.5rem',
-  minHeight: '100vh',
+  minHeight: '80vh',
   padding: '1.5rem'
 };
 
@@ -67,7 +72,6 @@ export interface PhaseIndicatorData {
   description?: string;  // phase description
   timeRemaining?: number; // seconds left in phase
   position: GamePosition;
-  size?: ComponentSize; // optional preset size
 }
 
 export interface TextDisplayData {
@@ -75,10 +79,35 @@ export interface TextDisplayData {
   content: string;     // main text content
   type?: "info" | "warning" | "error" | "success";
   position: GamePosition;
-  size?: ComponentSize; // optional preset size
 }
 
-export type ItemData = CharacterCardData | ActionButtonData | PhaseIndicatorData | TextDisplayData;
+export interface VotingPanelData {
+  votingId: string;    // unique voting ID from backend
+  title?: string;      // voting title/question
+  options: string[];   // list of voting options
+  position: GamePosition;
+}
+
+export interface AvatarSetData {
+  avatarType: string; // avatar type: "human" | "wolf" | "dog" | "cat" 
+}
+
+export interface BackgroundControlData {
+  backgroundColor: string; // background color options: "white" | "gray-900" | "blue-50" | "green-50" | "purple-50"
+}
+
+export interface ResultDisplayData {
+  content: string; // result content to display as artistic text
+  position: GamePosition;
+}
+
+export interface TimerData {
+  duration: number; // timer duration in seconds
+  label?: string; // optional timer label displayed above countdown (e.g., "Night Phase Timer", "Discussion Time")
+  // position is fixed to top-left corner, no position parameter needed
+}
+
+export type ItemData = CharacterCardData | ActionButtonData | PhaseIndicatorData | TextDisplayData | VotingPanelData | AvatarSetData | BackgroundControlData | ResultDisplayData | TimerData;
 
 export interface Item {
   id: string;
@@ -94,14 +123,23 @@ export interface PlanStep {
   note?: string;
 }
 
+export interface VoteRecord {
+  voteid: string;
+  playerid: string;
+  option: string;
+}
+
 export interface AgentState {
   items: Item[];
   lastAction?: string;
   itemsCreated: number;
   player_states?: Record<string, Record<string, unknown>>; // Dictionary of all game players: {"1": {name: "Alice", ...}, "2": {name: "Bob", ...}}
+  vote: VoteRecord[]; // Array of vote records
+  deadPlayers?: string[]; // Array of dead player IDs
   planSteps?: PlanStep[];
   currentStepIndex?: number;
   planStatus?: string;
+  gameName?: string; // Current game DSL name (e.g., "werewolf", "coup")
 }
 
 

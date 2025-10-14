@@ -126,6 +126,28 @@ class MemoryStorage {
     return { room, players };
   }
 
+  // 根据 threadId 查找房间数据
+  public getRoomByThreadId(threadId: string): { room: RoomData; players: PlayerData[] } | null {
+    try {
+      this.loadFromFile();
+      let foundKey: string | null = null;
+      let foundRoom: RoomData | undefined;
+      for (const [key, room] of this.rooms.entries()) {
+        if (room.thread_id === threadId) {
+          foundKey = key;
+          foundRoom = room;
+          break;
+        }
+      }
+      if (!foundKey || !foundRoom) return null;
+      const players = this.players.get(foundKey) || [];
+      return { room: foundRoom, players };
+    } catch (err) {
+      console.error('[memoryStorage] getRoomByThreadId failed:', err);
+      return null;
+    }
+  }
+
   // 调试方法
   public getDebugInfo() {
     return {

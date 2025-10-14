@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     const gameData = yaml.load(fileContent) as GameData;
 
     // Defense mechanism 1: Check if player_states_template exists
-    let template: Record<string, unknown>;
+    let template: Record<string, unknown> = {};
     
     if (gameData?.declaration?.player_states_template?.player_states) {
       // Try to get template with ID "1"

@@ -134,17 +134,17 @@ const options: { id: CardType; label: string }[] = [
 
 🎯 总结
 
-必须更新的核心位置 (4个):
+必须更新的核心位置 (5个):
 
 1. 类型定义 - types.ts
 2. 默认数据 - state.ts
 3. 渲染组件 - CardRenderer.tsx
 4. Agent工具 - page.tsx (useCopilotAction)
+5.Agent文件 (agent/agent_no_loop.py)
 
-可选更新的位置 (2个):
-5. 创建菜单 - NewItemMenu.tsx
+可选更新的位置 (1个):
+6. 创建菜单 - NewItemMenu.tsx
 
-1. Agent文件 (agent/agent_no_loop.py)
 
 FRONTEND_TOOL_ALLOWLIST = set([
 # Game component creation tools

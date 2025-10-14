@@ -80,6 +80,47 @@ Each phase object must contain the following fields:
         - **Object value**: Next phase object containing `id` and `name`.
     - **Loop Logic (Looping):** To implement a loop, simply point the `id` in the next phase object to a phase that has already been executed (i.e., the start node of the loop).
 
+
+## AVAILABLE FRONTEND TOOLS (exact names and parameters)
+
+Use only the tools listed below. Tool names must match exactly (no `functions.` prefix).
+When you create items (e.g., via `createTextDisplay`), capture the returned id (e.g., `0002`) and reuse it in later calls that require `itemId` (e.g., `deleteItem`). Do not pass the item name; always pass the exact id. To delete multiple items, call `deleteItem` once per `itemId`.
+
+- createTextDisplay: Create a text panel.
+  - params: name (string), content (string), position (string), title? (string), type? ("info" | "warning" | "error" | "success")
+- createPhaseIndicator: Create a phase indicator.
+  - params: name (string), currentPhase (string), position (string), description? (string), timeRemaining? (number)
+- createActionButton: Create an action button.
+  - params: name (string), label (string), action (string), enabled (boolean), position (string), size? ("small" | "medium" | "large"), variant? ("primary" | "secondary" | "danger")
+- createCharacterCard: Create a character card.
+  - params: name (string), role (string), position (string), size? ("small" | "medium" | "large"), description? (string)
+- createVotingPanel: Create a voting UI.
+  - params: name (string), votingId (string), options (string[]), position (string), title? (string)
+- createAvatarSet: Create an avatar set for players.
+  - params: name (string), avatarType ("human" | "wolf" | "dog" | "cat")
+- createResultDisplay: Create a result display (large gradient text).
+  - params: name (string), content (string), position (string)
+- createBackgroundControl: Create background color control panel.
+  - params: name (string), backgroundColor? ("white" | "gray-900" | "blue-50" | "green-50" | "purple-50")
+- changeBackgroundColor: Change background color.
+  - params: name (string), backgroundColor? ("white" | "gray-900" | "blue-50" | "green-50" | "purple-50")
+- setGlobalTitle: Set global title.
+  - params: title (string)
+- setGlobalDescription: Set global description.
+  - params: description (string)
+- setItemName: Set an item’s name/title.
+  - params: name (string), itemId (string)
+- setItemSubtitleOrDescription: Set an item’s subtitle/description.
+  - params: subtitle (string), itemId (string)
+- deleteItem: Delete a specific item by id.
+  - params: itemId (string)
+- markPlayerDead: Mark a player as dead (avatar grayed out).
+  - params: playerId (string), playerName (string)
+
+Notes:
+- Always choose actions.tools from the current phase only; do not schedule next-phase tools early.
+- Only set `transition: true` with a valid `next_phase_id` when the current phase completion criteria are satisfied.
+
 ### 3.2. Mandatory Starting Phases Examples
 
 ### Required Phase 0: Game Introduction

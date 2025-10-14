@@ -14,36 +14,46 @@ import ShikiHighlighter from "react-shiki/web";
 import { motion, useScroll, useTransform, useMotionValueEvent } from "motion/react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
-import type { AgentState, PlanStep, Item, ItemData, CardType, GamePosition, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, ComponentSize } from "@/lib/canvas/types";
+import type { AgentState, PlanStep, Item, ItemData, CardType, GamePosition, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, ComponentSize } from "@/lib/canvas/types";
 import { GAME_GRID_STYLE } from "@/lib/canvas/types";
 import { initialState, isNonEmptyAgentState, defaultDataFor } from "@/lib/canvas/state";
 // import { projectAddField4Item, projectSetField4ItemText, projectSetField4ItemDone, projectRemoveField4Item, chartAddField1Metric, chartSetField1Label, chartSetField1Value, chartRemoveField1Metric } from "@/lib/canvas/updates";
 import useMediaQuery from "@/hooks/use-media-query";
-import NewItemMenu from "@/components/canvas/NewItemMenu";
 
 export default function CopilotKitPage() {
-  // Get room context from sessionStorage for agent isolation
-  const [agentName, setAgentName] = useState("sample_agent");
-  
-  useEffect(() => {
-    const gameContext = sessionStorage.getItem('gameContext');
-    if (gameContext) {
-      const context = JSON.parse(gameContext);
-      const roomBasedAgentName = `agent_${context.roomId}`;
-      setAgentName(roomBasedAgentName);
-    }
-  }, []);
-
+  // Use consistent agent name across all components - room isolation via threadId
   const { state, setState } = useCoAgent<AgentState>({
-    name: agentName,
+    name: "sample_agent", // 🔑 Fixed agent name, room isolation via threadId in DynamicCopilotProvider
     initialState,
   });
 
   const { appendMessage } = useCopilotChat();
 
+  // Helper function to ensure gameName is set from URL
+  const ensureGameName = useCallback(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gameName = params.get('game');
+    
+    if (gameName) {
+      const currentGameName = state?.gameName;
+      if (currentGameName !== gameName) {
+        console.log('🎮 Setting gameName from URL:', gameName);
+        setState((prev) => {
+          const base = prev ?? initialState;
+          return { ...base, gameName } as AgentState;
+        });
+        return true; // Indicate that gameName was updated
+      }
+    }
+    return false; // No update needed
+  }, [setState, state]);
+
   // Handle action button clicks
   const handleButtonClick = useCallback(async (item: Item) => {
     const buttonData = item.data as ActionButtonData;
+    
+    // Ensure gameName is set before sending message
+    ensureGameName();
     
     // Send message to CopilotChat
     await appendMessage(
@@ -52,7 +62,39 @@ export default function CopilotKitPage() {
         content: `Button "${item.name}" (ID: ${item.id}) has been clicked. Action: ${buttonData.action}`
       })
     );
-  }, [appendMessage]);
+  }, [appendMessage, ensureGameName]);
+
+  // Handle voting
+  const handleVote = useCallback(async (votingId: string, playerId: string, option: string) => {
+    // Update state first
+    setState((prev) => {
+      const base = prev ?? initialState;
+      const currentVotes = base.vote ?? [];
+      
+      // Remove any existing vote from this player for this voting ID
+      const filteredVotes = currentVotes.filter(v => !(v.voteid === votingId && v.playerid === playerId));
+      
+      // Add the new vote
+      const newVote = {
+        voteid: votingId,
+        playerid: playerId,
+        option: option
+      };
+      
+      return {
+        ...base,
+        vote: [...filteredVotes, newVote]
+      } as AgentState;
+    });
+
+    // Send message to CopilotChat
+    await appendMessage(
+      new TextMessage({
+        role: MessageRole.User,
+        content: `Player ${playerId} voted "${option}" in voting ${votingId}`
+      })
+    );
+  }, [setState, appendMessage]);
 
   // Global cache for the last non-empty agent state
   const cachedStateRef = useRef<AgentState>(state ?? initialState);
@@ -110,8 +152,7 @@ export default function CopilotKitPage() {
 
   // Initialize player_states from sessionStorage when game starts
   useEffect(() => {
-    console.log('🔍 Checking for initialized player states in sessionStorage...');
-    
+    console.log('🔍 Checking for player states...');
     // Get current room context
     const gameContext = sessionStorage.getItem('gameContext');
     if (!gameContext) {
@@ -122,17 +163,25 @@ export default function CopilotKitPage() {
     const context = JSON.parse(gameContext);
     const playerStatesKey = `playerStates_${context.roomId}`;
     const playerStatesData = sessionStorage.getItem(playerStatesKey);
-    
+
     if (playerStatesData) {
       try {
         const parsedData = JSON.parse(playerStatesData);
         console.log('📥 Found player states for room:', context.roomId, parsedData);
         
-        // Initialize player_states in AgentState with clean initial state
-        setState(() => ({
-          ...initialState, // Start completely fresh
-          player_states: parsedData
-        }));
+        // Initialize player_states in AgentState
+        setState(prevState => {
+          if (prevState?.player_states) {
+            console.log('⏭️ Player states already set, skipping...');
+            return prevState;
+          }
+          
+          console.log('✅ Initializing player states...');
+          return {
+            ...(prevState || initialState),
+            player_states: parsedData
+          };
+        });
         
         // Clear room-specific sessionStorage to prevent re-initialization
         sessionStorage.removeItem(playerStatesKey);
@@ -143,7 +192,7 @@ export default function CopilotKitPage() {
         sessionStorage.removeItem(playerStatesKey); // Clear invalid data
       }
     }
-  }, [setState]); // Include setState dependency
+  }, [setState]); // Only depend on setState
 
   // Use cached viewState to derive plan-related fields
   const planStepsMemo = (viewState?.planSteps ?? initialState.planSteps) as PlanStep[];
@@ -152,7 +201,7 @@ export default function CopilotKitPage() {
 
   // One-time final summary renderer in chat when plan completes or fails
   useCoAgentStateRender<AgentState>({
-    name: agentName,
+    name: "sample_agent",
     nodeName: "plan-final-summary",
     render: ({ state }) => {
       const status = String(state?.planStatus ?? "");
@@ -215,12 +264,30 @@ export default function CopilotKitPage() {
   useCopilotAdditionalInstructions({
     instructions: (() => {
       const items = viewState.items ?? initialState.items;
+      const playerStates = viewState.player_states ?? {};
+      const votes = viewState.vote ?? [];
+      const deadPlayers = viewState.deadPlayers ?? [];
       const gTitle = "Game Engine";
       const gDesc = "AI-Powered Game Engine";
       const summary = items
         .slice(0, 5)
         .map((p: Item) => `id=${p.id} • name=${p.name} • type=${p.type}`)
         .join("\n");
+      
+      const playerStatesStr = Object.keys(playerStates).length > 0 
+        ? JSON.stringify(playerStates, null, 2)
+        : "(none)";
+      
+      const votesStr = votes.length > 0
+        ? votes.map(v => `${v.playerid} voted "${v.option}" in ${v.voteid}`).join("; ")
+        : "(none)";
+      
+      const deadPlayersStr = deadPlayers.length > 0
+        ? deadPlayers.join(", ")
+        : "(none)";
+      
+      const currentGameName = viewState.gameName || "(none)";
+      
       const fieldSchema = "";
       const toolUsageHints = [
         "GAME TOOL USAGE HINTS:",
@@ -231,8 +298,15 @@ export default function CopilotKitPage() {
         "ALWAYS ANSWER FROM SHARED STATE (GROUND TRUTH).",
         `Global Title: ${gTitle || "(none)"}`,
         `Global Description: ${gDesc || "(none)"}`,
+        `Current Game: ${currentGameName}`,
         "Items (sample):",
         summary || "(none)",
+        "Player States:",
+        playerStatesStr,
+        "Current Votes:",
+        votesStr,
+        "Dead Players:",
+        deadPlayersStr,
         fieldSchema,
         toolUsageHints,
       ].join("\n");
@@ -585,15 +659,13 @@ export default function CopilotKitPage() {
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "currentPhase", type: "string", required: true, description: "Current game phase" },
       { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
-      { name: "size", type: "string", required: false, description: "Indicator size (select: 'small' | 'medium' | 'large')" },
       { name: "description", type: "string", required: false, description: "Optional phase description" },
       { name: "timeRemaining", type: "number", required: false, description: "Seconds remaining in phase" },
     ],
-    handler: ({ name, currentPhase, position, size, description, timeRemaining }: {
+    handler: ({ name, currentPhase, position, description, timeRemaining }: {
       name: string;
       currentPhase: string;
       position: string;
-      size?: string;
       description?: string;
       timeRemaining?: number;
     }) => {
@@ -612,7 +684,6 @@ export default function CopilotKitPage() {
       const data: PhaseIndicatorData = {
         currentPhase,
         position: position as GamePosition,
-        size: size as ComponentSize,
         description,
         timeRemaining
       };
@@ -628,15 +699,13 @@ export default function CopilotKitPage() {
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "content", type: "string", required: true, description: "Main text content" },
       { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
-      { name: "size", type: "string", required: false, description: "Display size (select: 'small' | 'medium' | 'large')" },
       { name: "title", type: "string", required: false, description: "Optional title text" },
       { name: "type", type: "string", required: false, description: "Display type (select: 'info' | 'warning' | 'error' | 'success')" },
     ],
-    handler: ({ name, content, position, size, title, type }: {
+    handler: ({ name, content, position, title, type }: {
       name: string;
       content: string;
       position: string;
-      size?: string;
       title?: string;
       type?: string;
     }) => {
@@ -655,11 +724,240 @@ export default function CopilotKitPage() {
       const data: TextDisplayData = {
         content,
         position: position as GamePosition,
-        size: size as ComponentSize,
         title,
         type: type as "info" | "warning" | "error" | "success"
       };
       return addItem("text_display", name, data);
+    },
+  });
+
+  useCopilotAction({
+    name: "createVotingPanel",
+    description: "Create a voting panel for player voting.",
+    available: "remote",
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "votingId", type: "string", required: true, description: "Unique voting ID" },
+      { name: "options", type: "string[]", required: true, description: "List of voting options" },
+      { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
+      { name: "title", type: "string", required: false, description: "Optional voting title/question" },
+    ],
+    handler: ({ name, votingId, options, position, title }: {
+      name: string;
+      votingId: string;
+      options: string[];
+      position: string;
+      title?: string;
+    }) => {
+      const normalized = (name ?? "").trim();
+      
+      // Check for duplicate votingId in existing vote records
+      const existingVotes = (viewState.vote ?? []);
+      const duplicateVoting = existingVotes.some(vote => vote.voteid === votingId);
+      if (duplicateVoting) {
+        throw new Error(`Voting ID ${votingId} already exists in vote records`);
+      }
+      
+      // Name-based idempotency
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => 
+          it.type === "voting_panel" && (it.name ?? "").trim() === normalized
+        );
+        if (existing) {
+          return existing.id;
+        }
+      }
+      
+      const data: VotingPanelData = {
+        votingId,
+        options,
+        position: position as GamePosition,
+        title
+      };
+      return addItem("voting_panel", name, data);
+    },
+  });
+
+  useCopilotAction({
+    name: "createAvatarSet",
+    description: "Create avatar set to display all players.",
+    available: "remote",
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "avatarType", type: "string", required: true, description: "Avatar type (select: 'human' | 'wolf' | 'dog' | 'cat')" },
+    ],
+    handler: ({ name, avatarType }: {
+      name: string;
+      avatarType: string;
+    }) => {
+      const normalized = (name ?? "").trim();
+      
+      // Name-based idempotency
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => 
+          it.type === "avatar_set" && (it.name ?? "").trim() === normalized
+        );
+        if (existing) {
+          return existing.id;
+        }
+      }
+      
+      const data: AvatarSetData = {
+        avatarType: avatarType || "human"
+      };
+      return addItem("avatar_set", name, data);
+    },
+  });
+
+  useCopilotAction({
+    name: "markPlayerDead",
+    description: "Mark a player as dead, making their avatar appear grayed out.",
+    available: "remote",
+    parameters: [
+      { name: "playerId", type: "string", required: true, description: "Player ID to mark as dead" },
+      { name: "playerName", type: "string", required: true, description: "Player name for confirmation" },
+    ],
+    handler: ({ playerId, playerName }: {
+      playerId: string;
+      playerName: string;
+    }) => {
+      setState((prev) => {
+        const base = prev ?? initialState;
+        const currentDeadPlayers = base.deadPlayers ?? [];
+        
+        // Check if player is already dead
+        if (currentDeadPlayers.includes(playerId)) {
+          return base; // No change needed
+        }
+        
+        // Add player to dead list
+        return {
+          ...base,
+          deadPlayers: [...currentDeadPlayers, playerId],
+          lastAction: `marked_dead:${playerId}:${playerName}`
+        } as AgentState;
+      });
+      
+      return `Player ${playerName} (ID: ${playerId}) has been marked as dead`;
+    },
+  });
+
+  // Frontend action: create a timer component
+  useCopilotAction({
+    name: "createTimer",
+    description: "Create a timer component fixed to top-left corner that counts down and automatically sends a message to Agent when time expires.",
+    available: "remote",
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Timer name" },
+      { name: "duration", type: "number", required: true, description: "Timer duration in seconds" },
+      { name: "label", type: "string", required: false, description: "Optional label to display above timer" },
+    ],
+    handler: ({ name, duration, label }: {
+      name: string;
+      duration: number;
+      label?: string;
+    }) => {
+      const normalized = (name ?? "").trim();
+      
+      // Name-based idempotency
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => 
+          it.type === "timer" && (it.name ?? "").trim() === normalized
+        );
+        if (existing) {
+          return existing.id;
+        }
+      }
+      
+      const data: TimerData = {
+        duration: duration || 60,
+        label: label || "",
+      };
+      
+      const timerId = addItem("timer", name, data);
+      
+      // Start countdown and send message when expires
+      setTimeout(async () => {
+        await appendMessage(new TextMessage({
+          role: MessageRole.User,
+          content: `Timer "${name}" has expired after ${duration} seconds.`
+        }));
+        
+        // Remove timer after expiring
+        setState((prev) => {
+          const base = prev ?? initialState;
+          const items = base.items ?? [];
+          const filteredItems = items.filter(item => item.id !== timerId);
+          return { ...base, items: filteredItems } as AgentState;
+        });
+      }, duration * 1000);
+      
+      return timerId;
+    },
+  });
+
+  useCopilotAction({
+    name: "changeBackgroundColor",
+    description: "Create background color control panel with multiple color options including white and dark gray.",
+    available: "remote",
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "backgroundColor", type: "string", required: false, description: "Initial background color (select: 'white' | 'gray-900' | 'blue-50' | 'green-50' | 'purple-50')" },
+    ],
+    handler: ({ name, backgroundColor }: {
+      name: string;
+      backgroundColor?: string;
+    }) => {
+      const normalized = (name ?? "").trim();
+      
+      // Name-based idempotency
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => 
+          it.type === "background_control" && (it.name ?? "").trim() === normalized
+        );
+        if (existing) {
+          return existing.id;
+        }
+      }
+      
+      const data: BackgroundControlData = {
+        backgroundColor: backgroundColor || "white"
+      };
+      return addItem("background_control", name, data);
+    },
+  });
+
+  useCopilotAction({
+    name: "createResultDisplay",
+    description: "Create a result display showing content as large artistic text with gradient colors.",
+    available: "remote",
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "content", type: "string", required: true, description: "Result content to display" },
+      { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
+    ],
+    handler: ({ name, content, position }: {
+      name: string;
+      content: string;
+      position: string;
+    }) => {
+      const normalized = (name ?? "").trim();
+      
+      // Name-based idempotency
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => 
+          it.type === "result_display" && (it.name ?? "").trim() === normalized
+        );
+        if (existing) {
+          return existing.id;
+        }
+      }
+      
+      const data: ResultDisplayData = {
+        content: content || "RESULT",
+        position: position as GamePosition,
+      };
+      return addItem("result_display", name, data);
     },
   });
 
@@ -696,7 +994,7 @@ export default function CopilotKitPage() {
       className="h-[calc(100vh-3.5rem)] flex flex-col"
     >
       {/* Main Layout */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-visible">
         {/* Chat Sidebar */}
         <aside className="-order-1 max-md:hidden flex flex-col min-w-80 w-[30vw] max-w-120 p-4 pr-0">
           <div className="h-full flex flex-col align-start w-full shadow-lg rounded-2xl border border-sidebar-border overflow-hidden">
@@ -795,8 +1093,8 @@ export default function CopilotKitPage() {
           </div>
         </aside>
         {/* Main Content */}
-        <main className="relative flex flex-1 h-full">
-          <div ref={scrollAreaRef} className="relative overflow-auto size-full px-4 sm:px-8 md:px-10 py-4">
+        <main className="relative flex flex-1 h-full overflow-visible">
+          <div ref={scrollAreaRef} className="relative overflow-visible size-full px-4 sm:px-8 md:px-10 py-4">
             <div className={cn(
               "relative mx-auto max-w-7xl h-full min-h-8",
               (showJsonView || (viewState.items ?? []).length === 0) && "flex flex-col",
@@ -816,15 +1114,48 @@ export default function CopilotKitPage() {
               {(viewState.items ?? []).length === 0 ? (
                 <EmptyState className="flex-1">
                   <div className="mx-auto max-w-lg text-center">
-                    <h2 className="text-lg font-semibold text-foreground">Nothing here yet</h2>
-                    <p className="mt-2 text-sm text-muted-foreground">Create your first item to get started.</p>
+                    <h2 className="text-lg font-semibold text-foreground">Ready to Play!</h2>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Click Start to begin your {(() => {
+                        if (typeof window === 'undefined') return 'game';
+                        const params = new URLSearchParams(window.location.search);
+                        const gameName = params.get('game') || 'game';
+                        return gameName;
+                      })()} game.
+                    </p>
                     <div className="mt-6 flex justify-center">
-                      <NewItemMenu onSelect={(t: CardType) => addItem(t)} align="center" className="md:h-10" />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={cn(
+                          "gap-2 text-base font-semibold md:h-10",
+                          "bg-green-50 hover:bg-green-100 border-green-200 text-green-700",
+                        )}
+                        onClick={async () => {
+                          // Set gameName from URL and wait for state update
+                          const gameNameUpdated = ensureGameName();
+                          
+                          // Wait a moment for state to propagate if needed
+                          if (gameNameUpdated) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                          }
+                          
+                          console.log('🎮 Current state gameName:', state?.gameName);
+                          
+                          // Send start game message
+                          await appendMessage(new TextMessage({
+                            role: MessageRole.User,
+                            content: "Start game."
+                          }));
+                        }}
+                      >
+                        🎮 Start Game
+                      </Button>
                     </div>
                   </div>
                 </EmptyState>
               ) : (
-                <div className="flex-1 py-0 overflow-hidden">
+                <div className="flex-1 py-0 overflow-visible">
                   {showJsonView ? (
                     <div className="pb-16 size-full">
                       <div className="rounded-2xl border shadow-sm bg-card size-full overflow-auto max-md:text-sm">
@@ -834,10 +1165,31 @@ export default function CopilotKitPage() {
                       </div>
                     </div>
                   ) : (
-                    <div style={GAME_GRID_STYLE} className="pb-20">
+                    <div className="relative overflow-visible">
+                      {/* Avatar sets render as overlay */}
+                      <div className="absolute inset-0 z-10 pointer-events-none" style={{ left: '-150px', right: '-150px', top: '0', bottom: '0' }}>
+                        {(viewState.items ?? [])
+                          .filter(item => item.type === "avatar_set")
+                          .map(item => (
+                            <CardRenderer 
+                              key={item.id} 
+                              item={item} 
+                              onUpdateData={(updater) => updateItemData(item.id, updater)} 
+                              onToggleTag={() => toggleTag()} 
+                              onButtonClick={handleButtonClick} 
+                              onVote={handleVote} 
+                              playerStates={viewState.player_states} 
+                              deadPlayers={viewState.deadPlayers}
+                            />
+                          ))}
+                      </div>
+                      
+                      <div style={GAME_GRID_STYLE} className="pb-20 bg-white" data-canvas-container>
                       {/* Render all 9 region containers */}
                       {(["top-left", "top-center", "top-right", "middle-left", "center", "middle-right", "bottom-left", "bottom-center", "bottom-right"] as GamePosition[]).map(position => {
                         const itemsInRegion = (viewState.items ?? []).filter(item => {
+                          // Exclude avatar_set items as they render as overlay
+                          if (item.type === "avatar_set") return false;
                           const itemData = item.data as ItemData;
                           return (itemData as { position?: GamePosition })?.position === position;
                         });
@@ -846,7 +1198,7 @@ export default function CopilotKitPage() {
                           <div
                             key={position}
                             style={{ gridArea: position }}
-                            className={`flex flex-col items-center justify-center gap-4 p-2 rounded-lg min-h-[100px] ${itemsInRegion.length === 0 ? 'border border-dashed border-gray-200' : ''}`}
+                            className="flex flex-col items-center justify-center gap-4 p-2 rounded-lg min-h-[100px]"
                           >
                             {itemsInRegion.map((item) => (
                               <div key={item.id} className="relative group">
@@ -859,12 +1211,13 @@ export default function CopilotKitPage() {
                                   <X className="h-3 w-3" />
                                 </button>
                                 
-                                <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={() => toggleTag()} onButtonClick={handleButtonClick} />
+                                <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={() => toggleTag()} onButtonClick={handleButtonClick} onVote={handleVote} playerStates={viewState.player_states} deadPlayers={viewState.deadPlayers} />
                               </div>
                             ))}
                           </div>
                         );
                       })}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -880,17 +1233,38 @@ export default function CopilotKitPage() {
               "[&_button]:hover:border-accent [&_button]:hover:text-accent",
               "[&_button]:hover:bg-accent/10!",
             )}>
-              <NewItemMenu
-                onSelect={(t: CardType) => addItem(t)}
-                align="center"
-                className="rounded-r-none border-r-0 peer"
-              />
+              <Button
+                type="button"
+                variant="outline"
+                className={cn(
+                  "gap-1.25 text-base font-semibold rounded-r-none border-r-0",
+                  "bg-green-50 hover:bg-green-100 border-green-200 text-green-700",
+                )}
+                onClick={async () => {
+                  // Set gameName from URL and wait for state update
+                  const gameNameUpdated = ensureGameName();
+                  
+                  // Wait a moment for state to propagate if needed
+                  if (gameNameUpdated) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                  }
+                  
+                  console.log('🎮 Current state gameName:', state?.gameName);
+                  
+                  // Send start game message
+                  await appendMessage(new TextMessage({
+                    role: MessageRole.User,
+                    content: "Start game."
+                  }));
+                }}
+              >
+                🎮 Start
+              </Button>
               <Button
                 type="button"
                 variant="outline"
                 className={cn(
                   "gap-1.25 text-base font-semibold rounded-l-none",
-                  "peer-hover:border-l-accent!",
                 )}
                 onClick={() => setShowJsonView((v) => !v)}
               >
@@ -925,4 +1299,3 @@ export default function CopilotKitPage() {
     </div>
   );
 }
-

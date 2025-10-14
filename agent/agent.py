@@ -171,8 +171,15 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "createCharacterCard",
     "createActionButton", 
     "createPhaseIndicator",
-    "createTextDisplay"
-
+    "createTextDisplay",
+    "createVotingPanel",
+    "createAvatarSet",
+    "changeBackgroundColor",
+    "createResultDisplay",
+    # Component management tools
+    "deleteItem",
+    # Player state management
+    "markPlayerDead"
 ])
 
 

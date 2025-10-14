@@ -1,12 +1,16 @@
 "use client";
 
-import type { Item, ItemData, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData } from "@/lib/canvas/types";
+import type { Item, ItemData, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData } from "@/lib/canvas/types";
+import { getPlayersFromStates } from "@/lib/player-utils";
 // import { chartAddField1Metric, chartRemoveField1Metric, chartSetField1Label, chartSetField1Value, projectAddField4Item, projectRemoveField4Item, projectSetField4ItemDone, projectSetField4ItemText } from "@/lib/canvas/updates";
 export function CardRenderer(props: {
   item: Item;
   onUpdateData: (updater: (prev: ItemData) => ItemData) => void;
   onToggleTag: (tag: string) => void;
   onButtonClick?: (item: Item) => void;
+  onVote?: (votingId: string, playerId: string, option: string) => void;
+  playerStates?: Record<string, Record<string, unknown>>;
+  deadPlayers?: string[];
 }) {
   const { item } = props;
 
@@ -191,11 +195,46 @@ export function CardRenderer(props: {
       };
       return sizeMap[size] || sizeMap.medium;
     };
+    // Minimalist RPG styling with subtle gold accents
+    const role = String(d.role || "");
+    const r = role.toLowerCase();
+    const roleIcon = r.includes("wolf") || r.includes("werewolf")
+      ? "🐺"
+      : r.includes("seer") || r.includes("oracle")
+      ? "🔮"
+      : r.includes("mage") || r.includes("wizard") || r.includes("witch")
+      ? "🪄"
+      : r.includes("warrior") || r.includes("knight") || r.includes("ronin")
+      ? "⚔️"
+      : r.includes("thief") || r.includes("rogue")
+      ? "🗡️"
+      : r.includes("villager") || r.includes("peasant")
+      ? "🌾"
+      : "";
     
     return (
-      <div className={`${getSizeClasses(d.size)} bg-card border rounded-lg p-4 flex flex-col`}>
-        <div className="text-sm text-muted-foreground">{d.role}</div>
-        {d.description && <div className="text-xs mt-2 flex-1">{d.description}</div>}
+      <div className={`${getSizeClasses(d.size)} relative overflow-hidden rounded-2xl border-2 border-amber-500/30 ring-4 ring-amber-400/10 bg-gradient-to-br from-slate-800 via-gray-900 to-black shadow-xl flex flex-col`}>
+        {/* top banner */}
+        <div className="px-4 py-3 bg-gradient-to-r from-amber-500/15 via-amber-400/10 to-amber-500/15 border-b border-amber-500/20">
+          <div className="flex items-center gap-2">
+            {roleIcon && (
+              <span className="text-[calc(1rem+0.3vw)] leading-none">{roleIcon}</span>
+            )}
+            <div className="font-extrabold tracking-wide text-[calc(0.95rem+0.3vw)] leading-none bg-gradient-to-b from-amber-200 to-amber-400 text-transparent bg-clip-text drop-shadow">
+              {role}
+            </div>
+          </div>
+        </div>
+        {/* body */}
+        {d.description ? (
+          <div className="p-4 text-sm text-slate-200/85 leading-relaxed flex-1">
+            {d.description}
+          </div>
+        ) : (
+          <div className="p-4 text-sm text-slate-300/80 italic flex-1">RPG Character</div>
+        )}
+        {/* subtle vignette */}
+        <div className="pointer-events-none absolute inset-0 [background:radial-gradient(120%_80%_at_50%_0%,rgba(255,255,255,0.06)_0,rgba(0,0,0,0)_60%)]" />
       </div>
     );
   }
@@ -228,39 +267,289 @@ export function CardRenderer(props: {
 
   if (item.type === "phase_indicator") {
     const d = item.data as PhaseIndicatorData;
-    const getSizeClasses = (size: string = 'medium') => {
-      const sizeMap: Record<string, string> = {
-        small: "w-30 h-8",
-        medium: "w-45 h-12",
-        large: "w-60 h-16"
-      };
-      return sizeMap[size] || sizeMap.medium;
-    };
-    
+    // Fun, dark cartoon styling + auto sizing (only min constraints)
+    const phase = (d.currentPhase || "").toLowerCase();
+    const icon = phase.includes("night")
+      ? "🌙"
+      : phase.includes("day")
+      ? "☀️"
+      : phase.includes("vote")
+      ? "🗳️"
+      : "";
+
     return (
-      <div className={`${getSizeClasses(d.size)} bg-accent text-accent-foreground rounded-lg flex flex-col items-center justify-center`}>
-        <div className="font-bold text-sm">{d.currentPhase}</div>
-        {d.description && <div className="text-xs">{d.description}</div>}
-        {d.timeRemaining && <div className="text-xs">{d.timeRemaining}s</div>}
+      <div
+        className={
+          [
+            // Auto-size to parent; only minimum constraints
+            "inline-flex max-w-none max-h-none w-auto h-auto",
+            "min-w-48 min-h-16 px-6 py-4",
+            // Dark, cartoon-ish look
+            "rounded-3xl bg-gradient-to-br from-slate-800 via-gray-900 to-black",
+            "border-2 border-indigo-500/40 ring-4 ring-indigo-400/20",
+            "text-slate-100 shadow-2xl drop-shadow-[0_0_10px_rgba(99,102,241,0.35)]",
+            // Layout
+            "items-center justify-center gap-1.5",
+          ].join(" ")
+        }
+      >
+        <div className="flex items-center gap-2">
+          {icon && (
+            <span className="text-[calc(0.9rem+0.6vw)] leading-none">{icon}</span>
+          )}
+          <div className="flex flex-col items-start">
+            <div className="font-extrabold tracking-wide text-[calc(0.8rem+0.5vw)] leading-tight">
+              {d.currentPhase}
+            </div>
+            {d.description && (
+              <div className="opacity-80 text-[calc(0.55rem+0.25vw)] leading-snug">
+                {d.description}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {typeof d.timeRemaining === "number" && d.timeRemaining >= 0 && (
+          <div className="mt-2 w-full">
+            <div className="h-2.5 w-full rounded-full bg-slate-700/70 overflow-hidden border border-slate-600/60">
+              <div className="h-full w-full bg-gradient-to-r from-indigo-400 via-fuchsia-400 to-pink-400 opacity-70" />
+            </div>
+            <div className="mt-1 text-[0.7rem] tabular-nums text-slate-300/90">
+              {d.timeRemaining}s
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   if (item.type === "text_display") {
     const d = item.data as TextDisplayData;
-    const getSizeClasses = (size: string = 'medium') => {
-      const sizeMap: Record<string, string> = {
-        small: "w-50 h-20",
-        medium: "w-75 h-30",
-        large: "w-100 h-45"
-      };
-      return sizeMap[size] || sizeMap.medium;
+    
+    return (
+      <div className={`min-w-32 min-h-16 w-full h-full ${d.type === 'error' ? 'bg-destructive/10 border-destructive' : d.type === 'warning' ? 'bg-yellow-50 border-yellow-200' : d.type === 'success' ? 'bg-green-50 border-green-200' : 'bg-card'} border rounded-lg p-3 flex flex-col`}>
+        {d.title && <div className="font-semibold text-sm mb-2">{d.title}</div>}
+        <div className="text-sm flex-1">{d.content}</div>
+      </div>
+    );
+  }
+
+  if (item.type === "voting_panel") {
+    const d = item.data as VotingPanelData;
+    
+    const handleVote = (option: string) => {
+      console.log('Vote button clicked for option:', option);
+      const playerId = sessionStorage.getItem('playerId');
+      console.log('Retrieved playerId from sessionStorage:', playerId);
+      
+      if (!playerId) {
+        console.warn('No playerId found in sessionStorage');
+        // Use a default playerId for testing
+        const defaultPlayerId = "1";
+        console.log('Using default playerId:', defaultPlayerId);
+        if (props.onVote) {
+          props.onVote(d.votingId, defaultPlayerId, option);
+        }
+        return;
+      }
+      
+      // Call the vote handler if provided
+      if (props.onVote) {
+        console.log('Calling onVote with:', d.votingId, playerId, option);
+        props.onVote(d.votingId, playerId, option);
+      } else {
+        console.warn('No onVote handler provided');
+      }
     };
     
     return (
-      <div className={`${getSizeClasses(d.size)} ${d.type === 'error' ? 'bg-destructive/10 border-destructive' : d.type === 'warning' ? 'bg-yellow-50 border-yellow-200' : d.type === 'success' ? 'bg-green-50 border-green-200' : 'bg-card'} border rounded-lg p-3 flex flex-col`}>
-        {d.title && <div className="font-semibold text-sm mb-2">{d.title}</div>}
-        <div className="text-sm flex-1">{d.content}</div>
+      <div className="w-full h-full bg-gradient-to-br from-purple-100 to-blue-100 border-2 border-purple-200 rounded-xl p-4 shadow-lg flex flex-col">
+        {d.title && (
+          <div className="text-lg font-bold text-center text-purple-800 mb-4">
+            {d.title}
+          </div>
+        )}
+        <div className="flex gap-3 flex-wrap flex-1">
+          {d.options.map((option, index) => (
+            <button
+              key={index}
+              onClick={() => handleVote(option)}
+              className="flex-1 min-w-24 p-3 rounded-lg font-semibold transition-all duration-200 border-2 bg-white text-purple-700 border-purple-300 hover:bg-purple-50 hover:border-purple-400 hover:shadow-md"
+            >
+              <div className="flex justify-center items-center">
+                <span>{option}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (item.type === "avatar_set") {
+    const d = item.data as AvatarSetData;
+    
+    // Get players using the universal player utils
+    const playerStates = props.playerStates || {};
+    const players = getPlayersFromStates(playerStates);
+    
+    // Avatar mapping based on type
+    const avatarMap: Record<string, string> = {
+      human: '👤',
+      wolf: '🐺', 
+      dog: '🐶',
+      cat: '🐱'
+    };
+    
+    const avatarEmoji = avatarMap[d.avatarType] || avatarMap.human;
+    
+    // RGB colors for variety
+    const colors = [
+      'bg-red-400', 'bg-green-400', 'bg-blue-400', 'bg-yellow-400',
+      'bg-purple-400', 'bg-pink-400', 'bg-indigo-400', 'bg-teal-400'
+    ];
+    
+    // If no players, use test data
+    const playersToShow = players.length > 0 ? players : [
+      { id: "1", name: "Alice" },
+      { id: "2", name: "Bob" },
+      { id: "3", name: "Charlie" },
+      { id: "4", name: "Diana" }
+    ];
+    
+    // Position players on left and right sides
+    const leftPlayers: typeof playersToShow = [];
+    const rightPlayers: typeof playersToShow = [];
+    
+    playersToShow.forEach((player, index) => {
+      if (index % 2 === 0) {
+        leftPlayers.push(player);
+      } else {
+        rightPlayers.push(player);
+      }
+    });
+    
+    return (
+      <>
+        {/* Left side avatars - positioned outside the canvas area */}
+        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 pointer-events-none">
+          <div className="space-y-4">
+            {leftPlayers.map((player) => {
+              const colorIndex = parseInt(player.id) % colors.length;
+              const isDead = props.deadPlayers?.includes(player.id) || false;
+              
+              return (
+                <div key={player.id} className="flex flex-col items-center">
+                  <div className={`w-16 h-16 ${isDead ? 'bg-gray-400' : colors[colorIndex]} rounded-full flex items-center justify-center text-2xl shadow-lg border-4 border-white ring-2 ring-gray-300 ${isDead ? 'grayscale opacity-60' : ''}`}>
+                    {avatarEmoji}
+                  </div>
+                  <div className={`text-xs mt-2 text-center font-medium bg-white px-2 py-1 rounded-full shadow border border-gray-200 ${isDead ? 'opacity-60' : ''}`}>
+                    {player.name}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        
+        {/* Right side avatars - positioned outside the canvas area */}
+        <div className="absolute right-0 top-1/2 transform -translate-y-1/2 pointer-events-none">
+          <div className="space-y-4">
+            {rightPlayers.map((player) => {
+              const colorIndex = parseInt(player.id) % colors.length;
+              const isDead = props.deadPlayers?.includes(player.id) || false;
+              
+              return (
+                <div key={player.id} className="flex flex-col items-center">
+                  <div className={`w-16 h-16 ${isDead ? 'bg-gray-400' : colors[colorIndex]} rounded-full flex items-center justify-center text-2xl shadow-lg border-4 border-white ring-2 ring-gray-300 ${isDead ? 'grayscale opacity-60' : ''}`}>
+                    {avatarEmoji}
+                  </div>
+                  <div className={`text-xs mt-2 text-center font-medium bg-white px-2 py-1 rounded-full shadow border border-gray-200 ${isDead ? 'opacity-60' : ''}`}>
+                    {player.name}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (item.type === "result_display") {
+    const d = item.data as ResultDisplayData;
+    
+    return (
+      <div className="flex items-center justify-center min-h-24 w-full">
+        <div className="text-center">
+          <div className="text-4xl md:text-6xl lg:text-8xl font-black bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent drop-shadow-2xl transform hover:scale-105 transition-transform duration-300">
+            {d.content || "RESULT"}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (item.type === "background_control") {
+    const d = item.data as BackgroundControlData;
+    
+    const backgroundOptions = [
+      { value: "white", label: "白色", colorClass: "bg-white" },
+      { value: "gray-900", label: "灰黑色", colorClass: "bg-gray-900" },
+      { value: "blue-50", label: "淡蓝色", colorClass: "bg-blue-50" },
+      { value: "green-50", label: "淡绿色", colorClass: "bg-green-50" },
+      { value: "purple-50", label: "淡紫色", colorClass: "bg-purple-50" },
+    ];
+    
+    return (
+      <div className="p-4 border rounded-lg bg-card">
+        <h3 className="text-sm font-medium mb-3">背景颜色控制</h3>
+        <div className="grid grid-cols-2 gap-2">
+          {backgroundOptions.map((option) => (
+            <button
+              key={option.value}
+              onClick={() => {
+                props.onUpdateData(() => ({ backgroundColor: option.value } as BackgroundControlData));
+                // Apply background to canvas immediately
+                const canvas = document.querySelector('[data-canvas-container]') as HTMLElement;
+                if (canvas) {
+                  canvas.className = canvas.className.replace(/bg-\w+(-\d+)?/g, '');
+                  canvas.classList.add(option.colorClass);
+                }
+              }}
+              className={`flex items-center gap-2 p-2 rounded-lg border transition-all ${
+                d.backgroundColor === option.value
+                  ? 'border-blue-500 bg-blue-50 shadow-sm'
+                  : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              <div className={`w-4 h-4 rounded border ${option.colorClass} ${
+                option.value === 'white' ? 'border-gray-300' : 'border-gray-200'
+              }`} />
+              <span className="text-xs font-medium">{option.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-2 text-xs text-gray-500">
+          当前: {backgroundOptions.find(opt => opt.value === d.backgroundColor)?.label || '白色'}
+        </div>
+      </div>
+    );
+  }
+
+  if (item.type === "timer") {
+    const d = item.data as TimerData;
+    
+    return (
+      <div className="fixed top-4 left-4 z-50 bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 text-white shadow-lg">
+        {d.label && (
+          <div className="text-xs font-medium mb-1 text-center opacity-80">
+            {d.label}
+          </div>
+        )}
+        <div className="text-lg font-mono font-bold text-center">
+          {Math.floor(d.duration / 60)}:{String(d.duration % 60).padStart(2, '0')}
+        </div>
       </div>
     );
   }
@@ -275,5 +564,3 @@ export function CardRenderer(props: {
 }
 
 export default CardRenderer;
-
-

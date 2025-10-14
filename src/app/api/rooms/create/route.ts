@@ -60,7 +60,8 @@ export async function POST(request: NextRequest) {
 
     // Generate unique IDs
     const roomId = randomUUID();
-    const playerId = memoryStorage.updateNextPlayerId();
+    // 房主在新房间中总是ID=1
+    const playerId = 1;
     
     // Create agent thread
     const threadId = await createAgentThread(body.gameName);

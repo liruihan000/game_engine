@@ -21,6 +21,11 @@ export function NewItemMenu({ onSelect, align = "end", className }: { onSelect: 
         <DropdownMenuItem onClick={() => onSelect("action_button")}>Action Button</DropdownMenuItem>
         <DropdownMenuItem onClick={() => onSelect("phase_indicator")}>Phase Indicator</DropdownMenuItem>
         <DropdownMenuItem onClick={() => onSelect("text_display")}>Text Display</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("voting_panel")}>Voting Panel</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("avatar_set")}>Avatar Set</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("background_control")}>Background Control</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("result_display")}>Result Display</DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onSelect("timer")}>Timer</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
