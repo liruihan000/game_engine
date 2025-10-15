@@ -31,10 +31,10 @@ if VERBOSE_LOGGING:
     # 创建格式器
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
     
-    # 文件处理器 - 使用时间戳创建新的日志文件
+    # 文件处理器 - 开发态按“天”合并日志，避免热重载生成多文件
     from datetime import datetime
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    log_file = f'/home/lee/canvas-with-langgraph-python/logs/agent_{timestamp}.log'
+    date_str = datetime.now().strftime('%Y%m%d')
+    log_file = f'/home/lee/canvas-with-langgraph-python/logs/agent_{date_str}.log'
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
@@ -518,7 +518,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "current_phase_id": state.get("current_phase_id", 0),
             "actions": [],  # Clear actions after execution
             "__last_tool_guidance": None,
-        }
+        },
     )
 
 
@@ -529,7 +529,7 @@ async def PhaseEvaluator(state: AgentState, config: RunnableConfig) -> Command[L
         logger.info(f"[PhaseEvaluator][game] gameName={state.get('gameName', None)}")
     except Exception:
         pass
-    
+
     # Debug: Print entire received state
     logger.info(f"[PhaseEvaluator][DEBUG] Full received state keys: {list(state.keys())}")
     if "player_states" in state:

@@ -326,10 +326,55 @@ export function CardRenderer(props: {
   if (item.type === "text_display") {
     const d = item.data as TextDisplayData;
     
+    // Game-themed styling with different variants
+    const getTypeStyles = (type?: string) => {
+      switch (type) {
+        case 'error':
+          return {
+            container: 'bg-gradient-to-br from-red-900/20 via-red-800/15 to-red-700/20 border-red-500/30 ring-2 ring-red-400/20',
+            title: 'text-red-300',
+            content: 'text-red-100',
+            icon: '⚠️'
+          };
+        case 'warning': 
+          return {
+            container: 'bg-gradient-to-br from-amber-900/20 via-amber-800/15 to-amber-700/20 border-amber-500/30 ring-2 ring-amber-400/20',
+            title: 'text-amber-300',
+            content: 'text-amber-100',
+            icon: '🔶'
+          };
+        case 'success':
+          return {
+            container: 'bg-gradient-to-br from-emerald-900/20 via-emerald-800/15 to-emerald-700/20 border-emerald-500/30 ring-2 ring-emerald-400/20',
+            title: 'text-emerald-300', 
+            content: 'text-emerald-100',
+            icon: '✨'
+          };
+        default:
+          return {
+            container: 'bg-gradient-to-br from-slate-800/40 via-slate-700/30 to-slate-600/40 border-slate-400/30 ring-2 ring-slate-300/20',
+            title: 'text-slate-200',
+            content: 'text-slate-300',
+            icon: '📜'
+          };
+      }
+    };
+
+    const styles = getTypeStyles(d.type);
+    
     return (
-      <div className={`min-w-32 min-h-16 w-full h-full ${d.type === 'error' ? 'bg-destructive/10 border-destructive' : d.type === 'warning' ? 'bg-yellow-50 border-yellow-200' : d.type === 'success' ? 'bg-green-50 border-green-200' : 'bg-card'} border rounded-lg p-3 flex flex-col`}>
-        {d.title && <div className="font-semibold text-sm mb-2">{d.title}</div>}
-        <div className="text-sm flex-1">{d.content}</div>
+      <div className={`min-w-32 min-h-16 w-full h-full ${styles.container} border rounded-xl p-4 flex flex-col shadow-lg backdrop-blur-sm`}>
+        {d.title && (
+          <div className={`flex items-center gap-2 font-bold text-sm mb-3 ${styles.title}`}>
+            <span className="text-lg leading-none">{styles.icon}</span>
+            <span className="tracking-wide">{d.title}</span>
+          </div>
+        )}
+        <div className={`text-sm leading-relaxed flex-1 ${styles.content}`}>
+          {d.content}
+        </div>
+        {/* Subtle inner glow effect */}
+        <div className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-t from-transparent via-transparent to-white/5" />
       </div>
     );
   }

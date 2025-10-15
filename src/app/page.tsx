@@ -24,7 +24,38 @@ export default function CopilotKitPage() {
   // Use consistent agent name across all components - room isolation via threadId
   const { state, setState } = useCoAgent<AgentState>({
     name: "sample_agent", // 🔑 Fixed agent name, room isolation via threadId in DynamicCopilotProvider
-    initialState,
+    initialState: (() => {
+      // One-time initialization logic - no useEffect needed
+      if (typeof window === 'undefined') return initialState;
+      
+      try {
+        // Get game context and room session from sessionStorage
+        const gameContext = sessionStorage.getItem('gameContext');
+        const roomSession = sessionStorage.getItem('roomSession');
+        const urlGameName = new URLSearchParams(window.location.search).get('game');
+        
+        if (gameContext && roomSession) {
+          const context = JSON.parse(gameContext);
+          const room = JSON.parse(roomSession);
+          console.log('🎮 Game initialized from sessionStorage:', { gameName: context.gameName, players: room.players?.length });
+          return {
+            ...initialState,
+            gameName: context.gameName,
+            roomSession: room
+          };
+        }
+        
+        // Fallback to URL gameName only
+        if (urlGameName) {
+          console.log('🎮 Game initialized from URL:', urlGameName);
+          return { ...initialState, gameName: urlGameName };
+        }
+      } catch (error) {
+        console.error('Failed to initialize game state from sessionStorage:', error);
+      }
+      
+      return initialState;
+    })(),
   });
 
   const { appendMessage } = useCopilotChat();
@@ -46,31 +77,9 @@ export default function CopilotKitPage() {
       }
     }
     return false; // No update needed
-  }, [setState, state]);
+  }, [setState, state?.gameName]); // Only depend on the specific field we're checking
 
-  // Continuously sync gameName from URL (but avoid infinite loops)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // Only check if we're in browser and have a different gameName
-      if (typeof window !== 'undefined') {
-        const params = new URLSearchParams(window.location.search);
-        const urlGameName = params.get('game');
-        const currentGameName = state?.gameName;
-        
-        // Only update if there's a real difference
-        if (urlGameName && urlGameName !== currentGameName) {
-          console.log('🔄 Periodic gameName sync:', urlGameName);
-          setState((prev) => {
-            const base = prev ?? initialState;
-            return { ...base, gameName: urlGameName } as AgentState;
-          });
-        }
-      }
-    }, 2000); // Check every 2 seconds
-
-    // Cleanup interval on unmount
-    return () => clearInterval(interval);
-  }, [setState, state?.gameName]); // Depend on gameName to avoid unnecessary updates
+  // ✅ Removed gameName initialization useEffect - now handled in initialState
 
   // Handle action button clicks
   const handleButtonClick = useCallback(async (item: Item) => {
@@ -162,8 +171,11 @@ export default function CopilotKitPage() {
     }
   });
 
+  // ✅ Optimized: Only log in development
   useEffect(() => {
-    console.log("[CoAgent state updated]", state);
+    if (process.env.NODE_ENV === 'development') {
+      console.log("[CoAgent state updated]", state);
+    }
   }, [state]);
 
   // Reset JSON view when there are no items
@@ -174,49 +186,7 @@ export default function CopilotKitPage() {
     }
   }, [viewState?.items, showJsonView]);
 
-  // Initialize player_states from sessionStorage when game starts
-  useEffect(() => {
-    console.log('🔍 Checking for player states...');
-    // Get current room context
-    const gameContext = sessionStorage.getItem('gameContext');
-    if (!gameContext) {
-      console.log('No game context found');
-      return;
-    }
-    
-    const context = JSON.parse(gameContext);
-    const playerStatesKey = `playerStates_${context.roomId}`;
-    const playerStatesData = sessionStorage.getItem(playerStatesKey);
-
-    if (playerStatesData) {
-      try {
-        const parsedData = JSON.parse(playerStatesData);
-        console.log('📥 Found player states for room:', context.roomId, parsedData);
-        
-        // Initialize player_states in AgentState
-        setState(prevState => {
-          if (prevState?.player_states && Object.keys(prevState.player_states).length > 0) {
-            console.log('⏭️ Player states already set, skipping...');
-            return prevState;
-          }
-          
-          console.log('✅ Initializing player states...');
-          return {
-            ...(prevState || initialState),
-            player_states: parsedData
-          };
-        });
-        
-        // Clear room-specific sessionStorage to prevent re-initialization
-        sessionStorage.removeItem(playerStatesKey);
-        console.log('✅ Player states initialized and sessionStorage cleared for room:', context.roomId);
-        
-      } catch (error) {
-        console.error('❌ Failed to parse player states from sessionStorage:', error);
-        sessionStorage.removeItem(playerStatesKey); // Clear invalid data
-      }
-    }
-  }, [setState]); // Only depend on setState
+  // ✅ Removed roomSession initialization useEffect - now handled in initialState
 
   // Use cached viewState to derive plan-related fields
   const planStepsMemo = (viewState?.planSteps ?? initialState.planSteps) as PlanStep[];
@@ -561,7 +531,8 @@ export default function CopilotKitPage() {
   useCopilotAction({
     name: "setGlobalTitle",
     description: "Set the global title/name (outside of items).",
-    available: "remote",
+    available: "frontend", // ✅ 纯前端操作，不触发Agent
+    followUp: false,
     parameters: [
       { name: "title", type: "string", required: true, description: "The new global title/name." },
     ],
@@ -574,6 +545,7 @@ export default function CopilotKitPage() {
     name: "setGlobalDescription",
     description: "Set the global description/subtitle (outside of items).",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "description", type: "string", required: true, description: "The new global description/subtitle." },
     ],
@@ -587,6 +559,7 @@ export default function CopilotKitPage() {
     name: "setItemName",
     description: "Set an item's name/title.",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "name", type: "string", required: true, description: "The new item name/title." },
       { name: "itemId", type: "string", required: true, description: "Target item id." },
@@ -601,6 +574,7 @@ export default function CopilotKitPage() {
     name: "setItemSubtitleOrDescription",
     description: "Set an item's description/subtitle (short description or subtitle).",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "subtitle", type: "string", required: true, description: "The new item description/subtitle." },
       { name: "itemId", type: "string", required: true, description: "Target item id." },
@@ -616,6 +590,7 @@ export default function CopilotKitPage() {
     name: "createCharacterCard",
     description: "Create a character card for the game.",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name"},
       { name: "role", type: "string", required: true, description: "Character role (e.g., werewolf, seer, villager)" },
@@ -656,6 +631,7 @@ export default function CopilotKitPage() {
     name: "createActionButton",
     description: "Create an action button for player interactions.",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "label", type: "string", required: true, description: "Button text" },
@@ -702,6 +678,7 @@ export default function CopilotKitPage() {
     name: "createPhaseIndicator",
     description: "Create a phase indicator to show current game phase.",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "currentPhase", type: "string", required: true, description: "Current game phase" },
@@ -735,6 +712,7 @@ export default function CopilotKitPage() {
         timeRemaining
       };
       return addItem("phase_indicator", name, data);
+      
     },
   });
 
@@ -742,6 +720,7 @@ export default function CopilotKitPage() {
     name: "createTextDisplay",
     description: "Create a text display for game information.",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "content", type: "string", required: true, description: "Main text content" },
@@ -782,6 +761,7 @@ export default function CopilotKitPage() {
     name: "createVotingPanel",
     description: "Create a voting panel for player voting.",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "votingId", type: "string", required: true, description: "Unique voting ID" },
@@ -829,6 +809,7 @@ export default function CopilotKitPage() {
     name: "createAvatarSet",
     description: "Create avatar set to display all players.",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "avatarType", type: "string", required: true, description: "Avatar type (select: 'human' | 'wolf' | 'dog' | 'cat')" },
@@ -860,6 +841,7 @@ export default function CopilotKitPage() {
     name: "markPlayerDead",
     description: "Mark a player as dead, making their avatar appear grayed out.",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "playerId", type: "string", required: true, description: "Player ID to mark as dead" },
       { name: "playerName", type: "string", required: true, description: "Player name for confirmation" },
@@ -894,6 +876,7 @@ export default function CopilotKitPage() {
     name: "createTimer",
     description: "Create a timer component fixed to top-left corner that counts down and automatically sends a message to Agent when time expires.",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "name", type: "string", required: true, description: "Timer name" },
       { name: "duration", type: "number", required: true, description: "Timer duration in seconds" },
@@ -947,6 +930,7 @@ export default function CopilotKitPage() {
     name: "changeBackgroundColor",
     description: "Create background color control panel with multiple color options including white and dark gray.",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "backgroundColor", type: "string", required: false, description: "Initial background color (select: 'white' | 'gray-900' | 'blue-50' | 'green-50' | 'purple-50')" },
@@ -978,6 +962,7 @@ export default function CopilotKitPage() {
     name: "createResultDisplay",
     description: "Create a result display showing content as large artistic text with gradient colors.",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "content", type: "string", required: true, description: "Result content to display" },
@@ -1013,6 +998,7 @@ export default function CopilotKitPage() {
     name: "deleteItem",
     description: "Delete an item by id.",
     available: "remote",
+    followUp: false,
     parameters: [
       { name: "itemId", type: "string", required: true, description: "Target item id." },
     ],
@@ -1027,6 +1013,7 @@ export default function CopilotKitPage() {
     name: "clearCanvas",
     description: "Clear all items from the canvas except avatar sets. This is useful when transitioning between game phases or starting fresh.",
     available: "remote",
+    followUp: false,
     parameters: [],
     handler: () => {
       setState((prev) => {

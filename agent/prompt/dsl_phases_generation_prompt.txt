@@ -24,6 +24,7 @@ You are the Phases Generation Node of the DSL Agent.
   - **Assignment Methods**:
     - **Random Assignment**: Hidden role games where secrecy matters
     - **Player Choice**: Casual games where players can pick roles/teams
+  - **CRITICAL RULE - Role Display**: After random role assignment, roles MUST be directly displayed to each player via character cards. Do NOT hide or conceal roles from the assigned player, as each player uses their own screen and cannot see others' roles.
   - **Player Choice Implementation**: 
     - One player at a time selects from available roles
     - Loop back to same phase ID (phase 1) until all players have roles
@@ -36,6 +37,8 @@ This section defines the specific flow of the game, with each phase identified b
 
 **CRITICAL RULE: Each phase can contain AT MOST ONE player feedback request.**
 
+**CRITICAL RULE - Player Choice Tools**: For ANY player choice or decision (voting, role selection, target selection, yes/no decisions, multiple choice questions), you MUST use voting tools (createVotingPanel). Do not use generic prompts or text displays for player choices - always use voting mechanisms.
+
 **PHASE DECOMPOSITION RULES:**
 - If a logical "scene" requires multiple sequential player actions, split it into separate phases
 - Each phase = one "scene" or "moment" in the game that requires ONE type of player feedback
@@ -43,12 +46,15 @@ This section defines the specific flow of the game, with each phase identified b
   - `single_player_choice`: One specific player (e.g., Doctor selects protection target)
   - `all_players_action`: All target players (e.g., All players vote)
   - `multiple_players_action`: Multiple specific players (e.g., All werewolves choose target together)
+- **CRITICAL RULE - Result Announcements**: If you need to announce/declare results of any action (voting results, night action outcomes, elimination announcements, etc.), this MUST be a separate phase. Results cannot be announced as part of the action phase.
 - **Example decomposition**: "Night Phase" with sequential actions → Split into separate phases:
   - Phase 2: "Werewolf Night Action" (werewolves choose elimination target)
   - Phase 3: "Doctor Night Action" (doctor chooses protection target)  
   - Phase 4: "Detective Night Action" (detective chooses investigation target)
+  - Phase 5: "Dawn - Announce Night Results" (separate phase to declare what happened)
 - **Key principle**: If actions happen sequentially or require different target_players, create separate phases
 - **Key principle**: If actions happen simultaneously with same target_players, can be one phase
+- **Key principle**: Results/announcements always require separate phases from the actions that generate them
 
 ### 3.1. Phase Components
 
@@ -94,7 +100,7 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
   - params: name (string), label (string), action (string), enabled (boolean), position (string), size? ("small" | "medium" | "large"), variant? ("primary" | "secondary" | "danger")
 - createCharacterCard: Create a character card.
   - params: name (string), role (string), position (string), size? ("small" | "medium" | "large"), description? (string)
-- createVotingPanel: Create a voting UI.
+- createVotingPanel: Create a voting UI for ANY player choice or decision. Use this for all player selections including voting, role selection, target selection, yes/no decisions, multiple choice questions.
   - params: name (string), votingId (string), options (string[]), position (string), title? (string)
 - createAvatarSet: Create an avatar set for players.
   - params: name (string), avatarType ("human" | "wolf" | "dog" | "cat")
@@ -104,18 +110,14 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
   - params: name (string), backgroundColor? ("white" | "gray-900" | "blue-50" | "green-50" | "purple-50")
 - changeBackgroundColor: Change background color.
   - params: name (string), backgroundColor? ("white" | "gray-900" | "blue-50" | "green-50" | "purple-50")
-- setGlobalTitle: Set global title.
-  - params: title (string)
-- setGlobalDescription: Set global description.
-  - params: description (string)
-- setItemName: Set an item’s name/title.
-  - params: name (string), itemId (string)
-- setItemSubtitleOrDescription: Set an item’s subtitle/description.
-  - params: subtitle (string), itemId (string)
 - deleteItem: Delete a specific item by id.
   - params: itemId (string)
 - markPlayerDead: Mark a player as dead (avatar grayed out).
   - params: playerId (string), playerName (string)
+- createTimer: Create a timer component that counts down and automatically sends message to Agent when expired.
+  - params: name (string), durationMinutes (number), durationSeconds? (number), message? (string)
+- clearCanvas: Clear all items from the canvas except avatar sets.
+  - params: (no parameters)
 
 Notes:
 - Always choose actions.tools from the current phase only; do not schedule next-phase tools early.
@@ -145,15 +147,17 @@ Notes:
 ```
 1:
   name: "Role Assignment"
-  description: "Randomly assign roles to players according to game configuration."
+  description: "Randomly assign roles to players and directly display each player's specific role clearly via individual character cards. Do NOT hide or conceal roles."
   actions:
     - description: "Randomly assign all roles to players based on game setup"
       tools: [assign_roles_randomly]
-    - description: "Notify each player of their role privately"
-      tools: [notify_player_roles]
+    - description: "Create individual character cards for each player showing their specific assigned role clearly and visibly"
+      tools: [createCharacterCard]
+    - description: "Display role name and description directly to each player on their character card - do not hide this information"
+      tools: [setItemSubtitleOrDescription]
   completion_criteria:
     type: "UI_displayed"
-    description: "All roles have been assigned and players have been notified."
+    description: "All roles have been assigned and each player can clearly see their specific role displayed on their character card."
   next_phase:
     id: 2
     name: "Start Main Game"
@@ -163,17 +167,13 @@ Notes:
 ```
 1:
   name: "Role Assignment"
-  description: "Allow players to choose their roles sequentially until all players have roles."
+  description: "Allow players to choose their roles sequentially using voting panels until all players have roles."
   actions:
-    - description: "Display available roles to current player"
-      tools: [display_available_roles]
-    - description: "Allow current player to select a role"
-      tools: [player_role_selection]
-    - description: "Update player role and mark as assigned"
-      tools: [update_player_role]
+    - description: "Create voting panel showing available roles for current player to select from"
+      tools: [createVotingPanel]
   completion_criteria:
     type: "player_action"
-    description: "Current player has selected a role, and relevant player state (player_states) has been updated."
+    description: "Current player has selected a role via voting panel, and relevant player state (player_states) has been updated."
     wait_for: "single_player_choice"
     target_players:
       description: "Next player without an assigned role"
@@ -197,7 +197,7 @@ Notes:
   description: "All surviving players vote to select a player to eliminate."
   actions:
     - description: "Create and display voting UI for all surviving players"
-      tools: [create_voting_ui]
+      tools: [createVotingPanel]
   completion_criteria:
     type: "player_action"
     description: "Votes have been received from all surviving players, and relevant player state (player_states) has been updated."
@@ -209,6 +209,24 @@ Notes:
     id: 11
     name: "Announce Voting Results"
 
+11:
+  name: "Announce Voting Results"
+  description: "Display voting results and announce which player has been eliminated."
+  actions:
+    - description: "Clear voting UI from previous phase"
+      tools: [deleteItem]
+    - description: "Display voting results showing vote counts"
+      tools: [createTextDisplay]
+    - description: "Announce the eliminated player"
+      tools: [createResultDisplay]
+    - description: "Mark eliminated player as dead"
+      tools: [markPlayerDead]
+  completion_criteria:
+    type: "UI_displayed"
+    description: "Voting results have been announced and player status updated."
+  next_phase:
+    id: 12
+    name: "Check Win Conditions"
 ```
 
 ### Example 2: Player Decision (Proceed to Next Phase After State Update)
@@ -216,15 +234,13 @@ Notes:
 ```
 25:
   name: "Doctor's Choice"
-  description: "The doctor needs to choose whether to use the antidote tonight and update relevant player states based on the choice."
+  description: "The doctor needs to choose whether to use the antidote tonight using a voting panel."
   actions:
-    - description: "Display 'whether to use antidote' option to the doctor player"
-      tools: [prompt_player_choice]
-    - description: "Update the state of the healed player based on the doctor's choice"
-      tools: [update_player_state]
+    - description: "Create voting panel for doctor to choose whether to use antidote with options like 'Use Antidote', 'Save for Later'"
+      tools: [createVotingPanel]
   completion_criteria:
     type: "player_action"
-    description: "Doctor's decision has been received, and relevant player state (player_states) has been updated."
+    description: "Doctor's decision has been received via voting panel, and relevant player state (player_states) has been updated."
     wait_for: "single_player_choice"
     target_players:
       description: "Player with role 'Doctor'"

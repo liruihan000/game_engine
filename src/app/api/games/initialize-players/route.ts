@@ -10,6 +10,12 @@ interface PlayerStatesTemplate {
 
 interface GameDeclaration {
   player_states_template?: PlayerStatesTemplate;
+  // Schema definition for per-player state fields (used for auto-generating defaults)
+  player_states?: Record<string, { type?: string; example?: unknown } | unknown>;
+  // Example players data structure
+  players_example?: {
+    players?: Record<string, Record<string, unknown>>;
+  };
 }
 
 interface GameData {
@@ -19,7 +25,7 @@ interface GameData {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { roomId, gameName } = body;
+    const { roomId, gameName, roomSession } = body;
 
     if (!roomId || !gameName) {
       return NextResponse.json(
@@ -28,16 +34,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get room data with players from persistent storage
-    const roomData = memoryStorage.getRoom(roomId);
-    if (!roomData) {
-      return NextResponse.json(
-        { error: 'Room not found' },
-        { status: 404 }
-      );
+    // Prefer roomSession data if provided, fallback to storage
+    let roomPlayers = [];
+    if (roomSession?.players) {
+      roomPlayers = roomSession.players;
+      console.log('✅ Using roomSession players:', roomPlayers.length);
+    } else {
+      // Fallback to persistent storage
+      const roomData = memoryStorage.getRoom(roomId);
+      if (!roomData) {
+        return NextResponse.json(
+          { error: 'Room not found and no roomSession provided' },
+          { status: 404 }
+        );
+      }
+      roomPlayers = roomData.players || [];
     }
     
-    const { players: roomPlayers } = roomData;
     if (roomPlayers.length === 0) {
       return NextResponse.json(
         { error: 'No players found in room' },
@@ -83,6 +96,15 @@ export async function POST(request: NextRequest) {
       }
     }
     
+    // Debug logging
+    console.log('🔍 Debug: gameData structure:', JSON.stringify({
+      hasDeclaration: !!gameData?.declaration,
+      hasPlayerStatesTemplate: !!gameData?.declaration?.player_states_template,
+      hasPlayerStates: !!gameData?.declaration?.player_states,
+      hasPlayersExample: !!gameData?.declaration?.players_example,
+      gameDataKeys: Object.keys(gameData || {})
+    }, null, 2));
+
     // Defense mechanism 3: If template still not found, auto-generate from player_states definition
     if (!template && gameData?.declaration?.player_states) {
       console.log('🛡️ No template found, auto-generating from player_states definition');
@@ -132,11 +154,14 @@ export async function POST(request: NextRequest) {
     // Create initialized player_states with real players
     const initializedPlayers: Record<string, Record<string, unknown>> = {};
     
-    roomPlayers.forEach((player, index) => {
-      const playerId = (index + 1).toString();
+    roomPlayers.forEach((player) => {
+      // Use gamePlayerId if available (from roomSession), otherwise fallback to index
+      const playerId = player.gamePlayerId || (roomPlayers.indexOf(player) + 1).toString();
       initializedPlayers[playerId] = {
         ...template, // Copy all template fields
         name: player.name, // Replace with real player name
+        id: player.id || playerId, // Store original player ID
+        isHost: player.isHost || false
       };
     });
 

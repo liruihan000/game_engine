@@ -140,6 +140,7 @@ export interface AgentState {
   currentStepIndex?: number;
   planStatus?: string;
   gameName?: string; // Current game DSL name (e.g., "werewolf", "coup")
+  roomSession?: Record<string, any>; // Room session data from frontend
 }
 
 

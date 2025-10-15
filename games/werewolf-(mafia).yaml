@@ -1,142 +1,86 @@
 declaration:
-  description: 'Hidden-role social deduction. At night, Werewolves secretly choose
-    an elimination target, the Doctor chooses a player to protect, and the Detective
-    investigates a player. Resolution order: kill attempt → protection check → investigation.
-    Morning reveals results. Game Flow Navigation: role_assignment → first_night →
-    first_morning → first_day_discussion → first_day_voting → (night → morning → day_discussion
-    → day_voting) cycle until win conditions met → game_over. Win conditions: Werewolves
-    win if they equal or outnumber villagers; Village wins if all werewolves are eliminated.'
+  description: 'Hidden-role social deduction game with night actions and day voting.
+    At night, Werewolves secretly choose an elimination target, the Doctor selects
+    one player to protect, and the Detective investigates a player. Resolution order:
+    kill attempt → protection check → investigation. In the morning, outcomes are
+    revealed. Game flow follows: role_assignment → first_night → first_morning → first_day_discussion
+    → first_day_voting → (night → morning → day_discussion → day_voting) cycle until
+    win conditions are met. Werewolves win if they equal or outnumber villagers; the
+    village wins if all werewolves are eliminated.'
   is_multiplayer: true
   min_players: 4
   roles:
   - name: Villager
-    description: Has no special abilities. Win by eliminating all werewolves via daytime
-      votes.
+    description: No special night action. Works with others during the day to identify
+      and eliminate werewolves.
   - name: Werewolf
-    description: Each night, coordinate to select one player to eliminate. Win if
-      werewolves equal or outnumber villagers.
+    description: Chooses one player to eliminate each night with fellow werewolves.
   - name: Doctor
-    description: Each night, choose one player to protect from elimination.
+    description: Chooses one player to protect each night, preventing their elimination
+      if targeted.
   - name: Detective
-    description: Each night, investigate one player to learn whether they are a werewolf.
+    description: Investigates one player each night to learn whether they are a werewolf.
   player_states:
     name:
       type: string
       example: Player A
-      description: Player's display name.
+      description: Player's display name used for announcements and interfaces.
     role:
       type: string
       example: Villager
-      description: Hidden role assigned to the player (e.g., Villager, Werewolf, Doctor,
-        Detective).
-    faction:
-      type: string
-      example: Village
-      description: 'Alignment used for win conditions: "Village" or "Werewolf".'
+      description: 'Player''s assigned role: Villager, Werewolf, Doctor, or Detective.'
     is_alive:
       type: boolean
       example: true
       description: Whether the player is still active in the game (true=alive; false=eliminated).
-    current_vote_target:
-      type: num
-      example: 0
-      description: Player ID this player is currently voting for during the day; 0
-        means no vote.
-    votes_received:
-      type: num
-      example: 0
-      description: Number of votes currently on this player during the day.
-    night_action_target:
-      type: num
-      example: 0
-      description: During the night, the chosen target's player ID for roles with
-        night actions; 0 means none.
-    known_alignments:
-      type: dict
-      example:
-        2: Not Werewolf
-      description: 'For Detective: mapping of player_id → investigation result ("Werewolf"
-        or "Not Werewolf").'
-    has_voted_today:
-      type: boolean
-      example: false
-      description: Whether the player has cast a vote during the current day.
   player_states_template:
     player_states:
       1:
         name: ''
         role: ''
-        faction: ''
         is_alive: true
-        current_vote_target: 0
-        votes_received: 0
-        night_action_target: 0
-        known_alignments: {}
-        has_voted_today: false
   players_example:
     player_states:
       1:
         name: Alpha
         role: Werewolf
-        faction: Werewolf
         is_alive: true
-        current_vote_target: 0
-        votes_received: 0
-        night_action_target: 2
-        known_alignments: {}
-        has_voted_today: false
       2:
         name: Beta
         role: Villager
-        faction: Village
         is_alive: true
-        current_vote_target: 0
-        votes_received: 0
-        night_action_target: 0
-        known_alignments: {}
-        has_voted_today: false
       3:
         name: Gamma
         role: Doctor
-        faction: Village
         is_alive: true
-        current_vote_target: 0
-        votes_received: 0
-        night_action_target: 2
-        known_alignments: {}
-        has_voted_today: false
       4:
         name: Delta
         role: Detective
-        faction: Village
         is_alive: true
-        current_vote_target: 0
-        votes_received: 0
-        night_action_target: 1
-        known_alignments:
-          1: Werewolf
-        has_voted_today: false
 phases:
   0:
     name: Game Introduction
-    description: Introduce the game rules, setup, and objectives to all players, including
-      night action order and daytime process.
+    description: Introduce the game rules, roles, and win conditions; set up the interface
+      and show player list.
     actions:
-    - description: Initialize UI with title, description, background, avatar set,
-        and current phase indicator
+    - description: Set the global title and description for the game
       tools:
       - setGlobalTitle
       - setGlobalDescription
+    - description: Create background controls and set a welcoming daytime theme
+      tools:
       - createBackgroundControl
       - changeBackgroundColor
-      - createAvatarSet
+    - description: Show a phase indicator for the introduction
+      tools:
       - createPhaseIndicator
-    - description: Display game rules, roles, and the night/day flow overview
+    - description: Display rules, objectives, night/day flow, and resolution order
+        (kill → protect → investigate)
       tools:
       - createTextDisplay
-    - description: Display win conditions for Village and Werewolves
+    - description: Display the player avatars/list
       tools:
-      - createTextDisplay
+      - createAvatarSet
     completion_criteria:
       type: UI_displayed
       description: Game introduction has been displayed to all players.
@@ -145,151 +89,179 @@ phases:
       name: Role Assignment
   1:
     name: Role Assignment
-    description: Randomly assign hidden roles (Werewolf, Doctor, Detective, Villager)
-      to players according to game configuration, and privately notify each player.
+    description: Randomly assign hidden roles to all players and privately show each
+      player their role card.
     actions:
-    - description: Show role assignment overview and indicate that roles will be assigned
-        secretly
+    - description: Clear previous UI and prepare the role assignment screen
       tools:
-      - createTextDisplay
+      - clearCanvas
+    - description: Show a phase indicator for role assignment
+      tools:
       - createPhaseIndicator
-    - description: Confirm that each player has been privately informed of their role
+    - description: Display a notice that roles are being assigned randomly
       tools:
       - createTextDisplay
+    - description: Create individual character cards for each player with their assigned
+        role (private view)
+      tools:
+      - createCharacterCard
+      - setItemSubtitleOrDescription
     completion_criteria:
       type: UI_displayed
-      description: All roles have been assigned and players have been notified.
+      description: All roles have been assigned and each player can view their role
+        card.
     next_phase:
       id: 2
-      name: Night — Werewolves Choose Target
+      name: First Night — Werewolves Choose Target
   2:
-    name: Night — Werewolves Choose Target
-    description: All living Werewolves secretly coordinate and select one player to
-      eliminate.
+    name: First Night — Werewolves Choose Target
+    description: Werewolf players secretly choose one living player to eliminate.
     actions:
-    - description: Set night ambiance and display instructions to Werewolves to choose
-        a target
+    - description: Clear UI and switch to night theme
       tools:
+      - clearCanvas
       - changeBackgroundColor
+    - description: Show a night phase indicator for Werewolves' action
+      tools:
       - createPhaseIndicator
+    - description: Display instructions for Werewolves to choose a target
+      tools:
       - createTextDisplay
+    - description: Provide a selection UI for Werewolves to agree on a target
+      tools:
+      - createVotingPanel
     completion_criteria:
       type: player_action
-      description: Werewolves' elimination target has been submitted, and relevant
-        player state (player_states) has been updated.
+      description: Werewolves' choice has been received and relevant player state
+        (player_states) has been updated.
       wait_for: multiple_players_action
       target_players:
         description: All living players with the role 'Werewolf'
         condition: player.role == 'Werewolf' and player.is_alive == true
     next_phase:
       id: 3
-      name: Night — Doctor Protects
+      name: First Night — Doctor Chooses Protection
   3:
-    name: Night — Doctor Protects
-    description: The living Doctor chooses one player to protect from elimination
+    name: First Night — Doctor Chooses Protection
+    description: The Doctor selects one living player to protect from elimination
       tonight.
     actions:
-    - description: Display instructions to the Doctor to select a protection target
+    - description: Clear UI while keeping the night theme
+      tools:
+      - clearCanvas
+    - description: Show a night phase indicator for the Doctor's action
       tools:
       - createPhaseIndicator
+    - description: Display instructions for the Doctor to choose a protection target
+      tools:
       - createTextDisplay
+    - description: Provide a selection UI for the Doctor to pick a target
+      tools:
+      - createVotingPanel
     completion_criteria:
       type: player_action
-      description: Doctor's protection target has been submitted, and relevant player
+      description: Doctor's protection choice has been received and relevant player
         state (player_states) has been updated.
       wait_for: single_player_choice
       target_players:
-        description: The living Doctor
+        description: The living player with the role 'Doctor'
         condition: player.role == 'Doctor' and player.is_alive == true
     next_phase:
       id: 4
-      name: Night — Detective Investigates
+      name: First Night — Detective Investigates
   4:
-    name: Night — Detective Investigates
-    description: The living Detective investigates one player to learn whether they
+    name: First Night — Detective Investigates
+    description: The Detective investigates a living player to learn whether they
       are a Werewolf.
     actions:
-    - description: Display instructions to the Detective to choose an investigation
-        target
+    - description: Clear UI while keeping the night theme
+      tools:
+      - clearCanvas
+    - description: Show a night phase indicator for the Detective's action
       tools:
       - createPhaseIndicator
+    - description: Display instructions for the Detective to choose an investigation
+        target
+      tools:
       - createTextDisplay
+    - description: Provide a selection UI for the Detective to pick a target
+      tools:
+      - createVotingPanel
     completion_criteria:
       type: player_action
-      description: Detective's investigation target has been submitted, and relevant
+      description: Detective's investigation choice has been received and relevant
         player state (player_states) has been updated.
       wait_for: single_player_choice
       target_players:
-        description: The living Detective
+        description: The living player with the role 'Detective'
         condition: player.role == 'Detective' and player.is_alive == true
     next_phase:
       id: 5
-      name: Dawn — Night Resolution and Reveal
+      name: First Dawn — Announce Night Results
   5:
-    name: Dawn — Night Resolution and Reveal
-    description: 'Resolve the night: apply Werewolves'' kill attempt, check Doctor''s
-      protection, and reveal the outcome to all players.'
+    name: First Dawn — Announce Night Results
+    description: Resolve the night actions in order and announce whether anyone was
+      eliminated.
     actions:
-    - description: Show resolution summary; if a player died, mark them dead and display
-        the result
+    - description: Clear UI and switch to a daytime theme
       tools:
+      - clearCanvas
       - changeBackgroundColor
+    - description: Show a dawn phase indicator
+      tools:
       - createPhaseIndicator
+    - description: Display a summary of what happened overnight (protected or eliminated)
+      tools:
       - createTextDisplay
-      - markPlayerDead
       - createResultDisplay
+    - description: If a player was eliminated overnight, mark them dead
+      tools:
+      - markPlayerDead
     completion_criteria:
       type: UI_displayed
-      description: Night results have been revealed to all players.
+      description: Night results have been displayed and any eliminations have been
+        applied.
     next_phase:
       id: 6
-      name: Check Win Conditions (Post-Night)
+      name: First Day Discussion
   6:
-    name: Check Win Conditions (Post-Night)
-    description: Evaluate whether either side has won after the night; otherwise proceed
-      to daytime.
+    name: First Day Discussion
+    description: All living players discuss suspicions and strategies before voting.
     actions:
-    - description: Display a brief status check and prepare routing based on current
-        living counts
+    - description: Clear UI and set a daytime discussion layout
       tools:
-      - createTextDisplay
-    completion_criteria:
-      type: UI_displayed
-      description: Win condition evaluation finished; state prepared for routing.
-    next_phase:
-      If no living Werewolves remain:
-        id: 99
-        name: Game Over — Village Wins
-      If living Werewolves are equal to or outnumber living Villagers:
-        id: 99
-        name: Game Over — Werewolves Win
-      Otherwise, continue to daytime discussion:
-        id: 7
-        name: Daytime Discussion
-  7:
-    name: Daytime Discussion
-    description: All surviving players discuss and share information before voting.
-    actions:
-    - description: Set daytime ambiance, show discussion timer, and outline discussion
-        prompts
+      - clearCanvas
+    - description: Show a day discussion phase indicator
       tools:
-      - changeBackgroundColor
       - createPhaseIndicator
+    - description: Display discussion prompts and guidelines
+      tools:
       - createTextDisplay
+    - description: Start a discussion timer
+      tools:
+      - createTimer
     completion_criteria:
       type: timer
-      description: Wait for the discussion timer to end.
+      description: Wait for the discussion timer to expire.
     next_phase:
-      id: 8
-      name: Day Voting
-  8:
-    name: Day Voting
-    description: All surviving players vote to select a player to eliminate.
+      id: 7
+      name: First Day Voting
+  7:
+    name: First Day Voting
+    description: All living players vote to eliminate one player.
     actions:
-    - description: Create and display voting UI for all surviving players
+    - description: Clear UI and prepare the voting interface
+      tools:
+      - clearCanvas
+    - description: Show a day voting phase indicator
       tools:
       - createPhaseIndicator
+    - description: Create and display the voting UI with all living players as options
+      tools:
       - createVotingPanel
+    - description: Show brief instructions on voting rules and ties
+      tools:
+      - createTextDisplay
     completion_criteria:
       type: player_action
       description: Votes have been received from all surviving players, and relevant
@@ -299,33 +271,43 @@ phases:
         description: All surviving players
         condition: player.is_alive == true
     next_phase:
-      id: 9
-      name: Announce Voting Results & Elimination
-  9:
-    name: Announce Voting Results & Elimination
-    description: Announce the voting outcome; if a player is eliminated, reveal and
-      mark them as dead.
+      id: 8
+      name: Announce Voting Results
+  8:
+    name: Announce Voting Results
+    description: Reveal the voting outcome and eliminate the selected player, if any.
     actions:
-    - description: Display results; if a player is eliminated, mark them dead and
-        show elimination summary
+    - description: Clear voting UI and show results
+      tools:
+      - clearCanvas
+    - description: Show a results phase indicator
       tools:
       - createPhaseIndicator
-      - createResultDisplay
-      - markPlayerDead
+    - description: Display vote counts and the eliminated player
+      tools:
       - createTextDisplay
+      - createResultDisplay
+    - description: Mark the eliminated player as dead
+      tools:
+      - markPlayerDead
     completion_criteria:
       type: UI_displayed
-      description: Voting results and any elimination have been displayed.
+      description: Voting results have been displayed and elimination applied.
     next_phase:
-      id: 10
-      name: Check Win Conditions (Post-Day)
-  10:
-    name: Check Win Conditions (Post-Day)
-    description: Evaluate victory conditions after the daytime elimination; continue
-      to the next night if no winner.
+      id: 9
+      name: Check Win Conditions
+  9:
+    name: Check Win Conditions
+    description: Evaluate whether either side has won; otherwise continue the night/day
+      cycle.
     actions:
-    - description: Display a brief status check and prepare routing based on current
-        living counts
+    - description: Clear UI and show a status/check screen
+      tools:
+      - clearCanvas
+    - description: Show a phase indicator for win condition check
+      tools:
+      - createPhaseIndicator
+    - description: Display current counts of living Werewolves vs. others
       tools:
       - createTextDisplay
     completion_criteria:
@@ -335,22 +317,210 @@ phases:
       If no living Werewolves remain:
         id: 99
         name: Game Over — Village Wins
-      If living Werewolves are equal to or outnumber living Villagers:
+      If living Werewolves are equal to or outnumber living non-Werewolf players:
         id: 99
         name: Game Over — Werewolves Win
-      Otherwise, continue the night cycle:
-        id: 2
+      Otherwise, continue to the next Night cycle:
+        id: 10
         name: Night — Werewolves Choose Target
+  10:
+    name: Night — Werewolves Choose Target
+    description: Werewolf players secretly choose one living player to eliminate.
+    actions:
+    - description: Clear UI and switch to night theme
+      tools:
+      - clearCanvas
+      - changeBackgroundColor
+    - description: Show a night phase indicator for Werewolves' action
+      tools:
+      - createPhaseIndicator
+    - description: Display instructions for Werewolves to choose a target
+      tools:
+      - createTextDisplay
+    - description: Provide a selection UI for Werewolves to agree on a target
+      tools:
+      - createVotingPanel
+    completion_criteria:
+      type: player_action
+      description: Werewolves' choice has been received and relevant player state
+        (player_states) has been updated.
+      wait_for: multiple_players_action
+      target_players:
+        description: All living players with the role 'Werewolf'
+        condition: player.role == 'Werewolf' and player.is_alive == true
+    next_phase:
+      id: 11
+      name: Night — Doctor Chooses Protection
+  11:
+    name: Night — Doctor Chooses Protection
+    description: The Doctor selects one living player to protect from elimination
+      tonight.
+    actions:
+    - description: Clear UI while keeping the night theme
+      tools:
+      - clearCanvas
+    - description: Show a night phase indicator for the Doctor's action
+      tools:
+      - createPhaseIndicator
+    - description: Display instructions for the Doctor to choose a protection target
+      tools:
+      - createTextDisplay
+    - description: Provide a selection UI for the Doctor to pick a target
+      tools:
+      - createVotingPanel
+    completion_criteria:
+      type: player_action
+      description: Doctor's protection choice has been received and relevant player
+        state (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: The living player with the role 'Doctor'
+        condition: player.role == 'Doctor' and player.is_alive == true
+    next_phase:
+      id: 12
+      name: Night — Detective Investigates
+  12:
+    name: Night — Detective Investigates
+    description: The Detective investigates a living player to learn whether they
+      are a Werewolf.
+    actions:
+    - description: Clear UI while keeping the night theme
+      tools:
+      - clearCanvas
+    - description: Show a night phase indicator for the Detective's action
+      tools:
+      - createPhaseIndicator
+    - description: Display instructions for the Detective to choose an investigation
+        target
+      tools:
+      - createTextDisplay
+    - description: Provide a selection UI for the Detective to pick a target
+      tools:
+      - createVotingPanel
+    completion_criteria:
+      type: player_action
+      description: Detective's investigation choice has been received and relevant
+        player state (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: The living player with the role 'Detective'
+        condition: player.role == 'Detective' and player.is_alive == true
+    next_phase:
+      id: 13
+      name: Dawn — Announce Night Results
+  13:
+    name: Dawn — Announce Night Results
+    description: Resolve the night actions in order and announce whether anyone was
+      eliminated.
+    actions:
+    - description: Clear UI and switch to a daytime theme
+      tools:
+      - clearCanvas
+      - changeBackgroundColor
+    - description: Show a dawn phase indicator
+      tools:
+      - createPhaseIndicator
+    - description: Display a summary of what happened overnight (protected or eliminated)
+      tools:
+      - createTextDisplay
+      - createResultDisplay
+    - description: If a player was eliminated overnight, mark them dead
+      tools:
+      - markPlayerDead
+    completion_criteria:
+      type: UI_displayed
+      description: Night results have been displayed and any eliminations have been
+        applied.
+    next_phase:
+      id: 14
+      name: Day Discussion
+  14:
+    name: Day Discussion
+    description: All living players discuss suspicions and strategies before voting.
+    actions:
+    - description: Clear UI and set a daytime discussion layout
+      tools:
+      - clearCanvas
+    - description: Show a day discussion phase indicator
+      tools:
+      - createPhaseIndicator
+    - description: Display discussion prompts and guidelines
+      tools:
+      - createTextDisplay
+    - description: Start a discussion timer
+      tools:
+      - createTimer
+    completion_criteria:
+      type: timer
+      description: Wait for the discussion timer to expire.
+    next_phase:
+      id: 15
+      name: Day Voting
+  15:
+    name: Day Voting
+    description: All living players vote to eliminate one player.
+    actions:
+    - description: Clear UI and prepare the voting interface
+      tools:
+      - clearCanvas
+    - description: Show a day voting phase indicator
+      tools:
+      - createPhaseIndicator
+    - description: Create and display the voting UI with all living players as options
+      tools:
+      - createVotingPanel
+    - description: Show brief instructions on voting rules and ties
+      tools:
+      - createTextDisplay
+    completion_criteria:
+      type: player_action
+      description: Votes have been received from all surviving players, and relevant
+        player state (player_states) has been updated.
+      wait_for: all_players_action
+      target_players:
+        description: All surviving players
+        condition: player.is_alive == true
+    next_phase:
+      id: 16
+      name: Announce Voting Results
+  16:
+    name: Announce Voting Results
+    description: Reveal the voting outcome and eliminate the selected player, if any.
+    actions:
+    - description: Clear voting UI and show results
+      tools:
+      - clearCanvas
+    - description: Show a results phase indicator
+      tools:
+      - createPhaseIndicator
+    - description: Display vote counts and the eliminated player
+      tools:
+      - createTextDisplay
+      - createResultDisplay
+    - description: Mark the eliminated player as dead
+      tools:
+      - markPlayerDead
+    completion_criteria:
+      type: UI_displayed
+      description: Voting results have been displayed and elimination applied.
+    next_phase:
+      id: 9
+      name: Check Win Conditions
   99:
     name: Game Over
-    description: Display the winning side and conclude the game.
+    description: Announce the winning side and conclude the game.
     actions:
-    - description: Show final results and end-of-game summary
+    - description: Clear UI and present the end screen
       tools:
-      - changeBackgroundColor
+      - clearCanvas
+    - description: Show a final phase indicator
+      tools:
+      - createPhaseIndicator
+    - description: Display the winner and closing message
+      tools:
       - createResultDisplay
       - createTextDisplay
     completion_criteria:
       type: UI_displayed
-      description: Final results have been displayed.
+      description: Game over screen is displayed.
     next_phase: null

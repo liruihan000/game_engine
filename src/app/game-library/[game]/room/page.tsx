@@ -264,8 +264,21 @@ export default function GameRoom() {
     setError(null);
     
     try {
+      // Prepare roomSession data
+      const roomSessionData = {
+        roomId: roomData.roomId,
+        gameName: playerSession.gameName,
+        totalPlayers: roomData.players?.length || 0,
+        players: roomData.players?.map((player, index) => ({
+          id: player.id,
+          name: player.name,
+          isHost: player.isHost,
+          gamePlayerId: (index + 1).toString()
+        })) || []
+      };
+      
       // First, initialize player states with real player data
-      console.log('🎮 Initializing player states...');
+      console.log('🎮 Initializing player states with roomSession...', roomSessionData);
       const initResponse = await fetch('/api/games/initialize-players', {
         method: 'POST',
         headers: {
@@ -274,6 +287,7 @@ export default function GameRoom() {
         body: JSON.stringify({
           roomId: roomData.roomId,
           gameName: playerSession.gameName,
+          roomSession: roomSessionData,
         }),
       });
       
@@ -282,22 +296,8 @@ export default function GameRoom() {
         throw new Error(errorData.error || 'Failed to initialize player states');
       }
       
-      const playerStatesData = await initResponse.json();
-      console.log('✅ Player states initialized:', playerStatesData);
-      
-      // Store player_states with room-specific key for proper isolation
-      const playerStatesKey = `playerStates_${roomData.roomId}`;
-      sessionStorage.setItem(playerStatesKey, JSON.stringify(playerStatesData.player_states));
-      
-      // Clear any previous player states from other rooms
-      Object.keys(sessionStorage).forEach(key => {
-        if (key.startsWith('playerStates_') && key !== playerStatesKey) {
-          sessionStorage.removeItem(key);
-        }
-      });
-      
-      // Also clear legacy key if it exists
-      sessionStorage.removeItem('initializedPlayerStates');
+      const response = await initResponse.json();
+      console.log('✅ Player states API called, backend will handle initialization:', response);
       
       // Store game context
       const gameContext = {
@@ -308,6 +308,22 @@ export default function GameRoom() {
         gameName: playerSession.gameName
       };
       sessionStorage.setItem('gameContext', JSON.stringify(gameContext));
+      
+      // Store room session with all players info
+      const roomSession = {
+        roomId: roomData.roomId,
+        gameName: playerSession.gameName,
+        totalPlayers: roomData.players?.length || 0,
+        players: roomData.players?.map((player, index) => ({
+          id: player.id,
+          name: player.name,
+          isHost: player.isHost,
+          gamePlayerId: (index + 1).toString() // For DSL mapping
+        })) || [],
+        timestamp: Date.now()
+      };
+      sessionStorage.setItem('roomSession', JSON.stringify(roomSession));
+      console.log('💾 Room session stored:', roomSession);
       
       // 🔑 触发房间切换事件，通知 DynamicCopilotProvider 更新 threadId
       if (typeof window !== 'undefined') {
