@@ -211,7 +211,10 @@ async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Comman
                 except Exception:
                     pass
                 return Command(
-                    goto=END
+                    goto=END,
+                    update={
+                        "messages": ([]),
+                    }
                 )
     except Exception:
         pass
@@ -272,6 +275,7 @@ async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Comman
     final_dsl = dsl_content if dsl_content else state.get("dsl", {})
     updates["dsl"] = final_dsl
     logger.info(f"[InitialRouter] Passing DSL with keys: {list(final_dsl.keys()) if final_dsl else 'empty'}")
+    updates["messages"] = ([])
     return Command(goto="FeedbackDecisionNode", update=updates)
 
 async def FeedbackDecisionNode(state: AgentState, config: RunnableConfig) -> Command[Literal["BotBehaviorNode", "PhaseNode"]]:
@@ -453,11 +457,12 @@ async def FeedbackDecisionNode(state: AgentState, config: RunnableConfig) -> Com
     # Route based on feedback requirements
     if len(player_id_list) == 0:
         logger.info("[FeedbackDecisionNode] No players need feedback - routing to PhaseNode")
-        return Command(goto="PhaseNode", update={**common_updates, "dsl": state.get("dsl", {})})
+        return Command(goto="PhaseNode", update={**common_updates, "dsl": state.get("dsl", {}), "messages": ([])})    
     else:
         logger.info("[FeedbackDecisionNode] Players need feedback - routing to BotBehaviorNode")
         # Note: Player 1 feedback will be handled by ActionExecutor UI creation
-        return Command(goto="BotBehaviorNode", update={**common_updates, "dsl": state.get("dsl", {})})
+        return Command(goto="BotBehaviorNode", update={**common_updates, "dsl": state.get("dsl", {}),"messages": ([])})
+
 
 async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["RefereeNode"]]:
     """
@@ -605,6 +610,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
             "player_states": state.get("player_states", {}),
             "roomSession": state.get("roomSession", {}),
             "dsl": state.get("dsl", {}),
+            "messages": ([]),
         }
     )
 
@@ -793,6 +799,7 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             "referee_conclusions": conclusions,
             "roomSession": state.get("roomSession", {}),
             "dsl": state.get("dsl", {}),
+            "messages": ([]),
         }
     )
 
@@ -836,6 +843,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
                     "player_states": player_states,
                     "roomSession": state.get("roomSession", {}),
                     "dsl": dsl_content,
+                    "messages": ([]),
                 }
             )
         else:
@@ -993,6 +1001,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             "player_states": state.get("player_states", {}),
             "roomSession": state.get("roomSession", {}),
             "dsl": state.get("dsl", {}),
+            "messages": ([]),
         }
     )
 
@@ -1352,7 +1361,8 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
         goto=END,
         update={
             # Only deliver assistant messages that contain tool_calls; avoid self-trigger loops
-            "messages": [response] if getattr(response, "tool_calls", None) else [],
+            # 只傳遞工具調用，不傳遞LLM的推理內容
+            "messages": [AIMessage(content="你好", tool_calls=getattr(response, "tool_calls", []))] if getattr(response, "tool_calls", None) else [],
             "items": state.get("items", []),
             "player_states": final_player_states,  # Updated with role assignments
             "current_phase_id": updated_phase_id,
