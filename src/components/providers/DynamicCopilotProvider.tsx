@@ -54,6 +54,12 @@ export default function DynamicCopilotProvider({ children }: DynamicCopilotProvi
       headers={{
         'X-Thread-ID': threadId, // 🔑 传递房间特定的 threadId
       }}
+      // Disable all UI components
+      // chatComponentsConfig={{
+      //   showPopup: false,
+      //   showSidebar: false,
+      //   showChat: false,
+      // }}
     >
       {children}
     </CopilotKit>

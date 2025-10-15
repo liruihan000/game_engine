@@ -325,56 +325,71 @@ export function CardRenderer(props: {
 
   if (item.type === "text_display") {
     const d = item.data as TextDisplayData;
-    
-    // Game-themed styling with different variants
+
+    // Parchment-style theme with subtle variants
+    const baseParchment = [
+      // Layout/container
+      "relative overflow-hidden min-w-32 min-h-16 w-full h-full",
+      "rounded-[18px] border",
+      // Warm parchment background using layered gradients
+      "bg-[radial-gradient(60%_80%_at_50%_20%,#f3e6c9_0%,#ead9b9_60%,#dfc7a5_100%)]",
+      // Edge burn + inner glow
+      "shadow-[0_10px_24px_rgba(0,0,0,0.35)]",
+      "ring-1 ring-[#b79b79]/40",
+      "[box-shadow:inset_0_0_30px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.35)]",
+    ].join(" ");
+
     const getTypeStyles = (type?: string) => {
       switch (type) {
-        case 'error':
+        case "error":
           return {
-            container: 'bg-gradient-to-br from-red-900/20 via-red-800/15 to-red-700/20 border-red-500/30 ring-2 ring-red-400/20',
-            title: 'text-red-300',
-            content: 'text-red-100',
-            icon: '⚠️'
+            container: `${baseParchment} border-[#b68a7a] ring-red-900/15`,
+            title: "text-[#6b2f24]",
+            content: "text-[#4d251d]",
+            icon: "☠️",
           };
-        case 'warning': 
+        case "warning":
           return {
-            container: 'bg-gradient-to-br from-amber-900/20 via-amber-800/15 to-amber-700/20 border-amber-500/30 ring-2 ring-amber-400/20',
-            title: 'text-amber-300',
-            content: 'text-amber-100',
-            icon: '🔶'
+            container: `${baseParchment} border-[#c3a168] ring-amber-900/15`,
+            title: "text-[#7a5a2f]",
+            content: "text-[#4a3b2a]",
+            icon: "⚠️",
           };
-        case 'success':
+        case "success":
           return {
-            container: 'bg-gradient-to-br from-emerald-900/20 via-emerald-800/15 to-emerald-700/20 border-emerald-500/30 ring-2 ring-emerald-400/20',
-            title: 'text-emerald-300', 
-            content: 'text-emerald-100',
-            icon: '✨'
+            container: `${baseParchment} border-[#9db38a] ring-emerald-900/15`,
+            title: "text-[#355532]",
+            content: "text-[#3e3a2f]",
+            icon: "✨",
           };
         default:
           return {
-            container: 'bg-gradient-to-br from-slate-800/40 via-slate-700/30 to-slate-600/40 border-slate-400/30 ring-2 ring-slate-300/20',
-            title: 'text-slate-200',
-            content: 'text-slate-300',
-            icon: '📜'
+            container: `${baseParchment} border-[#c9b59a]`,
+            title: "text-[#5a4a3a]",
+            content: "text-[#4a3b2a]",
+            icon: "📜",
           };
       }
     };
 
     const styles = getTypeStyles(d.type);
-    
+
     return (
-      <div className={`min-w-32 min-h-16 w-full h-full ${styles.container} border rounded-xl p-4 flex flex-col shadow-lg backdrop-blur-sm`}>
+      <div className={`${styles.container} p-5 flex flex-col gap-2 font-serif`}>
+        {/* Texture overlays */}
+        <div className="pointer-events-none absolute inset-0 opacity-25 mix-blend-multiply bg-[radial-gradient(40%_30%_at_20%_15%,rgba(0,0,0,0.06),transparent_70%),radial-gradient(30%_25%_at_80%_60%,rgba(0,0,0,0.05),transparent_60%)]" />
+        <div className="pointer-events-none absolute inset-0 rounded-[18px] shadow-[inset_0_0_25px_rgba(0,0,0,0.18)]" />
+
         {d.title && (
-          <div className={`flex items-center gap-2 font-bold text-sm mb-3 ${styles.title}`}>
-            <span className="text-lg leading-none">{styles.icon}</span>
+          <div className={`relative z-[1] flex items-center gap-2 font-semibold text-sm mb-1 ${styles.title}`}>
+            <span className="text-base leading-none">{styles.icon}</span>
             <span className="tracking-wide">{d.title}</span>
           </div>
         )}
-        <div className={`text-sm leading-relaxed flex-1 ${styles.content}`}>
+
+        <div className={`relative z-[1] text-[1.25rem] leading-relaxed flex-1 ${styles.content}`}>
           {d.content}
         </div>
-        {/* Subtle inner glow effect */}
-        <div className="pointer-events-none absolute inset-0 rounded-xl bg-gradient-to-t from-transparent via-transparent to-white/5" />
       </div>
     );
   }
@@ -448,10 +463,26 @@ export function CardRenderer(props: {
     
     const avatarEmoji = avatarMap[d.avatarType] || avatarMap.human;
     
-    // RGB colors for variety
-    const colors = [
-      'bg-red-400', 'bg-green-400', 'bg-blue-400', 'bg-yellow-400',
-      'bg-purple-400', 'bg-pink-400', 'bg-indigo-400', 'bg-teal-400'
+    // Poker chip skins for a retro card-table vibe
+    const chipSkins = [
+      // Red chip
+      'bg-[repeating-conic-gradient(#b91c1c_0deg_20deg,white_20deg_40deg)]',
+      // Blue chip
+      'bg-[repeating-conic-gradient(#1e3a8a_0deg_20deg,white_20deg_40deg)]',
+      // Green chip
+      'bg-[repeating-conic-gradient(#166534_0deg_20deg,white_20deg_40deg)]',
+      // Black chip
+      'bg-[repeating-conic-gradient(#111827_0deg_20deg,white_20deg_40deg)]',
+      // Purple chip
+      'bg-[repeating-conic-gradient(#6d28d9_0deg_20deg,white_20deg_40deg)]',
+      // Teal chip
+      'bg-[repeating-conic-gradient(#0f766e_0deg_20deg,white_20deg_40deg)]',
+      // Orange chip
+      'bg-[repeating-conic-gradient(#c2410c_0deg_20deg,white_20deg_40deg)]',
+      // Brown chip
+      'bg-[repeating-conic-gradient(#6b4423_0deg_20deg,white_20deg_40deg)]',
+      // Pink chip
+      'bg-[repeating-conic-gradient(#be185d_0deg_20deg,white_20deg_40deg)]',
     ];
     
     // If no players, use test data
@@ -480,15 +511,19 @@ export function CardRenderer(props: {
         <div className="absolute left-0 top-1/2 transform -translate-y-1/2 pointer-events-none">
           <div className="space-y-4">
             {leftPlayers.map((player) => {
-              const colorIndex = parseInt(player.id) % colors.length;
+              const colorIndex = parseInt(player.id) % chipSkins.length;
               const isDead = props.deadPlayers?.includes(player.id) || false;
               
               return (
                 <div key={player.id} className="flex flex-col items-center">
-                  <div className={`w-16 h-16 ${isDead ? 'bg-gray-400' : colors[colorIndex]} rounded-full flex items-center justify-center text-2xl shadow-lg border-4 border-white ring-2 ring-gray-300 ${isDead ? 'grayscale opacity-60' : ''}`}>
-                    {avatarEmoji}
+                  {/* Poker chip avatar */}
+                  <div className={`relative w-16 h-16 rounded-full shadow-xl ring-2 ring-black/20 border-4 border-white ${isDead ? 'grayscale opacity-60 bg-gray-400' : chipSkins[colorIndex]}`}>
+                    <div className="absolute inset-1 rounded-full bg-[radial-gradient(70%_70%_at_35%_30%,#fefefe_0%,#e6e6e6_60%,#cfcfcf_100%)] flex items-center justify-center text-2xl">
+                      {avatarEmoji}
+                    </div>
                   </div>
-                  <div className={`text-xs mt-2 text-center font-medium bg-white px-2 py-1 rounded-full shadow border border-gray-200 ${isDead ? 'opacity-60' : ''}`}>
+                  {/* Wooden nameplate */}
+                  <div className={`text-[10px] mt-2 text-center font-semibold px-2 py-1 rounded-md shadow border ${isDead ? 'opacity-60' : ''} bg-[linear-gradient(135deg,#9a6b3f,#7b4a2e)] border-[#5c3a24] text-[#2b1a0e] drop-shadow-[0_1px_0_rgba(255,255,255,0.35)]`}>
                     {player.name}
                   </div>
                 </div>
@@ -501,15 +536,19 @@ export function CardRenderer(props: {
         <div className="absolute right-0 top-1/2 transform -translate-y-1/2 pointer-events-none">
           <div className="space-y-4">
             {rightPlayers.map((player) => {
-              const colorIndex = parseInt(player.id) % colors.length;
+              const colorIndex = parseInt(player.id) % chipSkins.length;
               const isDead = props.deadPlayers?.includes(player.id) || false;
               
               return (
                 <div key={player.id} className="flex flex-col items-center">
-                  <div className={`w-16 h-16 ${isDead ? 'bg-gray-400' : colors[colorIndex]} rounded-full flex items-center justify-center text-2xl shadow-lg border-4 border-white ring-2 ring-gray-300 ${isDead ? 'grayscale opacity-60' : ''}`}>
-                    {avatarEmoji}
+                  {/* Poker chip avatar */}
+                  <div className={`relative w-16 h-16 rounded-full shadow-xl ring-2 ring-black/20 border-4 border-white ${isDead ? 'grayscale opacity-60 bg-gray-400' : chipSkins[colorIndex]}`}>
+                    <div className="absolute inset-1 rounded-full bg-[radial-gradient(70%_70%_at_35%_30%,#fefefe_0%,#e6e6e6_60%,#cfcfcf_100%)] flex items-center justify-center text-2xl">
+                      {avatarEmoji}
+                    </div>
                   </div>
-                  <div className={`text-xs mt-2 text-center font-medium bg-white px-2 py-1 rounded-full shadow border border-gray-200 ${isDead ? 'opacity-60' : ''}`}>
+                  {/* Wooden nameplate */}
+                  <div className={`text-[10px] mt-2 text-center font-semibold px-2 py-1 rounded-md shadow border ${isDead ? 'opacity-60' : ''} bg-[linear-gradient(135deg,#9a6b3f,#7b4a2e)] border-[#5c3a24] text-[#2b1a0e] drop-shadow-[0_1px_0_rgba(255,255,255,0.35)]`}>
                     {player.name}
                   </div>
                 </div>
@@ -539,11 +578,17 @@ export function CardRenderer(props: {
     const d = item.data as BackgroundControlData;
     
     const backgroundOptions = [
+      // Solid backgrounds
       { value: "white", label: "白色", colorClass: "bg-white" },
       { value: "gray-900", label: "灰黑色", colorClass: "bg-gray-900" },
       { value: "blue-50", label: "淡蓝色", colorClass: "bg-blue-50" },
       { value: "green-50", label: "淡绿色", colorClass: "bg-green-50" },
       { value: "purple-50", label: "淡紫色", colorClass: "bg-purple-50" },
+      // Felt/table textures
+      { value: "felt-green", label: "牌桌·綠", colorClass: "bg-[radial-gradient(80%_80%_at_30%_20%,#1b5e2a_0%,#155c2b_55%,#0e4a22_100%)]" },
+      { value: "felt-blue", label: "牌桌·藍", colorClass: "bg-[radial-gradient(80%_80%_at_30%_20%,#1e3a8a_0%,#142f6b_55%,#0d2355_100%)]" },
+      { value: "felt-red", label: "牌桌·紅", colorClass: "bg-[radial-gradient(80%_80%_at_30%_20%,#7a1b1b_0%,#5c1414_55%,#3f0e0e_100%)]" },
+      { value: "felt-brown", label: "牌桌·棕", colorClass: "bg-[radial-gradient(80%_80%_at_30%_20%,#6b4e2e_0%,#5a4026_55%,#47331e_100%)]" },
     ];
     
     return (
@@ -558,7 +603,8 @@ export function CardRenderer(props: {
                 // Apply background to canvas immediately
                 const canvas = document.querySelector('[data-canvas-container]') as HTMLElement;
                 if (canvas) {
-                  canvas.className = canvas.className.replace(/bg-\w+(-\d+)?/g, '');
+                  // Remove existing Tailwind bg-* classes, including arbitrary bg-[...]
+                  canvas.className = canvas.className.replace(/bg-\w+(-\d+)?|bg-\[[^\]]*\]/g, '');
                   canvas.classList.add(option.colorClass);
                 }
               }}

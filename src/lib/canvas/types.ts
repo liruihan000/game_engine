@@ -45,7 +45,8 @@ export const GAME_GRID_STYLE = {
   gridTemplateColumns: '1fr 1fr 1fr',  // equal proportions
   gridTemplateRows: '1fr 1fr 1fr',     // equal proportions
   gap: '1.5rem',
-  minHeight: '80vh',
+  minHeight: '80vh',  // Reduced to prevent overflow
+  maxHeight: '80vh',  // Add max height constraint
   padding: '1.5rem'
 };
 

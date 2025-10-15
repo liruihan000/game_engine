@@ -1,155 +1,243 @@
 declaration:
-  description: A conversational party game where players share three statements about
-    themselves (two true, one false). Other players determine which statement is false
-    through discussion and voting. Points are given for correct guesses and successful
-    deception.
+  description: 'A conversational party game where each turn one player is the Speaker
+    and shares three statements about themselves (two true, one false). Others discuss
+    naturally and vote on the lie. Points: 1 per correct guess as a Guesser and 1
+    per opponent fooled as the Speaker. Game ends after all players have been Speaker
+    for the agreed number of rounds (default 1).'
   is_multiplayer: true
+  min_players: 3
+  roles:
+  - name: Speaker
+    description: On their turn, shares three statements (two true, one false), keeps
+      the lie secret until reveal, and earns 1 point for each other player fooled.
+  - name: Guesser
+    description: During others' turns, discusses and votes on which statement is the
+      lie; earns 1 point for each correct identification.
   player_states:
     name:
       type: string
       example: Player A
-      description: Player's display name in the game.
+      description: Player's display name used for conversation parsing and announcements.
     score:
       type: num
       example: 3
-      description: The total score accumulated by the player based on correct guesses
-        and successful deception.
-    current_role:
-      type: string
-      example: Speaker
-      description: The player's current role, either 'Speaker' or 'Guesser'.
-    has_been_speaker:
+      description: Total points from correct lie identifications and successful deception.
+    is_active_speaker:
       type: boolean
-      example: true
-      description: Indicates whether the player has taken their turn as the speaker
-        in the current round.
-  players_example:
-    players:
+      example: false
+      description: Whether this player is the current Speaker.
+    speaker_turns_taken:
+      type: num
+      example: 0
+      description: Number of completed turns as the Speaker across all rounds.
+    statements:
+      type: dict
+      example:
+        '1': I once met a celebrity.
+        '2': I can speak four languages.
+        '3': I've never broken a bone.
+      description: The three statements submitted by the Speaker for the current turn,
+        keyed by '1', '2', '3'.
+    lie_index:
+      type: num
+      example: 2
+      description: Which statement is the lie (1, 2, or 3) for the current Speaker's
+        turn; 0 when not set.
+    vote_choice:
+      type: num
+      example: 2
+      description: During voting, which statement number this player votes as the
+        lie (1, 2, or 3); 0 if not yet voted.
+  player_states_template:
+    player_states:
       1:
-        name: Alice
-        score: 5
-        current_role: Guesser
-        has_been_speaker: true
+        name: ''
+        score: 0
+        is_active_speaker: false
+        speaker_turns_taken: 0
+        statements: {}
+        lie_index: 0
+        vote_choice: 0
+  players_example:
+    player_states:
+      1:
+        name: Ava
+        score: 0
+        is_active_speaker: true
+        speaker_turns_taken: 0
+        statements:
+          '1': I once met a celebrity.
+          '2': I can speak four languages.
+          '3': I've never broken a bone.
+        lie_index: 2
+        vote_choice: 0
       2:
-        name: Bob
-        score: 3
-        current_role: Speaker
-        has_been_speaker: false
+        name: Ben
+        score: 1
+        is_active_speaker: false
+        speaker_turns_taken: 0
+        statements: {}
+        lie_index: 0
+        vote_choice: 2
       3:
-        name: Charlie
-        score: 4
-        current_role: Guesser
-        has_been_speaker: true
+        name: Cara
+        score: 0
+        is_active_speaker: false
+        speaker_turns_taken: 0
+        statements: {}
+        lie_index: 0
+        vote_choice: 3
 phases:
   0:
     name: Game Introduction
-    description: Introduce the game rules, setup, and objectives to all players.
+    description: Introduce the game rules, scoring, and round structure to all players.
     actions:
-    - description: Display game rules and objectives
+    - description: Clear any previous UI to start fresh
       tools:
-      - display_game_intro
-    - description: Show player list and game configuration
+      - clearCanvas
+    - description: Show game overview, objectives, how turns work, and scoring (Guessers
+        +1 for correct pick; Speaker +1 per player fooled)
       tools:
-      - display_player_setup
+      - createPhaseIndicator
+      - createTextDisplay
     completion_criteria:
       type: UI_displayed
       description: Game introduction has been displayed to all players.
     next_phase:
       id: 1
-      name: Start Game Turn
+      name: Start Game & Select Speaker
   1:
-    name: Start Game Turn
-    description: Initiate the turn for the current speaker to share their statements.
+    name: Start Game & Select Speaker
+    description: Automatically select the next Speaker (rotate among players with
+      the fewest speaker turns taken), set their is_active_speaker to true, and announce
+      whose turn it is.
     actions:
-    - description: Assign 'Speaker' role to the next player who has not been speaker
+    - description: Clear prior UI and highlight the selected Speaker for this turn;
+        update player_states (is_active_speaker for the chosen player)
       tools:
-      - assign_speaker_role
-    - description: Notify the speaker to prepare their statements
-      tools:
-      - notify_speaker_preparation
+      - clearCanvas
+      - createPhaseIndicator
+      - createTextDisplay
     completion_criteria:
-      type: player_action
-      description: Speaker is ready with their statements, and relevant player state
-        (player_states) has been updated.
-      wait_for: single_player_choice
-      target_players:
-        description: Current player assigned as 'Speaker'
-        condition: player.current_role == 'Speaker'
+      type: UI_displayed
+      description: Next Speaker has been set in player_states and announced to the
+        group.
     next_phase:
       id: 2
-      name: Speaker's Turn
+      name: Speaker Secret Lie Selection
   2:
-    name: Speaker's Turn
-    description: The speaker shares three statements, two truths and one lie, with
-      the group.
+    name: Speaker Secret Lie Selection
+    description: The Speaker privately selects which of their three statements is
+      the lie (1, 2, or 3) using a private voting panel.
     actions:
-    - description: Speaker submits their three statements
+    - description: Show private selection UI to the active Speaker to choose the lie
+        index
       tools:
-      - collect_speaker_statements
-    - description: Display statements to all guessers
-      tools:
-      - display_statements_to_guessers
-    completion_criteria:
-      type: UI_displayed
-      description: Statements have been shared with all players.
-    next_phase:
-      id: 3
-      name: Discussion and Voting
-  3:
-    name: Discussion and Voting
-    description: Players discuss the statements and each guesser votes on which they
-      think is the lie.
-    actions:
-    - description: Facilitate discussion among players
-      tools:
-      - facilitate_discussion
-    - description: Create and display voting UI for all guessers
-      tools:
-      - create_voting_ui
+      - createPhaseIndicator
+      - createVotingPanel
     completion_criteria:
       type: player_action
-      description: Votes have been received from all guessers, and relevant player
-        state (player_states) has been updated.
-      wait_for: all_players_action
+      description: Active Speaker has selected the lie via the voting panel, and relevant
+        player state (player_states.lie_index) has been updated.
+      wait_for: single_player_choice
       target_players:
-        description: All players in the role of 'Guesser'
-        condition: player.current_role == 'Guesser'
+        description: Current active Speaker
+        condition: player.is_active_speaker == true
+    next_phase:
+      id: 3
+      name: Group Discussion
+  3:
+    name: Group Discussion
+    description: Open discussion so Guessers can talk about the statements and debate
+      which one is the lie.
+    actions:
+    - description: Clear prior UI and start a discussion timer; remind Speaker to
+        read statements aloud
+      tools:
+      - clearCanvas
+      - createPhaseIndicator
+      - createTextDisplay
+      - createTimer
+    completion_criteria:
+      type: timer
+      description: Wait for the discussion timer to finish.
     next_phase:
       id: 4
-      name: Reveal and Score
+      name: Voting — Identify the Lie
   4:
-    name: Reveal and Score
-    description: Reveal the lie and update scores based on votes and deception.
+    name: Voting — Identify the Lie
+    description: All non-Speaker players vote on which statement (1, 2, or 3) they
+      believe is the lie.
     actions:
-    - description: Reveal which statement was the lie
+    - description: Clear discussion UI and present a voting panel to all Guessers
+        to pick the lie
       tools:
-      - reveal_lie
-    - description: Update scores based on correct guesses and deception success
-      tools:
-      - update_scores
+      - clearCanvas
+      - createPhaseIndicator
+      - createTextDisplay
+      - createVotingPanel
     completion_criteria:
-      type: UI_displayed
-      description: Lie has been revealed and scores have been updated for all players.
+      type: player_action
+      description: Votes have been received from all non-Speaker players via the voting
+        panel, and relevant player state (player_states.vote_choice) has been updated.
+      wait_for: all_players_action
+      target_players:
+        description: All non-Speaker players (Guessers)
+        condition: player.is_active_speaker == false
     next_phase:
-      If all players have been speakers this round:
-        id: 5
-        name: End of Round
-      If there are players who have not been speakers this round:
-        id: 1
-        name: Start Game Turn
+      id: 5
+      name: Reveal and Tally Results
   5:
-    name: End of Round
-    description: Conclude the round and prepare for the next round if required.
+    name: Reveal and Tally Results
+    description: Reveal the lie index, show vote distribution, and update scores (+1
+      to each correct Guesser; +1 to Speaker per player fooled).
     actions:
-    - description: Reset the speaker status for all players
+    - description: Clear voting UI; reveal the correct lie; display vote breakdown
+        and apply score updates accordingly
       tools:
-      - reset_speaker_status
-    - description: Display round summary and current scores
-      tools:
-      - display_round_summary
+      - clearCanvas
+      - createPhaseIndicator
+      - createResultDisplay
+      - createTextDisplay
     completion_criteria:
       type: UI_displayed
-      description: Round summary has been displayed and player statuses reset.
+      description: Results have been revealed and scores updated in player_states.
     next_phase:
-      id: 1
-      name: Start Game Turn
+      id: 6
+      name: Advance Turn and Check End Condition
+  6:
+    name: Advance Turn and Check End Condition
+    description: Wrap up the turn by incrementing the Speaker's speaker_turns_taken,
+      resetting temporary fields (is_active_speaker, lie_index, vote_choice), and
+      evaluating whether the game should end.
+    actions:
+    - description: Clear results UI; update turn counters and reset per-turn fields;
+        show current scoreboard
+      tools:
+      - clearCanvas
+      - createPhaseIndicator
+      - createTextDisplay
+    completion_criteria:
+      type: UI_displayed
+      description: Turn wrap-up complete and end condition evaluated.
+    next_phase:
+      If all players have speaker_turns_taken >= the agreed number of rounds (default 1):
+        id: 7
+        name: Game Over — Final Scores
+      Otherwise, proceed to the next Speaker:
+        id: 1
+        name: Start Game & Select Speaker
+  7:
+    name: Game Over — Final Scores
+    description: Display the final leaderboard and congratulate the top scorer(s).
+    actions:
+    - description: Clear UI and present final results with standings
+      tools:
+      - clearCanvas
+      - createPhaseIndicator
+      - createResultDisplay
+      - createTextDisplay
+    completion_criteria:
+      type: UI_displayed
+      description: Final scores have been displayed to all players.
+    next_phase: null

@@ -60,42 +60,75 @@ export default function CopilotKitPage() {
 
   const { appendMessage } = useCopilotChat();
 
-  // Helper function to ensure gameName is set from URL
-  const ensureGameName = useCallback(() => {
-    const params = new URLSearchParams(window.location.search);
-    const gameName = params.get('game');
-    
-    if (gameName) {
-      const currentGameName = state?.gameName;
-      if (currentGameName !== gameName) {
-        console.log('🎮 Setting gameName from URL:', gameName);
-        setState((prev) => {
-          const base = prev ?? initialState;
-          return { ...base, gameName } as AgentState;
-        });
-        return true; // Indicate that gameName was updated
+  // 統一用戶交互處理 - 替代分散的狀態管理邏輯
+  const handleUserInteraction = useCallback(async (content: string, actionType?: string) => {
+    try {
+      // 統一確保狀態完整性
+      const currentState = state ?? initialState;
+      
+      // 1️⃣ 優先從 sessionStorage 補充缺失的狀態
+      if (!currentState.gameName || !currentState.roomSession) {
+        const gameContext = sessionStorage.getItem('gameContext');
+        const roomSession = sessionStorage.getItem('roomSession');
+        
+        if (gameContext || roomSession) {
+          setState((prev) => {
+            const base = prev ?? initialState;
+            const updates: Partial<AgentState> = {};
+            
+            // 補充 gameName
+            if (!base.gameName && gameContext) {
+              const context = JSON.parse(gameContext);
+              updates.gameName = context.gameName;
+              console.log('🔄 補充 gameName from sessionStorage:', context.gameName);
+            }
+            
+            // 補充 roomSession
+            if (!base.roomSession && roomSession) {
+              updates.roomSession = JSON.parse(roomSession);
+              console.log('🔄 補充 roomSession from sessionStorage');
+            }
+            
+            return { ...base, ...updates } as AgentState;
+          });
+        }
+        // 2️⃣ sessionStorage 沒有才用 URL 備份
+        else if (!currentState.gameName) {
+          const urlGameName = new URLSearchParams(window.location.search).get('game');
+          if (urlGameName) {
+            setState(prev => ({ 
+              ...prev, 
+              gameName: urlGameName 
+            } as AgentState));
+            console.log('🔄 補充 gameName from URL:', urlGameName);
+          }
+        }
       }
+      
+      // 統一發送消息
+      await appendMessage(new TextMessage({
+        role: MessageRole.User,
+        content
+      }));
+      
+      if (actionType && process.env.NODE_ENV === 'development') {
+        console.log(`🎮 User interaction: ${actionType} - "${content}"`);
+      }
+    } catch (error) {
+      console.error('User interaction failed:', error);
     }
-    return false; // No update needed
-  }, [setState, state?.gameName]); // Only depend on the specific field we're checking
-
-  // ✅ Removed gameName initialization useEffect - now handled in initialState
+  }, [state, setState, appendMessage]);
 
   // Handle action button clicks
   const handleButtonClick = useCallback(async (item: Item) => {
     const buttonData = item.data as ActionButtonData;
     
-    // Ensure gameName is set before sending message
-    ensureGameName();
-    
-    // Send message to CopilotChat
-    await appendMessage(
-      new TextMessage({
-        role: MessageRole.User,
-        content: `Button "${item.name}" (ID: ${item.id}) has been clicked. Action: ${buttonData.action}`
-      })
+    // 使用統一交互處理
+    await handleUserInteraction(
+      `Button "${item.name}" (ID: ${item.id}) has been clicked. Action: ${buttonData.action}`,
+      'button_click'
     );
-  }, [appendMessage, ensureGameName]);
+  }, [handleUserInteraction]);
 
   // Handle voting
   const handleVote = useCallback(async (votingId: string, playerId: string, option: string) => {
@@ -120,14 +153,12 @@ export default function CopilotKitPage() {
       } as AgentState;
     });
 
-    // Send message to CopilotChat
-    await appendMessage(
-      new TextMessage({
-        role: MessageRole.User,
-        content: `Player ${playerId} voted "${option}" in voting ${votingId}`
-      })
+    // 使用統一交互處理
+    await handleUserInteraction(
+      `Player ${playerId} voted "${option}" in voting ${votingId}`,
+      'vote_cast'
     );
-  }, [setState, appendMessage]);
+  }, [setState, handleUserInteraction]);
 
   // Global cache for the last non-empty agent state
   const cachedStateRef = useRef<AgentState>(state ?? initialState);
@@ -1188,21 +1219,8 @@ export default function CopilotKitPage() {
                           "bg-green-50 hover:bg-green-100 border-green-200 text-green-700",
                         )}
                         onClick={async () => {
-                          // Set gameName from URL and wait for state update
-                          const gameNameUpdated = ensureGameName();
-                          
-                          // Wait a moment for state to propagate if needed
-                          if (gameNameUpdated) {
-                            await new Promise(resolve => setTimeout(resolve, 100));
-                          }
-                          
-                          console.log('🎮 Current state gameName:', state?.gameName);
-                          
-                          // Send start game message
-                          await appendMessage(new TextMessage({
-                            role: MessageRole.User,
-                            content: "Start game."
-                          }));
+                          // 使用統一交互處理
+                          await handleUserInteraction("Start game.", "start_game");
                         }}
                       >
                         🎮 Start Game
@@ -1240,7 +1258,14 @@ export default function CopilotKitPage() {
                           ))}
                       </div>
                       
-                      <div style={GAME_GRID_STYLE} className="pb-20 bg-white" data-canvas-container>
+                      {/* Card table wrapper (wood rim) */}
+                      <div className="rounded-[28px] p-4 bg-[linear-gradient(135deg,#7b4a2e,#9a6b3f,#7a4e2b)] shadow-[0_12px_30px_rgba(0,0,0,0.4)] [box-shadow:inset_0_0_0_2px_rgba(255,255,255,0.12),inset_0_0_0_1px_rgba(0,0,0,0.25)]">
+                        {/* Felt surface canvas */}
+                        <div
+                          style={GAME_GRID_STYLE}
+                          className="relative pb-20 rounded-[18px] border border-[#2a3f2f]/40 ring-1 ring-[#1a2d20]/40 bg-[radial-gradient(80%_80%_at_30%_20%,#1b5e2a_0%,#155c2b_55%,#0e4a22_100%)] overflow-hidden"
+                          data-canvas-container
+                        >
                       {/* Render all 9 region containers */}
                       {(["top-left", "top-center", "top-right", "middle-left", "center", "middle-right", "bottom-left", "bottom-center", "bottom-right"] as GamePosition[]).map(position => {
                         const itemsInRegion = (viewState.items ?? []).filter(item => {
@@ -1275,6 +1300,7 @@ export default function CopilotKitPage() {
                           </div>
                         );
                       })}
+                        </div>
                       </div>
                       
                       {/* Render timer components with fixed positioning */}
@@ -1305,14 +1331,8 @@ export default function CopilotKitPage() {
                 size="lg"
                 className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3"
                 onClick={async () => {
-                  // Ensure gameName is set
-                  ensureGameName();
-                  
-                  // Send continue message to Agent
-                  await appendMessage(new TextMessage({
-                    role: MessageRole.User,
-                    content: "Continue"
-                  }));
+                  // 使用統一交互處理
+                  await handleUserInteraction("Continue", "continue_game");
                 }}
               >
                 Continue
@@ -1337,21 +1357,8 @@ export default function CopilotKitPage() {
                   "bg-green-50 hover:bg-green-100 border-green-200 text-green-700",
                 )}
                 onClick={async () => {
-                  // Set gameName from URL and wait for state update
-                  const gameNameUpdated = ensureGameName();
-                  
-                  // Wait a moment for state to propagate if needed
-                  if (gameNameUpdated) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                  }
-                  
-                  console.log('🎮 Current state gameName:', state?.gameName);
-                  
-                  // Send start game message
-                  await appendMessage(new TextMessage({
-                    role: MessageRole.User,
-                    content: "Start game."
-                  }));
+                  // 使用統一交互處理
+                  await handleUserInteraction("Start game.", "start_game");
                 }}
               >
                 🎮 Start
