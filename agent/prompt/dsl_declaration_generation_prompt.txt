@@ -10,7 +10,7 @@ You are the Declaration Generation Node of the DSL Agent.
 - Persistence: The system will save the final YAML as a `.yaml` file under the `games/` directory; ensure the content is self-contained.
 - Scope constraints: Do not include `phases`; field names and types must strictly follow the rules; in `players_example`, player primary keys must be numeric IDs starting from 1 only.
 
-# Game DSL Structure Rules V2
+# Game DSL Structure Rules V3 (Audience Permission-Aware)
 
 ## 1. Top-Level Structure
 
@@ -18,6 +18,16 @@ The game DSL consists of two top-level keys: `declaration` and `phases`.
 
 - `declaration` (object): Contains all initial settings and metadata for the game.
 - `phases` (object): Contains definitions of all game phases, using numeric IDs as keys.
+
+## 1.1. Audience Permission Design Principles
+
+When designing game declarations, consider these audience permission principles:
+
+- **Information Privacy**: Distinguish between public information (visible to all) and private information (visible to specific players)
+- **Player Targeting**: Design player_states that enable fine-grained targeting based on roles, teams, status, or conditions
+- **UI Visibility Control**: Include fields that help determine which UI components should be visible to which players
+- **Group-based Targeting**: Define logical player groups in audience_groups for easier targeting in phases
+- **Progressive Disclosure**: Consider how information visibility changes throughout the game (revealed vs hidden states)
 
 ## 2. `declaration` (Initial Declaration)
 
@@ -32,13 +42,26 @@ This section defines the core rules and data structures of the game, loaded befo
 - **player_states** (object): Essential player state attributes only.
     - Each key: state attribute name.
     - Each value: object with `type`, `example`, `description`.
+    - **AUDIENCE PERMISSION & TARGETING DESIGN**: Include state fields that support fine-grained player targeting and privacy:
+        - Fields that help identify player groups (role, team, faction, status)
+        - Fields that determine UI component visibility (privilege_level, secret_info_access, revealed_status)  
+        - Fields that enable conditional targeting (phase_participation, action_eligibility, team_membership)
+        - Example: "has_secret_role": boolean for determining who sees secret action panels
+        - Example: "team": string for team-specific UI components
+        - Example: "revealed": boolean for controlling information disclosure
 - **player_states_template** (object): Template with player ID 1 and default values.
 - **players_example** (object): Example with numeric player IDs starting from 1.
+- **audience_groups** (object, optional): Define logical player groups for permission targeting and UI visibility control.
+    - Each key: group name (e.g., "werewolves", "villagers", "alive_players", "secret_holders").
+    - Each value: object with `description` and `selection_criteria`.
+    - Used to simplify audience targeting in UI components and phases.
+    - Example: Define team-based groups for faction games, role-based groups for social deduction games.
+    - Enables complex targeting like "all alive werewolves" or "players who know secret information".
 
 ### `declaration` Examples
 
 ```
-Example1:
+Example1 (Audience Permission-Aware Social Deduction Game):
 
 declaration:
   description: "This is a social deduction game of factional combat. Players are secretly divided into two camps: the Werewolf faction and the Villager faction (including special roles such as Doctor and Detective). The game progresses in day-night cycles where night actions resolve followed by day discussions and voting."
@@ -64,6 +87,18 @@ declaration:
       type: "boolean"
       example: true
       description: "Whether the player is still in the game (true=alive; false=eliminated). Eliminated players do not participate in subsequent votes and night actions."
+    team:
+      type: "string"
+      example: "villagers"
+      description: "Player's team affiliation for audience targeting (villagers, werewolves). Used to determine UI visibility for team-specific components."
+    role_revealed:
+      type: "boolean"
+      example: false
+      description: "Whether this player's role has been publicly revealed. Controls visibility of role-specific information displays."
+    can_vote:
+      type: "boolean"
+      example: true
+      description: "Whether player can participate in voting phases. Used for targeting voting UI components."
 
   player_states_template:
     player_states:
@@ -71,6 +106,9 @@ declaration:
         name: ""
         role: ""
         is_alive: true
+        team: ""
+        role_revealed: false
+        can_vote: true
 
   players_example:
     player_states:
@@ -78,21 +116,44 @@ declaration:
         name: "Alpha"
         role: "Killer"
         is_alive: true
+        team: "werewolves"
+        role_revealed: false
+        can_vote: true
 
       2:
         name: "Beta"
         role: "Villager"
         is_alive: true
+        team: "villagers"
+        role_revealed: false
+        can_vote: true
 
       3:
         name: "Gamma"
         role: "Doctor"
         is_alive: true
+        team: "villagers"
+        role_revealed: false
+        can_vote: true
 
-Example2:
+  audience_groups:
+    werewolves:
+      description: "All players with werewolf-faction roles"
+      selection_criteria: "player.team == 'werewolves' and player.is_alive == true"
+    villagers:
+      description: "All players with villager-faction roles including special roles"
+      selection_criteria: "player.team == 'villagers' and player.is_alive == true"
+    alive_players:
+      description: "All players who are still in the game"
+      selection_criteria: "player.is_alive == true"
+    special_roles:
+      description: "Players with special abilities (Doctor, Detective, etc.)"
+      selection_criteria: "player.role in ['Doctor', 'Detective', 'Seer']"
+
+Example2 (Card Game with Private Information Targeting):
 
 declaration:
-  description: "A Wild West shootout card game where players have hidden roles and use playing cards to attack, defend, and survive."
+  description: "A Wild West shootout card game where players have hidden roles and use playing cards to attack, defend, and survive. Players can see their own cards and health, but other players' information is hidden."
   is_multiplayer: true
   min_players: 4
   roles:
@@ -103,15 +164,27 @@ declaration:
     name:
       type: "string"
       example: "Player A"
-      description: "Player name"
+      description: "Player name, visible to all players"
     cards:
       type: "dict"
       example: {"Attack card": 2, "Dodge Card": 3}
-      description: "Cards currently held by the player"
+      description: "Cards currently held by the player. Private information - only visible to the card owner."
     health:
       type: "num"
       example: 2
-      description: "Player's health points, maximum of 5"
+      description: "Player's health points, maximum of 5. Public information visible to all."
+    max_health:
+      type: "num"
+      example: 5
+      description: "Player's maximum health capacity"
+    is_active:
+      type: "boolean"
+      example: true
+      description: "Whether player is currently active in this turn. Used for targeting turn-specific UI components."
+    card_count:
+      type: "num"
+      example: 5
+      description: "Number of cards in hand (public information). Actual cards are private."
 
   player_states_template:
     player_states:
@@ -119,6 +192,9 @@ declaration:
         name: ""
         cards: {}
         health: 5
+        max_health: 5
+        is_active: false
+        card_count: 0
 
   players_example:
     player_states:
@@ -126,14 +202,34 @@ declaration:
         name: "Arnold"
         cards: {"Attack card": 2, "Dodge Card": 3}
         health: 4
+        max_health: 5
+        is_active: true
+        card_count: 5
       2:
         name: "Billy"
         cards: {"Attack card": 3, "Dodge Card": 3}
         health: 5
+        max_health: 5
+        is_active: false
+        card_count: 6
       3:
         name: "Chris"
         cards: {"Attack card": 1, "Dodge Card": 1}
         health: 3
+        max_health: 5
+        is_active: false
+        card_count: 2
+
+  audience_groups:
+    active_player:
+      description: "Player whose turn it currently is"
+      selection_criteria: "player.is_active == true"
+    alive_players:
+      description: "Players with health greater than 0"
+      selection_criteria: "player.health > 0"
+    low_health_players:
+      description: "Players with 2 or fewer health points"
+      selection_criteria: "player.health <= 2 and player.health > 0"
 
 ```
 

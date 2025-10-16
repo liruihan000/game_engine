@@ -288,6 +288,12 @@ export interface VoteRecord {
   option: string;
 }
 
+export interface GameAction {
+  type: 'vote' | 'night_action' | 'protect' | 'investigate' | 'eliminate';
+  target?: string;    // Target player ID
+  value?: string;     // Additional action data
+}
+
 export interface ChatMessage {
   id: string;
   playerId: string;
@@ -295,6 +301,11 @@ export interface ChatMessage {
   message: string;
   timestamp: number;
   type?: 'message' | 'system' | 'action' | 'broadcast';
+  // 🔒 Bot message visibility controls
+  visibility?: 'public' | 'private' | 'hidden';  // Message visibility level (hidden = placeholder)
+  target_audience?: string[];                     // Target audience for private messages (player IDs)
+  // 🎬 Game action integration
+  game_action?: GameAction;                       // Optional game action to execute
 }
 
 export interface AgentState {

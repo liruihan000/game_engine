@@ -151,6 +151,40 @@ declaration:
 
 ```
 
+## 🎯 **Mandatory Audience Permissions System**
+
+Each player has their own private screen with granular visibility controls. UI components should explicitly set audience permissions for optimal privacy and game experience.
+
+- **Universal Permission Rule**: ALL UI tools support audience_type and audience_ids parameters for precise visibility control
+  * audience_type=true → Component visible to ALL players (public components)
+  * audience_type=false + audience_ids=['1','3'] → Component visible ONLY to specified player IDs (private/targeted)
+
+- **Three-Tier Creation Strategy** (recommended ordering for phases):
+  🌐 **TIER 1 - PUBLIC COMPONENTS**: Create shared UI first (visible to everyone)
+      Examples: Phase indicators, public timers, general announcements, voting results
+      Code: createPhaseIndicator(name='CurrentPhase', currentPhase='Discussion Phase', audience_type=true)
+  
+  👥 **TIER 2 - GROUP COMPONENTS**: Create role/team-specific UI (visible to specific groups)
+      Examples: Werewolf coordination, team instructions, role-specific guidance
+      Code: createTextDisplay(name='WolfInstructions', content='Choose target', audience_type=false, audience_ids=['2','4'])
+  
+  👤 **TIER 3 - INDIVIDUAL COMPONENTS**: Create player-specific UI (visible to one player)
+      Examples: Personal role cards, individual action buttons, private feedback
+      Code: createCharacterCard(name='Player2Role', role='Detective', audience_type=false, audience_ids=['2'])
+
+- **Smart Audience Selection Guidelines**: Determine IDs based on game state and roles
+  * All werewolves → Find players with role='Werewolf' → audience_ids=['2','4']
+  * Alive players only → Find players with is_alive=true → audience_ids=['1','2','3']  
+  * Specific role → Find player with role='Doctor' → audience_ids=['3']
+  * Human player → Always player ID '1' → audience_ids=['1']
+  * Public information → All players → audience_type=true
+
+- **Privacy Examples by Game Context**:
+  * Night phases: Private action panels for each role + public waiting message
+  * Role assignment: Individual character cards only visible to assigned player
+  * Voting phases: Public voting panel + private confirmation messages
+  * Results: Public announcements + private feedback to affected players
+
 ## 3. `phases` (Phase Flow)
 
 This section defines the specific flow of the game, with each phase identified by a unique numeric ID. 
@@ -158,6 +192,8 @@ This section defines the specific flow of the game, with each phase identified b
 **CRITICAL VALIDATION RULE: Each phase can contain AT MOST ONE player feedback request.**
 
 **CRITICAL VALIDATION RULE - Player Choice Tools**: For ANY player choice or decision (voting, role selection, target selection, yes/no decisions, multiple choice questions), phases MUST use voting tools (createVotingPanel). Reject phases that use generic prompts or text displays for player choices - validate that voting mechanisms are used.
+**AUDIENCE VALIDATION (MANDATORY)**: Every UI tool call MUST explicitly include audience permissions. Validate that each create/update tool has either `audience_type=true` or `audience_type=false` with explicit `audience_ids=[...]`. Reject or correct phases that omit audience fields.
+**NO HARD-CODED PLAYER 1**: Reject/correct any phase text that targets "player 1" generically. Instead require target conditions (role/team/status) or a prior step that computes concrete `audience_ids`.
 
 **PHASE DECOMPOSITION VALIDATION RULES:**
 - If a phase has multiple sequential player actions, it must be split into separate phases
@@ -183,6 +219,7 @@ Each phase object must contain the following fields:
 - **actions** (array): A series of operations the DM needs to execute.
     - Each operation includes `description` (string) and `tools` (array) fields.
     - **Important**: The first action of each phase should typically be used to clean up UI elements from the previous phase (if needed).
+    - **Audience enforcement**: Validate that actions which create/update UI specify audience. Prefer the sequence: public components → group-targeted components → individual/private components.
 - **completion_criteria** (object): Defines the conditions for phase completion.
     - `type` (string): Type of completion condition, can be `"timer"`, `"player_action"`, or `"UI_displayed"`.
     - `description` (string): Natural language description of the completion condition. For example: "Wait for all players to complete voting" or "Wait for 5-second countdown to finish". If player feedback is required (i.e., `type` is `player_action`), this description must include "relevant player state (player_states) has been updated".
@@ -207,7 +244,7 @@ Each phase object must contain the following fields:
 
 ## AVAILABLE FRONTEND TOOLS (exact names and parameters)
 
-Validation must ensure that phase action tools come only from the following list. Tool names must match exactly (no `functions.` prefix). When items are created, the returned id must be captured and reused in later calls that require `itemId` (do not pass the item name). To delete multiple items, `deleteItem` must be called once per `itemId`.
+Validation must ensure that phase action tools come only from the following list. Tool names must match exactly (no `functions.` prefix). When items are created, the returned id must be captured and reused in later calls that require `itemId` (do not pass the item name). To delete multiple items, `deleteItem` must be called once per `itemId`. Additionally, each tool must include audience fields where available.
 
 - createTextDisplay: Create a text panel.
   - params: name (string), content (string), position (string), title? (string), type? ("info" | "warning" | "error" | "success")
@@ -401,3 +438,29 @@ Validation guidance:
     "Otherwise, continue with daytime discussion":
       id: 17
       name: "Day Discussion"
+
+## 📋 **Validation Checklist**
+
+Before approving DSL, verify:
+
+**🔍 Declaration Consistency:**
+- [ ] All roles in phases exist in `declaration.roles`
+- [ ] Player count assumptions match `declaration.min_players`/`declaration.max_players`
+- [ ] All referenced player_states fields exist in `declaration.player_states`
+- [ ] Game mechanics align with declared description
+
+**🔗 Phase Flow Integrity:**  
+- [ ] All `next_phase.id` references point to valid phase IDs
+- [ ] No orphaned phases (phases never referenced)
+- [ ] Phase 0 always exists as "Game Introduction"
+- [ ] Phase loops have proper exit conditions
+
+**⚙️ Completion Criteria Validation:**
+- [ ] `target_players.condition` uses only defined player_states fields
+- [ ] Role-based conditions reference declared roles only
+- [ ] Phase completion logic is achievable with available game state
+
+**🎯 Audience Permissions Check:**
+- [ ] All UI components have explicit audience_type and audience_ids
+- [ ] TIER 1/2/3 system is properly implemented
+- [ ] Privacy boundaries match game requirements
