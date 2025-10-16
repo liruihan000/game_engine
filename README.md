@@ -80,7 +80,7 @@ graph TB
     end
     
     subgraph "⚡ CopilotKit Runtime"
-        Runtime[WebSocket Bridge<br/>Real-time Sync<br/>Tool Execution]
+        Runtime[AU-GI Bridge<br/>Real-time Sync<br/>Tool Execution]
     end
     
     DSL --> Agent
