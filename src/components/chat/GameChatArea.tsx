@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, MessageCircle, Users } from 'lucide-react';
 import type { ChatMessage } from '@/lib/canvas/types';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 // Use shared ChatMessage type from lib to avoid divergence
 
@@ -34,7 +35,6 @@ export function GameChatArea({
   const [selectedBot, setSelectedBot] = useState<string>('');
   const [isClient, setIsClient] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Fix hydration by ensuring we know when we're on the client
@@ -45,12 +45,7 @@ export function GameChatArea({
   // Auto scroll to bottom when new messages arrive
   useEffect(() => {
     const scrollToBottom = () => {
-      const container = messagesContainerRef.current;
-      if (container) {
-        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
-        return;
-      }
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'start' });
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end', inline: 'nearest' });
     };
     
     // Immediate scroll for initial load, delayed scroll for new messages
@@ -116,40 +111,42 @@ export function GameChatArea({
       </div>
 
       {/* Messages Area */}
-      <div ref={messagesContainerRef} className="flex-1 min-h-0 max-h-full overflow-y-auto scroll-smooth overscroll-contain p-4 space-y-3">
-        {messages.length === 0 ? (
-          <div className="text-center py-8">
-            <MessageCircle className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
-            <p className="text-muted-foreground">
-              No messages yet — start the conversation.
-            </p>
-          </div>
-        ) : (
-          <>
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`p-3 rounded-lg border ${getMessageStyle(msg)}`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="font-medium text-sm text-foreground">
-                    {msg.type === 'system' ? '🤖 System' : 
-                     msg.type === 'action' ? '⚡ Game' : 
-                     msg.playerName}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {formatTime(msg.timestamp)}
-                  </span>
+      <ScrollArea className="flex-1 min-h-0">
+        <div className="p-4 space-y-3">
+          {messages.length === 0 ? (
+            <div className="text-center py-8">
+              <MessageCircle className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-muted-foreground">
+                No messages yet — start the conversation.
+              </p>
+            </div>
+          ) : (
+            <>
+              {messages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`p-3 rounded-lg border ${getMessageStyle(msg)}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="font-medium text-sm text-foreground">
+                      {msg.type === 'system' ? '🤖 System' : 
+                       msg.type === 'action' ? '⚡ Game' : 
+                       msg.playerName}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatTime(msg.timestamp)}
+                    </span>
+                  </div>
+                  <p className="text-sm text-foreground/80 whitespace-pre-wrap break-words break-all">
+                    {msg.message}
+                  </p>
                 </div>
-                <p className="text-sm text-foreground/80 whitespace-pre-wrap break-words break-all">
-                  {msg.message}
-                </p>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </>
-        )}
-      </div>
+              ))}
+              <div ref={messagesEndRef} />
+            </>
+          )}
+        </div>
+      </ScrollArea>
 
       {/* Input Area */}
       <div className="flex-shrink-0 p-4 border-t border-sidebar-border bg-accent/10">

@@ -37,6 +37,8 @@ export type CardType =
   | "health_display"    // 生命/子彈顯示（Bang! 等）
   | "influence_set"     // 影響力卡組（Coup 兩張）
   | "broadcast_input"   // 廣播輸入框
+  | "player_states_display" // 玩家状态展示器
+  | "player_actions_display" // 玩家行动日志展示器
   // Future components (commented for MVP)
   // | "player_list" | "score_board" 
   // | "challenge_modal" | "elimination_display" | "game_log";
@@ -250,6 +252,21 @@ export interface BroadcastInputData extends AudiencePermissions {
   position: GamePosition;    // placement
 }
 
+// Player states display - shows current player_states from game state
+export interface PlayerStatesDisplayData extends AudiencePermissions {
+  title?: string;            // header text (e.g., "Player States")
+  position: GamePosition;    // placement
+  maxHeight?: string;        // max height for scrolling (e.g., "400px")
+}
+
+// Player actions display - scrollable log of playerActions with latest at top  
+export interface PlayerActionsDisplayData extends AudiencePermissions {
+  title?: string;            // header text (e.g., "Player Actions", "Action Log")
+  position: GamePosition;    // placement
+  maxHeight?: string;        // max height for scrolling (e.g., "400px")
+  maxItems?: number;         // maximum number of actions to display (default: 50)
+}
+
 // Room session types
 export interface RoomPlayer {
   id: number;
@@ -266,7 +283,7 @@ export interface RoomSession {
   timestamp: number;
 }
 
-export type ItemData = CharacterCardData | ActionButtonData | PhaseIndicatorData | TextDisplayData | VotingPanelData | AvatarSetData | BackgroundControlData | ResultDisplayData | TimerData | HandsCardData | ScoreBoardData | CoinDisplayData | StatementBoardData | ReactionTimerData | NightOverlayData | TurnIndicatorData | HealthDisplayData | InfluenceSetData | BroadcastInputData;
+export type ItemData = CharacterCardData | ActionButtonData | PhaseIndicatorData | TextDisplayData | VotingPanelData | AvatarSetData | BackgroundControlData | ResultDisplayData | TimerData | HandsCardData | ScoreBoardData | CoinDisplayData | StatementBoardData | ReactionTimerData | NightOverlayData | TurnIndicatorData | HealthDisplayData | InfluenceSetData | BroadcastInputData | PlayerStatesDisplayData | PlayerActionsDisplayData;
 
 export interface Item {
   id: string;

@@ -623,7 +623,6 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             "The itemsState shows the current UI layout and you MUST use it to understand the current layout and decide what to delete or create.\n"
             "\n"
             "Planning & Progress Tracking Strategy:\n"
-            "- You MUST use the set_plan tool to set at least 2 steps plan for complex phases\n"
             "- Track progress of each step using update_plan_progress ('in_progress', 'completed')\n"  
             "- CRITICAL: After completing each step, immediately proceed to the next step in the SAME conversation turn\n"
             "- Continue executing plan steps until all are completed, then call complete_plan\n"

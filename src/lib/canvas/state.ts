@@ -1,4 +1,4 @@
-import { AgentState, CardType, ItemData, VotingPanelData, TextDisplayData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, BroadcastInputData } from "@/lib/canvas/types";
+import { AgentState, CardType, ItemData, VotingPanelData, TextDisplayData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, BroadcastInputData, PlayerStatesDisplayData, PlayerActionsDisplayData } from "@/lib/canvas/types";
 
 export const initialState: AgentState = {
   items: [],
@@ -195,6 +195,23 @@ export function defaultDataFor(type: CardType): ItemData {
         audience_type: true,
         audience_ids: [],
       } as BroadcastInputData;
+    case "player_states_display":
+      return {
+        title: "Player States",
+        position: "middle-left",
+        maxHeight: "400px",
+        audience_type: true,
+        audience_ids: [],
+      } as PlayerStatesDisplayData;
+    case "player_actions_display":
+      return {
+        title: "Player Actions",
+        position: "middle-right", 
+        maxHeight: "400px",
+        maxItems: 50,
+        audience_type: true,
+        audience_ids: [],
+      } as PlayerActionsDisplayData;
     default:
       return {
         content: "",

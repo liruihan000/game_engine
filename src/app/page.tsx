@@ -17,7 +17,7 @@ import ShikiHighlighter from "react-shiki/web";
 import { motion, useScroll, useTransform, useMotionValueEvent } from "motion/react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
-import type { AgentState, PlanStep, Item, ItemData, CardType, GamePosition, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, ComponentSize, ChatMessage, RoomPlayer, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData } from "@/lib/canvas/types";
+import type { AgentState, PlanStep, Item, ItemData, CardType, GamePosition, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, ComponentSize, ChatMessage, RoomPlayer, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, PlayerStatesDisplayData, PlayerActionsDisplayData } from "@/lib/canvas/types";
 import { GAME_GRID_STYLE, normalizePosition } from "@/lib/canvas/types";
 import { initialState, isNonEmptyAgentState, defaultDataFor } from "@/lib/canvas/state";
 // import { projectAddField4Item, projectSetField4ItemText, projectSetField4ItemDone, projectRemoveField4Item, chartAddField1Metric, chartSetField1Label, chartSetField1Value, chartRemoveField1Metric } from "@/lib/canvas/updates";
@@ -2130,6 +2130,72 @@ export default function CopilotKitPage() {
   });
 
   // Frontend action: delete an item by id
+  // Create Player States Display
+  useCopilotAction({
+    name: "createPlayerStatesDisplay",
+    description: "Create a display panel showing current player states with real-time updates",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "title", type: "string", required: false, description: "Display title (default: 'Player States')" },
+      { name: "position", type: "string", required: false, description: "Grid position (default: 'middle-left')" },
+      { name: "maxHeight", type: "string", required: false, description: "Max height for scrolling (default: '400px')" },
+      { name: "audience_type", type: "boolean", required: false, description: "true=public; false=private" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Visible player IDs if private" },
+    ],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler: ({ name, title, position, maxHeight, audience_type, audience_ids }: any) => {
+      const normalized = (name ?? "").trim();
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => it.type === "player_states_display" && (it.name ?? "").trim() === normalized);
+        if (existing) return existing.id;
+      }
+      const data = {
+        title: title || "Player States",
+        position: (position as GamePosition) || "middle-left",
+        maxHeight: maxHeight || "400px",
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? [],
+      } as PlayerStatesDisplayData;
+      return addItem("player_states_display", name, data);
+    },
+  });
+
+  // Create Player Actions Display
+  useCopilotAction({
+    name: "createPlayerActionsDisplay", 
+    description: "Create a scrollable display panel showing player actions log with latest actions at the top",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "title", type: "string", required: false, description: "Display title (default: 'Player Actions')" },
+      { name: "position", type: "string", required: false, description: "Grid position (default: 'middle-right')" },
+      { name: "maxHeight", type: "string", required: false, description: "Max height for scrolling (default: '400px')" },
+      { name: "maxItems", type: "number", required: false, description: "Maximum number of actions to display (default: 50)" },
+      { name: "audience_type", type: "boolean", required: false, description: "true=public; false=private" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Visible player IDs if private" },
+    ],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler: ({ name, title, position, maxHeight, maxItems, audience_type, audience_ids }: any) => {
+      const normalized = (name ?? "").trim();
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => it.type === "player_actions_display" && (it.name ?? "").trim() === normalized);
+        if (existing) return existing.id;
+      }
+      const data = {
+        title: title || "Player Actions", 
+        position: (position as GamePosition) || "middle-right",
+        maxHeight: maxHeight || "400px",
+        maxItems: maxItems || 50,
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? [],
+      } as PlayerActionsDisplayData;
+      return addItem("player_actions_display", name, data);
+    },
+  });
+
   useCopilotAction({
     name: "deleteItem",
     description: "Delete an item by id.",
@@ -2243,10 +2309,10 @@ export default function CopilotKitPage() {
   return (
     <div
       style={{ "--copilot-kit-primary-color": "#2563eb" } as CopilotKitCSSProperties}
-      className="h-[calc(100vh-3.5rem)] flex flex-col"
+      className="h-[calc(100vh-3.5rem)] flex flex-col min-h-0 overflow-hidden"
     >
       {/* Main Layout */}
-      <div className="flex flex-1 overflow-visible">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Chat Sidebar */}
         <aside className="-order-1 max-md:hidden flex flex-col min-w-80 w-[30vw] max-w-120 p-4 pr-0">
           <div className="h-full flex flex-col align-start w-full shadow-lg rounded-2xl border border-sidebar-border overflow-hidden">
@@ -2325,6 +2391,68 @@ export default function CopilotKitPage() {
                 </div>
               );
             })()}
+            
+            {/* Player States and Actions Display - Outside Canvas */}
+            <div className="p-4 space-y-3">
+              {/* Player States Display */}
+              <div className="bg-card border border-border rounded-lg p-3 shadow-sm">
+                <div className="text-sm font-medium text-foreground mb-2">
+                  Player States
+                </div>
+                <div className="space-y-2 overflow-y-auto max-h-[180px]">
+                  {Object.keys(viewState.player_states || {}).length === 0 ? (
+                    <div className="text-xs text-muted-foreground text-center py-4">
+                      No player states available
+                    </div>
+                  ) : (
+                    Object.entries(viewState.player_states || {}).map(([playerId, state]) => (
+                      <div key={playerId} className="p-2 bg-muted/50 rounded border text-xs">
+                        <div className="font-medium mb-1">Player {playerId}</div>
+                        <pre className="whitespace-pre-wrap text-xs font-mono overflow-hidden">
+                          {JSON.stringify(state, null, 2)}
+                        </pre>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Player Actions Display */}
+              <div className="bg-card border border-border rounded-lg p-3 shadow-sm">
+                <div className="text-sm font-medium text-foreground mb-2">
+                  Player Actions
+                </div>
+                <div className="space-y-2 overflow-y-auto max-h-[180px]">
+                  {(() => {
+                    const playerActions = viewState.playerActions || {};
+                    const actionEntries = Object.entries(playerActions)
+                      .map(([playerId, action]) => ({ playerId, ...action }))
+                      .sort((a, b) => b.timestamp - a.timestamp)
+                      .slice(0, 50);
+                    
+                    return actionEntries.length === 0 ? (
+                      <div className="text-xs text-muted-foreground text-center py-4">
+                        No player actions recorded
+                      </div>
+                    ) : (
+                      actionEntries.map((action, index) => (
+                        <div key={`${action.playerId}-${action.timestamp}-${index}`} className="p-2 bg-muted/50 rounded border">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-xs font-medium">{action.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(action.timestamp).toLocaleTimeString()}
+                            </span>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-1">Phase: {action.phase}</div>
+                          <div className="text-xs">{action.actions}</div>
+                        </div>
+                      ))
+                    );
+                  })()}
+                </div>
+              </div>
+            </div>
+            
             {/* Chat Content - conditionally rendered to avoid duplicate rendering */}
             {isDesktop && (
               <CopilotChat
@@ -2466,7 +2594,7 @@ export default function CopilotKitPage() {
                                     </button>
                                   )}
                                   
-                                  <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={() => toggleTag()} onButtonClick={handleButtonClick} onVote={handleVote} playerStates={viewState.player_states} deadPlayers={viewState.deadPlayers} />
+                                  <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={() => toggleTag()} onButtonClick={handleButtonClick} onVote={handleVote} playerStates={viewState.player_states} deadPlayers={viewState.deadPlayers} playerActions={viewState.playerActions} />
                                 </div>
                               );
                             })}

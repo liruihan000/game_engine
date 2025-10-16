@@ -1,6 +1,6 @@
 "use client";
 
-import type { Item, ItemData, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, AudiencePermissions, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, BroadcastInputData } from "@/lib/canvas/types";
+import type { Item, ItemData, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, AudiencePermissions, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, BroadcastInputData, PlayerStatesDisplayData, PlayerActionsDisplayData } from "@/lib/canvas/types";
 import HandsCard from "@/components/canvas/cards/HandsCard";
 import ScoreBoard from "@/components/canvas/cards/ScoreBoard";
 import CoinDisplay from "@/components/canvas/cards/CoinDisplay";
@@ -21,6 +21,12 @@ export function CardRenderer(props: {
   onVote?: (votingId: string, playerId: string, option: string) => void;
   playerStates?: Record<string, Record<string, unknown>>;
   deadPlayers?: string[];
+  playerActions?: Record<string, {
+    name: string;
+    actions: string;
+    timestamp: number;
+    phase: string;
+  }>;
 }) {
   const { item } = props;
 
@@ -657,7 +663,7 @@ export function CardRenderer(props: {
     return (
       <div className="flex items-center justify-center min-h-24 w-full">
         <div className="text-center">
-          <div className="text-4xl md:text-6xl lg:text-8xl font-black bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent drop-shadow-2xl transform hover:scale-105 transition-transform duration-300">
+          <div className="text-lg md:text-xl lg:text-2xl font-bold bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent drop-shadow-lg transform hover:scale-105 transition-transform duration-300">
             {d.content || "RESULT"}
           </div>
         </div>
@@ -745,6 +751,79 @@ export function CardRenderer(props: {
           >
             {d.confirmLabel || "Send"}
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (item.type === "player_states_display") {
+    const d = item.data as PlayerStatesDisplayData;
+    const playerStates = props.playerStates || {};
+    return (
+      <div className="bg-card border border-border rounded-lg p-3 shadow-sm min-w-[320px]">
+        <div className="text-sm font-medium text-foreground mb-2">
+          {d.title || "Player States"}
+        </div>
+        <div 
+          className="space-y-2 overflow-y-auto"
+          style={{ maxHeight: d.maxHeight || "400px" }}
+        >
+          {Object.keys(playerStates).length === 0 ? (
+            <div className="text-xs text-muted-foreground text-center py-4">
+              No player states available
+            </div>
+          ) : (
+            Object.entries(playerStates).map(([playerId, state]) => (
+              <div key={playerId} className="p-2 bg-muted/50 rounded border text-xs">
+                <div className="font-medium mb-1">Player {playerId}</div>
+                <pre className="whitespace-pre-wrap text-xs font-mono overflow-hidden">
+                  {JSON.stringify(state, null, 2)}
+                </pre>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (item.type === "player_actions_display") {
+    const d = item.data as PlayerActionsDisplayData;
+    const playerActions = props.playerActions || {};
+    
+    // Convert to array and sort by timestamp (latest first)
+    const actionEntries = Object.entries(playerActions)
+      .map(([playerId, action]) => ({ playerId, ...action }))
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, d.maxItems || 50);
+    
+    return (
+      <div className="bg-card border border-border rounded-lg p-3 shadow-sm min-w-[320px]">
+        <div className="text-sm font-medium text-foreground mb-2">
+          {d.title || "Player Actions"}
+        </div>
+        <div 
+          className="space-y-2 overflow-y-auto"
+          style={{ maxHeight: d.maxHeight || "400px" }}
+        >
+          {actionEntries.length === 0 ? (
+            <div className="text-xs text-muted-foreground text-center py-4">
+              No player actions recorded
+            </div>
+          ) : (
+            actionEntries.map((action, index) => (
+              <div key={`${action.playerId}-${action.timestamp}-${index}`} className="p-2 bg-muted/50 rounded border">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-medium">{action.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(action.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+                <div className="text-xs text-muted-foreground mb-1">Phase: {action.phase}</div>
+                <div className="text-xs">{action.actions}</div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     );
