@@ -1,7 +1,17 @@
 "use client";
 
-import type { Item, ItemData, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData } from "@/lib/canvas/types";
-import { getPlayersFromStates } from "@/lib/player-utils";
+import type { Item, ItemData, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, AudiencePermissions, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, BroadcastInputData } from "@/lib/canvas/types";
+import HandsCard from "@/components/canvas/cards/HandsCard";
+import ScoreBoard from "@/components/canvas/cards/ScoreBoard";
+import CoinDisplay from "@/components/canvas/cards/CoinDisplay";
+import StatementBoard from "@/components/canvas/cards/StatementBoard";
+import ReactionTimer from "@/components/canvas/cards/ReactionTimer";
+import NightOverlay from "@/components/canvas/cards/NightOverlay";
+import TurnIndicator from "@/components/canvas/cards/TurnIndicator";
+import HealthDisplay from "@/components/canvas/cards/HealthDisplay";
+import InfluenceSet from "@/components/canvas/cards/InfluenceSet";
+import Timer from "@/components/canvas/cards/Timer";
+import { getPlayersFromStates, getCurrentPlayerId } from "@/lib/player-utils";
 // import { chartAddField1Metric, chartRemoveField1Metric, chartSetField1Label, chartSetField1Value, projectAddField4Item, projectRemoveField4Item, projectSetField4ItemDone, projectSetField4ItemText } from "@/lib/canvas/updates";
 export function CardRenderer(props: {
   item: Item;
@@ -13,6 +23,25 @@ export function CardRenderer(props: {
   deadPlayers?: string[];
 }) {
   const { item } = props;
+
+  // Check audience permissions
+  const checkAudiencePermissions = (data: ItemData & AudiencePermissions): boolean => {
+    const currentPlayerId = getCurrentPlayerId();
+    if (!currentPlayerId) return true; // Default to visible when no playerId
+    
+    // Visible to everyone
+    if (data.audience_type === true) {
+      return true;
+    }
+    
+    // Visible to specified players only
+    return data.audience_ids.includes(currentPlayerId);
+  };
+
+  // Permission check - if current player lacks access, do not render
+  if (!checkAudiencePermissions(item.data as ItemData & AudiencePermissions)) {
+    return null;
+  }
 
   // if (item.type === "note") {
   //   const d = item.data as NoteData;
@@ -185,6 +214,68 @@ export function CardRenderer(props: {
   // }
 
   // Game Component Renderers - following the same pattern as ChartData, EntityData, etc.
+  if (item.type === "hands_card") {
+    const d = item.data as HandsCardData;
+    return (
+      <HandsCard data={d} title={item.name} subtitle={item.subtitle} />
+    );
+  }
+
+  if (item.type === "score_board") {
+    const d = item.data as ScoreBoardData;
+    return (
+      <ScoreBoard data={d} />
+    );
+  }
+
+  if (item.type === "coin_display") {
+    const d = item.data as CoinDisplayData;
+    return (
+      <CoinDisplay data={d} />
+    );
+  }
+
+  if (item.type === "statement_board") {
+    const d = item.data as StatementBoardData;
+    return (
+      <StatementBoard data={d} />
+    );
+  }
+
+  if (item.type === "reaction_timer") {
+    const d = item.data as ReactionTimerData;
+    return (
+      <ReactionTimer data={d} />
+    );
+  }
+
+  if (item.type === "night_overlay") {
+    const d = item.data as NightOverlayData;
+    return (
+      <NightOverlay data={d} />
+    );
+  }
+
+  if (item.type === "turn_indicator") {
+    const d = item.data as TurnIndicatorData;
+    return (
+      <TurnIndicator data={d} />
+    );
+  }
+
+  if (item.type === "health_display") {
+    const d = item.data as HealthDisplayData;
+    return (
+      <HealthDisplay data={d} />
+    );
+  }
+
+  if (item.type === "influence_set") {
+    const d = item.data as InfluenceSetData;
+    return (
+      <InfluenceSet data={d} />
+    );
+  }
   if (item.type === "character_card") {
     const d = item.data as CharacterCardData;
     const getSizeClasses = (size: string = 'medium') => {
@@ -579,21 +670,21 @@ export function CardRenderer(props: {
     
     const backgroundOptions = [
       // Solid backgrounds
-      { value: "white", label: "白色", colorClass: "bg-white" },
-      { value: "gray-900", label: "灰黑色", colorClass: "bg-gray-900" },
-      { value: "blue-50", label: "淡蓝色", colorClass: "bg-blue-50" },
-      { value: "green-50", label: "淡绿色", colorClass: "bg-green-50" },
-      { value: "purple-50", label: "淡紫色", colorClass: "bg-purple-50" },
+      { value: "white", label: "White", colorClass: "bg-white" },
+      { value: "gray-900", label: "Gray (900)", colorClass: "bg-gray-900" },
+      { value: "blue-50", label: "Blue (50)", colorClass: "bg-blue-50" },
+      { value: "green-50", label: "Green (50)", colorClass: "bg-green-50" },
+      { value: "purple-50", label: "Purple (50)", colorClass: "bg-purple-50" },
       // Felt/table textures
-      { value: "felt-green", label: "牌桌·綠", colorClass: "bg-[radial-gradient(80%_80%_at_30%_20%,#1b5e2a_0%,#155c2b_55%,#0e4a22_100%)]" },
-      { value: "felt-blue", label: "牌桌·藍", colorClass: "bg-[radial-gradient(80%_80%_at_30%_20%,#1e3a8a_0%,#142f6b_55%,#0d2355_100%)]" },
-      { value: "felt-red", label: "牌桌·紅", colorClass: "bg-[radial-gradient(80%_80%_at_30%_20%,#7a1b1b_0%,#5c1414_55%,#3f0e0e_100%)]" },
-      { value: "felt-brown", label: "牌桌·棕", colorClass: "bg-[radial-gradient(80%_80%_at_30%_20%,#6b4e2e_0%,#5a4026_55%,#47331e_100%)]" },
+      { value: "felt-green", label: "Felt · Green", colorClass: "bg-[radial-gradient(80%_80%_at_30%_20%,#1b5e2a_0%,#155c2b_55%,#0e4a22_100%)]" },
+      { value: "felt-blue", label: "Felt · Blue", colorClass: "bg-[radial-gradient(80%_80%_at_30%_20%,#1e3a8a_0%,#142f6b_55%,#0d2355_100%)]" },
+      { value: "felt-red", label: "Felt · Red", colorClass: "bg-[radial-gradient(80%_80%_at_30%_20%,#7a1b1b_0%,#5c1414_55%,#3f0e0e_100%)]" },
+      { value: "felt-brown", label: "Felt · Brown", colorClass: "bg-[radial-gradient(80%_80%_at_30%_20%,#6b4e2e_0%,#5a4026_55%,#47331e_100%)]" },
     ];
     
     return (
       <div className="p-4 border rounded-lg bg-card">
-        <h3 className="text-sm font-medium mb-3">背景颜色控制</h3>
+        <h3 className="text-sm font-medium mb-3">Background Color Control</h3>
         <div className="grid grid-cols-2 gap-2">
           {backgroundOptions.map((option) => (
             <button
@@ -622,7 +713,7 @@ export function CardRenderer(props: {
           ))}
         </div>
         <div className="mt-2 text-xs text-gray-500">
-          当前: {backgroundOptions.find(opt => opt.value === d.backgroundColor)?.label || '白色'}
+          Current: {backgroundOptions.find(opt => opt.value === d.backgroundColor)?.label || 'White'}
         </div>
       </div>
     );
@@ -630,16 +721,30 @@ export function CardRenderer(props: {
 
   if (item.type === "timer") {
     const d = item.data as TimerData;
-    
+    return <Timer data={d} />;
+  }
+
+  if (item.type === "broadcast_input") {
+    const d = item.data as BroadcastInputData;
     return (
-      <div className="fixed top-4 left-4 z-50 bg-black/70 backdrop-blur-sm rounded-lg px-3 py-2 text-white shadow-lg">
-        {d.label && (
-          <div className="text-xs font-medium mb-1 text-center opacity-80">
-            {d.label}
+      <div className="bg-card border border-border rounded-lg p-3 shadow-sm min-w-[280px]">
+        <div className="flex items-center gap-2">
+          <div className="flex flex-col flex-1">
+            <span className="text-xs font-medium text-muted-foreground leading-none pb-1">
+              {d.title || "Broadcast"}
+            </span>
+            <input
+              placeholder={d.placeholder || "Type a broadcast message..."}
+              className="bg-transparent text-sm outline-none px-2 py-1 rounded border border-input"
+              defaultValue=""
+            />
           </div>
-        )}
-        <div className="text-lg font-mono font-bold text-center">
-          {Math.floor(d.duration / 60)}:{String(d.duration % 60).padStart(2, '0')}
+          <button
+            type="button"
+            className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-700"
+          >
+            {d.confirmLabel || "Send"}
+          </button>
         </div>
       </div>
     );

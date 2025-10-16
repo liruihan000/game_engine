@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 
 export async function GET() {
   try {
-    // 直接在内存中创建一个测试房间
+    // Create a test room directly in memory
     const testRoomId = randomUUID();
     const testRoom = {
       id: testRoomId,
@@ -27,12 +27,12 @@ export async function GET() {
       joined_at: new Date().toISOString()
     };
 
-    // 存储测试数据
+    // Store test data
     memoryStorage.rooms.set(testRoomId, testRoom);
     memoryStorage.players.set(testRoomId, [testPlayer]);
 
     return NextResponse.json({
-      message: '测试房间已创建',
+      message: 'Test room created',
       testRoomId,
       totalRooms: memoryStorage.rooms.size,
       totalPlayers: memoryStorage.players.size,
@@ -50,12 +50,12 @@ export async function GET() {
   }
 }
 
-// 清理测试数据
+// Clear test data
 export async function DELETE() {
   try {
     memoryStorage.clearAll();
     return NextResponse.json({
-      message: '内存已清理',
+      message: 'Memory cleared',
       totalRooms: memoryStorage.rooms.size,
       totalPlayers: memoryStorage.players.size,
       nextPlayerId: memoryStorage.nextPlayerId

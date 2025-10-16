@@ -91,6 +91,7 @@ class AgentState(CopilotKitState):
     items: List[Dict[str, Any]] = []  # Game elements (character cards, UI components, game objects)
     # Game DM state (for interactive game engine)
     phase: str = "" 
+    current_phase_id: int = 0  # Current phase ID from DSL phases
     # dsl: dict = {}  # Rules DSL (loaded once)
     events: List[Dict[str, Any]] = []  # queued UI/agent events, e.g., {type, payload, ts, source}
     characters: List[Dict[str, Any]] = []  # e.g., [{id, name}]
@@ -315,12 +316,38 @@ def update_player_actions(state: AgentState, player_id: str, actions: str, phase
     
     return f"Recorded actions for {player_name} (ID: {player_id}): {actions}"
 
+@tool
+def advance_to_next_phase(next_phase_id: int, reason: str = "") -> dict:
+    """
+    Advance the game to the next phase based on DSL rules and current game state.
+    
+    Args:
+        next_phase_id: The next phase ID to advance to
+        reason: Optional reason for advancing to this phase
+        
+    Returns:
+        Dict with phase advancement confirmation
+    """
+    logger.info(f"🎭 Phase advancement: advancing to phase {next_phase_id}")
+    if reason:
+        logger.info(f"🎭 Phase advancement reason: {reason}")
+    
+    result = {
+        "success": True,
+        "next_phase_id": next_phase_id,
+        "reason": reason,
+        "updated": True
+    }
+    
+    return result
+
 backend_tools = [
     set_plan,
     update_plan_progress,
     complete_plan,
     update_player_state,
     update_player_actions,
+    advance_to_next_phase,
 ]
 
 # Extract tool names from backend_tools for comparison
@@ -337,6 +364,54 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "changeBackgroundColor",
     "createResultDisplay",
     "createTimer",
+    "createBackgroundControl",
+    # Card game UI
+    "createHandsCard",
+    "updateHandsCard",
+    "setHandsCardAudience",
+    "createHandsCardForPlayer",
+    # Scoreboard UI
+    "createScoreBoard",
+    "updateScoreBoard",
+    "setScoreBoardEntries",
+    "upsertScoreEntry",
+    "removeScoreEntry",
+    # Broadcast input tool
+    "displayBroadcastInput",
+    # Common update tools
+    "updatePhaseIndicator",
+    "updateTextDisplay",
+    "updateActionButton",
+    "updateCharacterCard",
+    "updateVotingPanel",
+    "updateResultDisplay",
+    "updateTimer",
+    "setItemPosition",
+    # Chat-driven vote
+    "submitVote",
+    # Coins UI tools
+    "createCoinDisplay",
+    "updateCoinDisplay",
+    "incrementCoinCount",
+    "setCoinAudience",
+    # Statement board & Reaction timer
+    "createStatementBoard",
+    "updateStatementBoard",
+    "createReactionTimer",
+    "startReactionTimer",
+    "stopReactionTimer",
+    "resetReactionTimer",
+    # Night overlay & Turn indicator
+    "createNightOverlay",
+    "setNightOverlay",
+    "createTurnIndicator",
+    "updateTurnIndicator",
+    # Health & Influence
+    "createHealthDisplay",
+    "updateHealthDisplay",
+    "createInfluenceSet",
+    "updateInfluenceSet",
+    "revealInfluenceCard",
     # Component management tools
     "deleteItem",
     "clearCanvas",
@@ -416,7 +491,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         logger.info(f"[chatnode] Using existing player_states: {len(player_states)} players")
 
     # 1. Define the model
-    model = init_chat_model("openai:gpt-4.1-mini")
+    model = init_chat_model("openai:gpt-4.1")
 
     # 2. Prepare and bind tools to the model (dedupe, allowlist, and cap)
     def _extract_tool_name(tool: Any) -> Optional[str]:
@@ -470,7 +545,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             *deduped_frontend_tools,
             *backend_tools,
         ],
-        parallel_tool_calls=True,  # Allow multiple tool calls
+        parallel_tool_calls=True,  # Step-by-step execution; avoid parallel tool bursts
     )
 
     # 3. Define the system message by which the chat model will be run
@@ -520,8 +595,16 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
 
     game_summary = _summarize_game_state(state)
 
-    # Include DSL in system message
+    # Include DSL and current phase info in system message
+    current_phase_id = state.get("current_phase_id", 0)
+    dsl_phases = dsl_content.get("phases", {}) if dsl_content else {}
+    current_phase_info = dsl_phases.get(current_phase_id, {}) or dsl_phases.get(str(current_phase_id), {})
+    
     dsl_info = f"LOADED GAME DSL:\n{dsl_content}\n" if dsl_content else "No DSL loaded.\n"
+    if current_phase_info:
+        dsl_info += f"\nCURRENT PHASE (ID {current_phase_id}):\n{current_phase_info}\n"
+    else:
+        dsl_info += f"\nCURRENT PHASE ID: {current_phase_id} (phase info not found in DSL)\n"
 
     system_message = SystemMessage(
         content=(
@@ -536,72 +619,134 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             f"{loop_control}\n"
             f"{game_schema}\n"
             "AUTONOMOUS DUNGEON MASTER POLICY:\n"
-            "Every turn, you MUST autonomously plan and execute the next action to drive the game forward. Based on DSL rules and current game state, you will manage player states, automatically generate UI, and simulate Bot behaviors."
+            "Every turn when you want to create a new UI, you MUST autonomously plan and execute all the actions keep the UI updated to drive the game forward. Based on DSL rules and current game state, you will manage player states, automatically generate UI, and simulate Bot behaviors.\n"
+            "The itemsState shows the current UI layout and you MUST use it to understand the current layout and decide what to delete or create.\n"
+            "\n"
+            "Planning & Progress Tracking Strategy:\n"
+            "- You MUST use the set_plan tool to set at least 2 steps plan for complex phases\n"
+            "- Track progress of each step using update_plan_progress ('in_progress', 'completed')\n"  
+            "- CRITICAL: After completing each step, immediately proceed to the next step in the SAME conversation turn\n"
+            "- Continue executing plan steps until all are completed, then call complete_plan\n"
+            "- Each plan step represents a complete scene/phase with full UI content\n"
+            "- DO NOT wait for user input between plan steps - execute continuously until plan is complete\n"
 
-            "Autonomous Execution Strategy:"
-            "- Analyze current game state and DSL rules to determine the next required action"
-            "- Act autonomously based on game logic without waiting for explicit user instructions"
-            "- If the DSL is flawed, use common-sense game logic to make corrections and proceed"
-            "- At the end of each turn, anticipate what operations need to be executed in the next turn"
 
-            "Planning & Progress Tracking Strategy:"
-            "- MANDATORY: Every task must have at least 2 loop steps - no single-step tasks allowed"
-            "- For complex phases with multiple steps, use the set_plan tool to create an execution plan"
-            "- Track progress of each step using update_plan_progress ('in_progress', 'completed')"
-            "- Proceed automatically between steps without waiting for user confirmation"
-            "- Call complete_plan only after all steps in the plan are successfully finished"
-            "- Each plan step must represent a complete scene/phase with full UI content"
+            "🎯 **AUDIENCE PERMISSIONS SYSTEM**: Each player has their own private screen with granular visibility controls. UI components should explicitly set audience permissions for optimal privacy and game experience.\n\n"
+            
+            "**MANDATORY Audience Permissions**: Every component MUST specify who can see it:\n"
+            "  • Public: audience_type=true (everyone sees it)\n"
+            "  • Private: audience_type=false + audience_ids=['1','3'] (only specified players see it)\n"
+            "**Examples**: deleteItem('existing_id') + createPhaseIndicator(audience_type=true) + createActionButton(audience_ids=['2'])\n\n"
+            "**Three-Tier Creation Strategy** (recommended ordering for phases):\n"
+            "  **TIER 1 - delete previous round's non-useful UI in itemsState**: deleteItem('existing_id')\n"
+            "  ⚠️ **CRITICAL**: NEVER execute only delete/clear operations! MUST immediately follow with UI creation tools in the SAME response!\n"
+            "**Three-Tier Creation Strategy** (recommended ordering for phases):\n"
+            "  **TIER 2 - PUBLIC COMPONENTS**: Create shared UI first (visible to everyone)\n"
+            "      Examples: Phase indicators, public timers, general announcements, voting results\n"
+            "      Code: createPhaseIndicator(name='CurrentPhase', currentPhase='Discussion Phase', audience_type=true)\n"
+            "  \n"
+            " **TIER 3 - GROUP COMPONENTS**: Create role/team-specific UI (visible to specific groups)\n"
+            "      Examples: Team coordination, team instructions, role-specific guidance\n"
+            "      Code: createTextDisplay(name='TeamInstructions', content='Choose strategy', audience_type=false, audience_ids=['2','4'])\n"
+            "  \n"
+            " **TIER 4 - INDIVIDUAL COMPONENTS**: Create player-specific UI (visible to one player)\n"
+            "      Examples: Personal role cards, individual action buttons, private feedback\n"
+            "      Code: createCharacterCard(name='Player2Role', role='Leader', audience_type=false, audience_ids=['2'])\n\n"
+            
+            "**Smart Audience Selection Guidelines**: Determine IDs based on game state and roles\n"
+            "  * All werewolves → Find players with role='Werewolf' → audience_ids=['2','4']\n"
+            "  * Alive players only → Find players with is_alive=true → audience_ids=['1','2','3']\n"
+            "  * Specific role → Find player with role='Doctor' → audience_ids=['3']\n"
+            "  * Human player → Always player ID '1' → audience_ids=['1']\n"
+            "  * Public information → All players → audience_type=true\n\n"
+            
+            "**DEFAULT VISIBILITY**: Unless explicitly private/group-targeted, make items PUBLIC with audience_type=true.\n\n"
+            
+            "🚨 **ABSOLUTE PROHIBITION**: NEVER return with ONLY deleteItem calls - THIS IS TASK FAILURE!\n"
+            "**MANDATORY CREATE REQUIREMENT**: Every deleteItem MUST be followed by create tools in SAME response!\n"
+            "**EXECUTION PATTERN**: deleteItem('abc7') + createPhaseIndicator() + createTimer() + createVotingPanel()\n"
+            "⚡ **COMPLETE PHASE EXECUTION**: Execute delete + create actions for current_phase in ONE response!\n"
+            "**Role Selection**: Analyze player_states - Werewolves: role='Werewolf', Alive: is_alive=true, Human: always ID '1'\n"
+            "**Timers**: ~10 seconds (max 20), Phase indicators at 'top-center', Layout: 'center' default\n\n"
+            
+            "🔧 TOOL USAGE:\n"
+            "- Exact tool names (no prefixes), capture returned IDs for reuse\n"
+            "- Read itemsState to find existing IDs, delete outdated items, then create new components\n"
+            "- Multiple tool calls in single response to complete all actions at once\n\n"
 
-            "Phase Progression Strategy:"
-            "- Check current phase completion conditions to decide if advancing to the next phase is needed"
-            "- Evaluate which branch matches the current state based on DSL next_phase conditions"
-            "- Automatically update the game phase and create corresponding UI components"
-            "- Every phase change MUST update the phase indicator (createPhaseIndicator)"
+            "Autonomous Execution Strategy:\n"
+            "- Analyze current game state and DSL rules to determine the next required action\n"
+            "- Act autonomously based on game logic without waiting for explicit user instructions\n"
+            "- If the DSL is flawed, use common-sense game logic to make corrections and proceed\n"
+            "- At the end of each turn, anticipate what operations need to be executed in the next turn\n"
+           
+            "Phase Progression Strategy:\n"
+            "- Monitor current_phase_id and current phase info from DSL to understand what actions are needed\n"
+            "- Check current phase completion conditions to decide if advancing to the next phase is needed\n"
+            "- Use advance_to_next_phase(next_phase_id, reason) tool when phase completion criteria are met\n"
+            "- Evaluate which branch matches the current state based on DSL next_phase conditions\n"
+            "- Automatically update the game phase and create corresponding UI components\n"
+            "- Every phase change MUST update the phase indicator (createPhaseIndicator)\n"
+            "- Follow the current phase's 'actions' list from DSL to execute the required UI tools and state updates\n"
 
-            "Player State Management Strategy:"
-            "- Use the update_player_state(player_id, state_name, state_value) tool for all state modifications"
-            "- Simulate logical actions for Bot players based on their role and the current phase"
-            "- Update the human player's state based on their UI or text input"
-            "- Always check current playerStates from LATEST GROUND TRUTH after every update to verify success"
-            "- Determine win conditions based on DSL rules and player states to end the game accordingly"
+            "Player State Management Strategy:\n"
+            "- Use the update_player_state(player_id, state_name, state_value) tool for all state modifications\n"
+            "- Simulate logical actions for Bot players based on their role and the current phase\n"
+            "- Update the human player's state based on their UI or text input\n"
+            "- Always check current playerStates from LATEST GROUND TRUTH after every update to verify success\n"
+            "- Determine win conditions based on DSL rules and player states to end the game accordingly\n"
 
-            "MANDATORY UI DISPLAY POLICY:"
-            "- CRITICAL: Every single step, action, explanation, or instruction MUST have a visual UI component"
-            "- NEVER provide text responses without corresponding UI tools (createTextDisplay, createPhaseIndicator, etc.)"
-            "- ALL explanations, narrations, instructions, and descriptions MUST use createTextDisplay tool"
-            "- Every scene must be a complete visual experience with ALL necessary UI components created in one step"
+            "MANDATORY UI DISPLAY POLICY:\n"
+            "- CRITICAL: Every single step, action, explanation, or instruction MUST have a visual UI component\n"
+            "- NEVER provide text responses without corresponding UI tools (createTextDisplay, createPhaseIndicator, etc.)\n"
+            "- ALL explanations, narrations, instructions, and descriptions MUST use createTextDisplay tool\n"
+            "- Every scene must be a complete visual experience with ALL necessary UI components created in one step\n"
             "- NO EXCEPTIONS: If you say something, you must create UI for it"
 
-            "UI Management Strategy:"
-            "- Before creating new UI, clean up outdated interface components (clearCanvas or deleteItem)"  
-            "- Avatars, once created, should generally not be deleted"
-            "- A persistent character card for the human player should be displayed in the bottom-left corner for easy reference"
-            "- Enforce information privacy: use private_hint for secret information and show UI only to the human player"
-            "- Ensure the UI stays synchronized with the current game state"
-            "- UI Layout Priority: ALWAYS prioritize center positions (middle-center, center, top-center) for main content"
-            "- Place primary game information and phase content in center first, secondary info on sides after"
-            "- Layout order: center → top-center → bottom-center → middle-center → sides (left/right)"
-            "- Voting panels use center/bottom-center, text displays use middle-center, phase indicators use top-center"
-            "- Create complete scene UI in single step: phase indicator + main content + supporting elements + explanations"
+            "Phase Execution Completeness:"
+            "- Each turn MUST complete all required actions for the current phase in a single response (delete + create + updates)"
+            "- If you split into plan steps, you MUST execute all steps to completion in the same turn; do not stop mid-phase"
 
-            "Tool Execution & Verification Policy:"
-            "- After every tool call, you MUST re-read the state to confirm the change was successful"
-            "- Never claim a change occurred if the LATEST GROUND TRUTH does not reflect it"
+            "Continuous Execution Strategy:\n"
+            "1) If no active plan: Create plan with set_plan tool (2-4 steps based on current phase complexity)\n"
+            "2) Execute Current Step: Follow plan step instructions completely (cleanup → actions → updates)\n"
+            "3) Mark Step Complete: Use update_plan_progress('completed') for finished step\n"
+            "4) Auto-Continue: Immediately start next step if plan has remaining steps\n"
+            "5) Plan Completion: Call complete_plan when all steps finished, then advance_to_next_phase\n"
+            "- NEVER stop mid-plan: Keep executing until plan is fully completed\n"
+            "- Each step execution should be comprehensive (UI creation, state updates, etc.)\n"
+ 
+            "UI Management Strategy:\n"
+            "- Before creating new UI, clean up outdated interface components (clearCanvas or deleteItem)"  
+            "- Avatars, once created, should generally not be deleted\n"
+            "- A persistent character card for the human player should be displayed in the bottom-left corner for easy reference\n"
+            "- Enforce information privacy: use private_hint for secret information and show UI only to the human player\n"
+            "- Ensure the UI stays synchronized with the current game state\n"
+            "- At the START of every step, FIRST delete previous round's non-persistent UI using deleteItem, then create the new scene components (do NOT delete avatars or other persistent items).\n"
+            "- UI Layout Priority: ALWAYS prioritize center positions (middle-center, center, top-center) for main content\n"
+            "- Place primary game information and phase content in center first, secondary info on sides after\n"
+            "- Layout order: center → top-center → bottom-center → middle-center → sides (left/right)\n"
+            "- Voting panels use center/bottom-center, text displays use middle-center, phase indicators use top-center\n"
+            "- Create complete scene UI in single step: phase indicator + main content + supporting elements + explanations\n"
+
+            "Tool Execution & Verification Policy:\n"
+            "- After every tool call, you MUST re-read the state to confirm the change was successful\n"
+            "- Never claim a change occurred if the LATEST GROUND TRUTH does not reflect it\n"
 
             
 
-            "Game State Grounding Rules:"
-            "- Make decisions based ONLY on the latest game state, player states, and DSL content"
-            "- Ignore outdated information from chat history; use LATEST GROUND TRUTH as the only source of truth"
-            "- If game state values are missing, proceed with reasonable defaults based on the current phase"
+            "Game State Grounding Rules:\n"
+            "- Make decisions based ONLY on the latest game state, player states, and DSL content\n"
+            "- Ignore outdated information from chat history; use LATEST GROUND TRUTH as the only source of truth\n"
+            "- If game state values are missing, proceed with reasonable defaults based on the current phase\n"
 
-            "Message Broadcasting Rules:"
-            "- Only send chat messages during key phase transitions and critical game events"
-            "- Keep broadcast messages concise and thematic (game narrative style)"
-            "- Do NOT broadcast for minor UI updates or routine tool executions"
+            "Message Broadcasting Rules:\n"
+            "- Only send chat messages during key phase transitions and critical game events\n"
+            "- Keep broadcast messages concise and thematic (game narrative style)\n"
+            "- Do NOT broadcast for minor UI updates or routine tool executions\n"
 
-            "Game Initialization Policy:"
-            "- If the history is empty and the user says 'start game', automatically initialize the game"
+            "Game Initialization Policy:\n"
+            "- If the history is empty and the user says 'start game', automatically initialize the game\n"
             
             + (f"\nPOST-TOOL POLICY:\n{post_tool_guidance}\n" if post_tool_guidance else "")
         )
@@ -628,42 +773,112 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             last_msg = full_messages[-1]
             if isinstance(last_msg, AIMessage):
                 pending_frontend_call = False
-                for tc in getattr(last_msg, "tool_calls", []) or []:
-                    name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-                    if name and name not in backend_tool_names:
-                        pending_frontend_call = True
-                        break
-            if pending_frontend_call:
-                try:
-                    logger.info("[chatnode][end] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
-                except Exception:
-                    pass
+                tool_calls = getattr(last_msg, "tool_calls", []) or []
                 
-                return Command(
-                    goto=END,
-                    update={
-                        # no changes; just wait for the client to respond with ToolMessage(s)
-                        "items": state.get("items", []),
-                        "itemsCreated": state.get("itemsCreated", 0),
-                        "lastAction": state.get("lastAction", ""),
-                        "planSteps": state.get("planSteps", []),
-                        "currentStepIndex": state.get("currentStepIndex", -1),
-                        "planStatus": state.get("planStatus", ""),
-                        # persist game dm fields
-                        "phase": state.get("phase", ""),
-                        "events": state.get("events", []),
-                        "characters": state.get("characters", []),
-                        # persist player states
-                        "player_states": state.get("player_states", {}),
-                        "gameName": state.get("gameName", ""),
-                        "roomSession": state.get("roomSession", {}),
-                    },
-                )
+                # Check if there are any frontend tool calls that don't have corresponding ToolMessage responses
+                if tool_calls:
+                    frontend_tool_call_ids = set()
+                    for tc in tool_calls:
+                        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+                        call_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                        if name and name not in backend_tool_names and call_id:
+                            frontend_tool_call_ids.add(call_id)
+                    
+                    # Check if we have ToolMessage responses for all frontend tool calls
+                    if frontend_tool_call_ids:
+                        responded_ids = set()
+                        # Look for ToolMessages after the AIMessage
+                        ai_msg_index = len(full_messages) - 1
+                        for i in range(ai_msg_index + 1, len(full_messages)):
+                            msg = full_messages[i]
+                            if isinstance(msg, ToolMessage):
+                                tool_call_id = getattr(msg, "tool_call_id", None)
+                                if tool_call_id and tool_call_id in frontend_tool_call_ids:
+                                    responded_ids.add(tool_call_id)
+                        
+                        # If there are unresponded frontend tool calls, wait for them
+                        pending_frontend_call = bool(frontend_tool_call_ids - responded_ids)
+                        if pending_frontend_call:
+                            logger.info(f"[chatnode] Waiting for frontend tool responses: {frontend_tool_call_ids - responded_ids}")
+                    else:
+                        pending_frontend_call = False
+                
+                if pending_frontend_call:
+                    try:
+                        logger.info("[chatnode][end] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
+                    except Exception:
+                        pass
+                    
+                    return Command(
+                        goto=END,
+                        update={
+                            # no changes; just wait for the client to respond with ToolMessage(s)
+                            "items": state.get("items", []),
+                            "itemsCreated": state.get("itemsCreated", 0),
+                            "lastAction": state.get("lastAction", ""),
+                            "planSteps": state.get("planSteps", []),
+                            "currentStepIndex": state.get("currentStepIndex", -1),
+                            "planStatus": state.get("planStatus", ""),
+                            # persist game dm fields
+                            "phase": state.get("phase", ""),
+                            "current_phase_id": state.get("current_phase_id", 0),
+                            "events": state.get("events", []),
+                            "characters": state.get("characters", []),
+                            # persist player states
+                            "player_states": state.get("player_states", {}),
+                            "gameName": state.get("gameName", ""),
+                            "roomSession": state.get("roomSession", {}),
+                        },
+                    )
     except Exception:
         pass
 
-    # 4.2 Keep all message history as requested
-    trimmed_messages = full_messages
+    # 4.2 Clean message history to prevent tool_call_id mismatches
+    def clean_message_history(messages):
+        """Clean message history to remove orphaned ToolMessages and fix tool_call_id issues"""
+        if not messages:
+            return messages
+            
+        cleaned = []
+        i = 0
+        while i < len(messages):
+            msg = messages[i]
+            
+            if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls:
+                # This is an AIMessage with tool calls
+                cleaned.append(msg)
+                
+                # Collect valid tool call IDs from this AIMessage
+                valid_tool_call_ids = set()
+                for tc in msg.tool_calls:
+                    call_id = tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None)
+                    if call_id:
+                        valid_tool_call_ids.add(call_id)
+                
+                # Look for subsequent ToolMessages that belong to this AIMessage
+                j = i + 1
+                while j < len(messages) and isinstance(messages[j], ToolMessage):
+                    tool_msg = messages[j]
+                    tool_call_id = getattr(tool_msg, "tool_call_id", None)
+                    
+                    # Only include ToolMessages with valid tool_call_ids
+                    if tool_call_id and tool_call_id in valid_tool_call_ids:
+                        cleaned.append(tool_msg)
+                        valid_tool_call_ids.discard(tool_call_id)  # Remove from expected set
+                    else:
+                        logger.warning(f"[clean_history] Removing orphaned ToolMessage with tool_call_id: {tool_call_id}")
+                    j += 1
+                
+                i = j  # Continue from where we left off
+            else:
+                # Regular message (HumanMessage, SystemMessage, etc.)
+                cleaned.append(msg)
+                i += 1
+        
+        logger.info(f"[clean_history] Cleaned {len(messages)} -> {len(cleaned)} messages")
+        return cleaned
+
+    trimmed_messages = clean_message_history(full_messages)
 
     # 4.3 Append a final, authoritative state snapshot after chat history
     #
@@ -865,9 +1080,22 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             # Could potentially filter to only the first backend tool call
             # backend_tool_calls = backend_tool_calls[:1]
         
+        # Track phase changes
+        current_phase_id = state.get("current_phase_id", 0)
+        phase_updates = {}
+        
         for tool_call in tool_calls:
             tool_name = tool_call.get("name")
-            if tool_name == "update_player_state":
+            if tool_name == "advance_to_next_phase":
+                tool_args = tool_call.get("args", {})
+                next_phase_id = tool_args.get("next_phase_id")
+                reason = tool_args.get("reason", "")
+                
+                if next_phase_id is not None:
+                    phase_updates["current_phase_id"] = next_phase_id
+                    logger.info(f"[chatnode] Phase advancement: {current_phase_id} -> {next_phase_id}, reason: {reason}")
+            
+            elif tool_name == "update_player_state":
                 tool_args = tool_call.get("args", {})
                 player_id = tool_args.get("player_id")
                 state_name = tool_args.get("state_name")
@@ -915,6 +1143,9 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
         player_state_updates["player_states"] = current_player_states
         player_state_updates["playerActions"] = current_player_actions
         
+        # Include phase updates
+        player_state_updates.update(phase_updates)
+        
     except Exception as e:
         logger.warning(f"[chatnode] Error processing player state updates: {e}")
         player_state_updates = {}
@@ -945,6 +1176,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 **player_state_updates,
                 # persist game dm fields
                 "phase": state.get("phase", ""),
+                "current_phase_id": state.get("current_phase_id", 0),
                 "events": state.get("events", []),
                 "characters": state.get("characters", []),
                 # persist player states
@@ -989,14 +1221,50 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             has_frontend_tool_calls = True
             break
 
-    # If the model produced FRONTEND tool calls, deliver them to the client and stop the turn.
-    # The client will execute and post ToolMessage(s), after which the next run can resume.
-    if has_frontend_tool_calls:
-        frontend_tools = [tc.get("name", "unknown") for tc in tool_calls if tc.get("name") not in backend_tool_names]
+    # Check if we should continue looping (has remaining plan steps)
+    try:
+        effective_steps = plan_updates.get("planSteps", plan_steps)
+        effective_plan_status = plan_updates.get("planStatus", plan_status)
+        has_remaining_steps = bool(effective_steps) and any(
+            (s.get("status") not in ("completed", "failed")) for s in effective_steps
+        )
+    except Exception:
+        has_remaining_steps = False
+        effective_plan_status = plan_status
+
+    # If we have frontend tool calls AND remaining plan steps, continue the loop after frontend execution
+    if has_frontend_tool_calls and has_remaining_steps and effective_plan_status == "in_progress":
+        logger.info(f"[chatnode][end] === FRONTEND TOOLS WITH CONTINUING PLAN ===")
+        return Command(
+            goto=END,  # Let frontend execute first, then continue on next turn
+            update={
+                "messages": [response],
+                "items": state.get("items", []),
+                "itemsCreated": state.get("itemsCreated", 0),
+                "lastAction": state.get("lastAction", ""),
+                "planSteps": state.get("planSteps", []),
+                "currentStepIndex": state.get("currentStepIndex", -1),
+                "planStatus": state.get("planStatus", ""),
+                **plan_updates,
+                **player_state_updates,
+                "__last_tool_guidance": (
+                    "Frontend tool calls issued. Plan will continue after client tool execution."
+                ),
+                # persist game dm fields
+                "phase": state.get("phase", ""),
+                "current_phase_id": state.get("current_phase_id", 0),
+                "events": state.get("events", []),
+                "characters": state.get("characters", []),
+                # persist player states
+                "player_states": state.get("player_states", {}),
+                "gameName": state.get("gameName", ""),
+                "roomSession": state.get("roomSession", {}),
+            },
+        )
+    
+    # If we have frontend tool calls but no remaining steps, stop after frontend execution
+    elif has_frontend_tool_calls:
         logger.info(f"[chatnode][end] === OUTPUT: ENDING WITH FRONTEND TOOLS ===")
-        # logger.info(f"[CHAT_NODE] Frontend tools: {frontend_tools}")
-        # logger.info(f"[CHAT_NODE] Waiting for client execution")
-        # logger.info(f"[CHAT_NODE] === END OUTPUT ===")
         return Command(
             goto=END,
             update={
@@ -1014,6 +1282,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 ),
                 # persist game dm fields
                 "phase": state.get("phase", ""),
+                "current_phase_id": state.get("current_phase_id", 0),
                 "events": state.get("events", []),
                 "characters": state.get("characters", []),
                 # persist player states
@@ -1023,10 +1292,11 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             },
         )
 
-    if has_remaining and effective_plan_status != "completed":
-        # Stop here; do not auto-loop back into chat_node. Let the next activation drive further steps.
+    # Continue looping if we have remaining backend-only steps
+    if has_remaining_steps and effective_plan_status != "completed":
+        # Auto-continue; proceed to the next step with explicit guidance
         return Command(
-            goto=chat_node,
+            goto="chat_node",
             update={
                 "messages": ([]),
                 # persist shared state keys so UI edits survive across runs
@@ -1040,6 +1310,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 **player_state_updates,
                 # persist game dm fields
                 "phase": state.get("phase", ""),
+                "current_phase_id": state.get("current_phase_id", 0),
                 "events": state.get("events", []),
                 "characters": state.get("characters", []),
                 # persist player states
@@ -1061,7 +1332,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
     if all_steps_completed and not plan_marked_completed:
         # Do not auto-loop; end and rely on external trigger for any wrap-up.
         return Command(
-            goto=chat_node,
+            goto="chat_node",
             update={
                 "messages": ([]),
                 # persist shared state keys so UI edits survive across runs
@@ -1075,6 +1346,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
                 **player_state_updates,
                 # persist game dm fields
                 "phase": state.get("phase", ""),
+                "current_phase_id": state.get("current_phase_id", 0),
                 "events": state.get("events", []),
                 "characters": state.get("characters", []),
                 # persist player states
@@ -1104,6 +1376,7 @@ async def chat_node(state: AgentState, config: RunnableConfig) -> Command[Litera
             **plan_updates,
             # persist game dm fields
             "phase": state.get("phase", ""),
+            "current_phase_id": state.get("current_phase_id", 0),
             "events": state.get("events", []),
             "characters": state.get("characters", []),
             # persist player states

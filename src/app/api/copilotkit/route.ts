@@ -20,16 +20,20 @@ const baseConfig = {
  
 // 3. Build a Next.js API route that handles the CopilotKit runtime requests.
 export const POST = async (req: NextRequest) => {
-  // 从请求头获取房间特定的 threadId
-  const threadId = req.headers.get('X-Thread-ID') || 'default';
+  // Get room-scoped threadId from request header
+  const headerThreadId = req.headers.get('X-Thread-ID');
+  if (!headerThreadId) {
+    console.warn('⚠️ Missing X-Thread-ID header, falling back to "default". This may cause shared chat history across rooms.');
+  }
+  const threadId = headerThreadId || 'default';
   console.log('🧵 Using threadId for this request:', threadId);
   
-  // 为每个请求创建带有特定 threadId 的 runtime
+  // Create a runtime bound to the specific threadId per request
   const dynamicRuntime = new CopilotRuntime({
     agents: {
       "sample_agent": new LangGraphAgent({
-        ...baseConfig,        // 复用基础配置
-        threadId: threadId,   // 🔑 使用房间特定的线程ID
+        ...baseConfig,        // Reuse base config
+        threadId: threadId,   // 🔑 Room-scoped thread ID
       }),
     }
   });

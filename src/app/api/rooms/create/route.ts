@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
 
     // Generate unique IDs
     const roomId = randomUUID();
-    // 房主在新房间中总是ID=1
+    // Host is always assigned ID=1 in a new room
     const playerId = 1;
     
     // Create agent thread
@@ -94,6 +94,7 @@ export async function POST(request: NextRequest) {
     memoryStorage.setRoom(roomId, roomData);
     memoryStorage.setPlayers(roomId, [playerData]);
     console.log('✅ Room stored successfully. Total rooms:', memoryStorage.rooms.size);
+    console.log('🔗 Continuity check: room.thread_id (to be used as X-Thread-ID):', threadId);
     
     return NextResponse.json({
       roomId: roomId,

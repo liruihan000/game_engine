@@ -118,14 +118,35 @@ async def load_game_dsl() -> dict:
 
 
 def summarize_items_for_prompt(state: AgentState) -> str:
-    """Simplified for game engine - items not used for complex project management"""
+    """Summarize current UI items with ID, type, name, position - formatted for ActionExecutor deletion/creation decisions."""
     try:
         items = state.get("items", []) or []
         if not items:
             return "(no items)"
-        return f"{len(items)} item(s) present"
-    except Exception:
-        return "(unable to summarize items)"
+        
+        # Build detailed summary with IDs for deletion
+        lines: List[str] = []
+        for it in items[:15]:  # Show more items for better context
+            try:
+                item_id = it.get("id", "unknown")
+                item_type = it.get("type", "unknown")
+                item_name = it.get("name", "unnamed")
+                
+                # Get position from data or fallback to item level
+                data = it.get("data", {}) or {}
+                position = data.get("position") or it.get("position") or "none"
+                
+                # Format: [ID] type:name@position
+                lines.append(f"  [{item_id}] {item_type}:{item_name}@{position}")
+            except Exception:
+                continue
+        
+        more = "" if len(items) <= 15 else f"\n  (+{len(items)-15} more items...)"
+        header = f"Canvas Items ({len(items)} total):"
+        return header + "\n" + "\n".join(lines) + more
+        
+    except Exception as e:
+        return f"(unable to summarize items: {e})"
 
 
 async def initialize_player_states_from_dsl(dsl_content: dict, room_players: list) -> dict:
@@ -216,6 +237,54 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "changeBackgroundColor",
     "createResultDisplay",
     "createTimer",
+    "createBackgroundControl",
+    # Card game UI
+    "createHandsCard",
+    "updateHandsCard",
+    "setHandsCardAudience",
+    "createHandsCardForPlayer",
+    # Scoreboard UI
+    "createScoreBoard",
+    "updateScoreBoard",
+    "setScoreBoardEntries",
+    "upsertScoreEntry",
+    "removeScoreEntry",
+    # Broadcast input tool
+    "displayBroadcastInput",
+    # Common update tools
+    "updatePhaseIndicator",
+    "updateTextDisplay",
+    "updateActionButton",
+    "updateCharacterCard",
+    "updateVotingPanel",
+    "updateResultDisplay",
+    "updateTimer",
+    "setItemPosition",
+    # Chat-driven vote
+    "submitVote",
+    # Coins UI tools
+    "createCoinDisplay",
+    "updateCoinDisplay",
+    "incrementCoinCount",
+    "setCoinAudience",
+    # Statement board & Reaction timer
+    "createStatementBoard",
+    "updateStatementBoard",
+    "createReactionTimer",
+    "startReactionTimer",
+    "stopReactionTimer",
+    "resetReactionTimer",
+    # Night overlay & Turn indicator
+    "createNightOverlay",
+    "setNightOverlay",
+    "createTurnIndicator",
+    "updateTurnIndicator",
+    # Health & Influence
+    "createHealthDisplay",
+    "updateHealthDisplay",
+    "createInfluenceSet",
+    "updateInfluenceSet",
+    "revealInfluenceCard",
     # Component management tools
     "deleteItem",
     "clearCanvas",
@@ -364,13 +433,47 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "- Use the game schema above to ensure proper data structure for each tool call.\n"
             "- After making ALL tool calls, include a brief, friendly message about what phase/stage is ready.\n"
             "- Keep the message concise and game-narrative style (e.g., 'The game scene is ready. Please choose your character.').\n"
+            "\n"
+            "**UI STATE MANAGEMENT (CRITICAL):**\n"
+            "- **BEFORE creating new UI elements, ALWAYS clean up outdated/conflicting items first**\n"
+            "- **Phase transitions require UI refresh**: When phase changes, remove old phase-specific UI elements\n"
+            "- **Smart cleanup strategy (CRITICAL - MUST CREATE AFTER DELETE)**:\n"
+            "  1. IDENTIFY what items should be removed (old phase indicators, expired timers, outdated voting panels)\n"
+            "  2. For each required tool in actions: DELETE old item + CREATE new item in SAME response\n"
+            "  3. NEVER delete without creating replacement - this leaves UI empty!\n"
+            "  4. Example: deleteItem('old_id') + createPhaseIndicator(...) in same tool call sequence\n"
+            "- **Update vs Replace**: For dynamic content, DELETE old and CREATE new in same response\n"
+            "- **Persistent items**: Keep core game elements (character cards, permanent game state) unless explicitly changing\n"
+            "\n"
             "TOOL USAGE RULES:\n"
             "- Tool names must match exactly (no 'functions.' prefix).\n"
-            "- When you create items (e.g., via `createTextDisplay`), capture the returned id (e.g., '0002') and reuse it in later calls that require 'itemId' (e.g., 'deleteItem'). Do not pass the item name; always pass the exact id.\n"
+            "- **Item ID handling (CRITICAL)**: \n"
+            "  * itemsState now shows format: '[ID] type:name@position'\n"
+            "  * ALWAYS extract the exact ID from brackets like [0001], [0002], [0003]\n"
+            "  * NEVER use item names/types like 'phase_indicator', 'voting_panel' for deleteItem\n"
+            "  * Example: '[0001] phase_indicator:CurrentPhase@top-center' → use '0001' for deleteItem(itemId='0001')\n"
+            "\n"
+            "- **UPDATE vs DELETE+CREATE options**:\n"
+            "  * For content changes: Use updateItem functions when available (updateTextDisplay, updatePhaseIndicator, etc.)\n"
+            "  * For major changes: Use DELETE old + CREATE new pattern\n"
+            "  * UPDATE is faster and preserves item position/audience settings\n"
+            "  * Example: updateTextDisplay(itemId='0003', text='New message', position='center')\n"
+            "  * Example: updatePhaseIndicator(itemId='0001', phase='Night Phase', description='New phase info')\n"
+            "- **Creation pattern**: createTool → capture returned id → use id for future deleteItem calls\n"
+            "- **Deletion pattern**: Check itemsState for existing items → deleteItem by exact id → create replacement\n"
             "- To delete multiple items, call 'deleteItem' once per 'itemId'.\n"
+            "\n"
+            "CLEANUP EXAMPLES:\n"
+            "- Phase change: Delete old phase_indicator → Create new phase_indicator\n"
+            "- Timer expired: Delete old timer → Create new UI elements\n"
+            "- Action finished: Delete action_panel → Create results display\n"
+            "- State change: Delete old UI → Create new appropriate UI\n"
+            "- Turn transition: Delete player-specific UI → Create next player UI\n"
+            "\n"
             "ROLE ASSIGNMENT SPECIAL RULES:\n"
             "- One person can only have ONE role. When displaying roles after random assignment, place at most ONE character card per player (no duplicates).\n"
             "- For now, only consider player1: when showing assigned roles, create/place exactly one character card for player1 only; do NOT create cards for other players.\n"
+            "\n"
             "LAYOUT PLACEMENT RULES:\n"
             "- Prefer placing text tools (createTextDisplay, createResultDisplay) at grid position 'center' by default.\n"
             "- If there are already 4 or more items on canvas, distribute subsequent items across: 'top-center', 'bottom-center', 'middle-left', 'middle-right', then 'top-left', 'top-right', 'bottom-left', 'bottom-right'.\n"

@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAdditionalInstructions, useLangGraphInterrupt, useCopilotChat } from "@copilotkit/react-core";
 import { CopilotKitCSSProperties, CopilotChat, CopilotPopup } from "@copilotkit/react-ui";
@@ -16,13 +17,15 @@ import ShikiHighlighter from "react-shiki/web";
 import { motion, useScroll, useTransform, useMotionValueEvent } from "motion/react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
-import type { AgentState, PlanStep, Item, ItemData, CardType, GamePosition, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, ComponentSize, ChatMessage } from "@/lib/canvas/types";
-import { GAME_GRID_STYLE } from "@/lib/canvas/types";
+import type { AgentState, PlanStep, Item, ItemData, CardType, GamePosition, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, ComponentSize, ChatMessage, RoomPlayer, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData } from "@/lib/canvas/types";
+import { GAME_GRID_STYLE, normalizePosition } from "@/lib/canvas/types";
 import { initialState, isNonEmptyAgentState, defaultDataFor } from "@/lib/canvas/state";
 // import { projectAddField4Item, projectSetField4ItemText, projectSetField4ItemDone, projectRemoveField4Item, chartAddField1Metric, chartSetField1Label, chartSetField1Value, chartRemoveField1Metric } from "@/lib/canvas/updates";
 import useMediaQuery from "@/hooks/use-media-query";
 import { GameChatArea } from "@/components/chat/GameChatArea";
-import { getPlayersFromStates, getCurrentPlayerId } from "@/lib/player-utils";
+import BroadcastInput from "@/components/tools/BroadcastInput";
+import { getCurrentPlayerId } from "@/lib/player-utils";
+import NewItemMenu from "@/components/canvas/NewItemMenu";
 
 export default function CopilotKitPage() {
   // Use consistent agent name across all components - room isolation via threadId
@@ -64,13 +67,13 @@ export default function CopilotKitPage() {
 
   const { appendMessage } = useCopilotChat();
 
-  // 統一用戶交互處理 - 替代分散的狀態管理邏輯
+  // Unified user interaction handler - replaces scattered state logic
   const handleUserInteraction = useCallback(async (content: string, actionType?: string) => {
     try {
-      // 統一確保狀態完整性
+      // Ensure state integrity
       const currentState = state ?? initialState;
       
-      // 1️⃣ 優先從 sessionStorage 補充缺失的狀態
+      // Prefer filling missing state from sessionStorage first
       if (!currentState.gameName || !currentState.roomSession) {
         const gameContext = sessionStorage.getItem('gameContext');
         const roomSession = sessionStorage.getItem('roomSession');
@@ -80,17 +83,17 @@ export default function CopilotKitPage() {
             const base = prev ?? initialState;
             const updates: Partial<AgentState> = {};
             
-            // 補充 gameName
+            // Fill gameName
             if (!base.gameName && gameContext) {
               const context = JSON.parse(gameContext);
               updates.gameName = context.gameName;
-              console.log('🔄 補充 gameName from sessionStorage:', context.gameName);
+              console.log('🔄 Filled gameName from sessionStorage:', context.gameName);
             }
             
-            // 補充 roomSession
+            // Fill roomSession
             if (!base.roomSession && roomSession) {
               updates.roomSession = JSON.parse(roomSession);
-              console.log('🔄 補充 roomSession from sessionStorage');
+              console.log('🔄 Filled roomSession from sessionStorage');
             }
             
             // 保持现有的chatMessages，避免覆盖
@@ -101,7 +104,7 @@ export default function CopilotKitPage() {
             return result;
           });
         }
-        // 2️⃣ sessionStorage 沒有才用 URL 備份
+        // If sessionStorage is missing, fall back to URL
         else if (!currentState.gameName) {
           const urlGameName = new URLSearchParams(window.location.search).get('game');
           if (urlGameName) {
@@ -109,12 +112,12 @@ export default function CopilotKitPage() {
               ...prev, 
               gameName: urlGameName 
             } as AgentState));
-            console.log('🔄 補充 gameName from URL:', urlGameName);
+            console.log('🔄 Filled gameName from URL:', urlGameName);
           }
         }
       }
       
-      // 統一發送消息
+      // Send message via unified handler
       await appendMessage(new TextMessage({
         role: MessageRole.User,
         content
@@ -186,7 +189,7 @@ export default function CopilotKitPage() {
     
     if (!playerId) return;
 
-    // 1. 立即添加用户消息到内存存储
+    // 1. Immediately add user message to in-memory storage
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
       playerId: playerId,
@@ -198,7 +201,7 @@ export default function CopilotKitPage() {
 
     setChatMessages(prev => [...prev, userMessage]);
 
-    // 2. 发送给Agent处理Bot回复
+    // 2. Send to Agent for bot reply handling
     if (targetBotId) {
       await handleUserInteraction(
         `Player ${playerName} to Bot ${targetBotId}: ${message}`,
@@ -220,6 +223,32 @@ export default function CopilotKitPage() {
     toBotId?: string;
   } | null>(null);
   const [pendingTextValue, setPendingTextValue] = useState<string>("");
+
+  // Broadcast input UI state
+  const [pendingBroadcast, setPendingBroadcast] = useState<{
+    title?: string;
+    placeholder?: string;
+    prefill?: string;
+  } | null>(null);
+  const [broadcastOpen, setBroadcastOpen] = useState<boolean>(false);
+
+  // Agent-triggered UI tool to open floating broadcast input
+  useCopilotAction({
+    name: "displayBroadcastInput",
+    description: "Open a floating, pill-shaped broadcast input box for sending a system-wide message.",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "title", type: "string", required: false, description: "Small caption above the input" },
+      { name: "placeholder", type: "string", required: false, description: "Placeholder text in the input" },
+      { name: "prefill", type: "string", required: false, description: "Prefill text for the input" },
+    ],
+    handler: ({ title, placeholder, prefill }: { title?: string; placeholder?: string; prefill?: string }) => {
+      setPendingBroadcast({ title, placeholder, prefill });
+      setBroadcastOpen(true);
+      return "broadcast_input_opened";
+    },
+  });
 
   // Confirm handler for promptUserText dialog
   const handleConfirmPromptText = useCallback(async () => {
@@ -245,33 +274,32 @@ export default function CopilotKitPage() {
   // Get available bots from roomSession in sessionStorage
   const getAvailableBots = useCallback(() => {
     const roomSession = viewState.roomSession;
-    const deadPlayers = viewState.deadPlayers || [];
-    
+    const deadPlayers = (viewState.deadPlayers || []).map(String);
     if (!roomSession?.players) return [];
-    
-    return roomSession.players
-      .filter((player: any) => player.is_bot === true) // 只返回Bot玩家
-      .map((player: any) => ({
-        id: player.id,
-        name: player.name,
+    const players = roomSession.players as (RoomPlayer & { is_bot?: boolean; role?: string })[];
+    return players
+      .filter((player) => player.is_bot === true)
+      .map((player) => ({
+        id: String(player.id ?? ""),
+        name: String(player.name ?? ""),
         role: player.role,
-        isAlive: !deadPlayers.includes(player.id)
+        isAlive: !deadPlayers.includes(String(player.id ?? ""))
       }));
   }, [viewState.roomSession, viewState.deadPlayers]);
 
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const [showJsonView, setShowJsonView] = useState<boolean>(false);
   
-  // 聊天消息存储在本地内存中，不依赖Agent状态
+  // Chat messages are stored locally, independent from Agent state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   
-  // 监听房间变化，清空聊天记录
+  // Listen for room changes and clear chat history
   const currentRoomId = viewState.roomSession?.roomId;
   const previousRoomIdRef = useRef<string | undefined>(undefined);
   
   useEffect(() => {
     if (currentRoomId && previousRoomIdRef.current && currentRoomId !== previousRoomIdRef.current) {
-      // 房间切换，清空聊天记录
+      // Room changed, clear chat messages
       console.log('🏠 Room changed, clearing chat messages');
       setChatMessages([]);
     }
@@ -733,13 +761,17 @@ export default function CopilotKitPage() {
       { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
       { name: "size", type: "string", required: false, description: "Card size (select: 'small' | 'medium' | 'large'; default: 'medium')" },
       { name: "description", type: "string", required: false, description: "Optional character description" },
+      { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']" },
     ],
-    handler: ({ name, role, position, size, description }: { 
+    handler: ({ name, role, position, size, description, audience_type, audience_ids }: { 
       name: string;
       role: string; 
       position: string; 
       size?: string; 
-      description?: string; 
+      description?: string;
+      audience_type?: boolean;
+      audience_ids?: string[];
     }) => {
       const normalized = (name ?? "").trim();
       
@@ -755,9 +787,11 @@ export default function CopilotKitPage() {
       
       const data: CharacterCardData = {
         role,
-        position: position as GamePosition,
+        position: normalizePosition(position || 'center'),
         size: size as ComponentSize,
-        description
+        description,
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? []
       };
       return addItem("character_card", name, data);
     },
@@ -776,8 +810,10 @@ export default function CopilotKitPage() {
       { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
       { name: "size", type: "string", required: false, description: "Button size (select: 'small' | 'medium' | 'large')" },
       { name: "variant", type: "string", required: false, description: "Button style (select: 'primary' | 'secondary' | 'danger')" },
+      { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']" },
     ],
-    handler: ({ name, label, action, enabled, position, size, variant }: {
+    handler: ({ name, label, action, enabled, position, size, variant, audience_type, audience_ids }: {
       name: string;
       label: string;
       action: string;
@@ -785,6 +821,8 @@ export default function CopilotKitPage() {
       position: string;
       size?: string;
       variant?: string;
+      audience_type?: boolean;
+      audience_ids?: string[];
     }) => {
       const normalized = (name ?? "").trim();
       
@@ -802,9 +840,11 @@ export default function CopilotKitPage() {
         label,
         action,
         enabled,
-        position: position as GamePosition,
+        position: normalizePosition(position || 'center'),
         size: size as ComponentSize,
-        variant: variant as "primary" | "secondary" | "danger"
+        variant: variant as "primary" | "secondary" | "danger",
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? []
       };
       return addItem("action_button", name, data);
     },
@@ -821,13 +861,17 @@ export default function CopilotKitPage() {
       { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
       { name: "description", type: "string", required: false, description: "Optional phase description" },
       { name: "timeRemaining", type: "number", required: false, description: "Seconds remaining in phase" },
+      { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']" },
     ],
-    handler: ({ name, currentPhase, position, description, timeRemaining }: {
+    handler: ({ name, currentPhase, position, description, timeRemaining, audience_type, audience_ids }: {
       name: string;
       currentPhase: string;
       position: string;
       description?: string;
       timeRemaining?: number;
+      audience_type?: boolean;
+      audience_ids?: string[];
     }) => {
       const normalized = (name ?? "").trim();
       
@@ -843,9 +887,11 @@ export default function CopilotKitPage() {
       
       const data: PhaseIndicatorData = {
         currentPhase,
-        position: position as GamePosition,
+        position: normalizePosition(position || 'center'),
         description,
-        timeRemaining
+        timeRemaining,
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? []
       };
       return addItem("phase_indicator", name, data);
       
@@ -863,13 +909,17 @@ export default function CopilotKitPage() {
       { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
       { name: "title", type: "string", required: false, description: "Optional title text" },
       { name: "type", type: "string", required: false, description: "Display type (select: 'info' | 'warning' | 'error' | 'success')" },
+      { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']" },
     ],
-    handler: ({ name, content, position, title, type }: {
+    handler: ({ name, content, position, title, type, audience_type, audience_ids }: {
       name: string;
       content: string;
       position: string;
       title?: string;
       type?: string;
+      audience_type?: boolean;
+      audience_ids?: string[];
     }) => {
       const normalized = (name ?? "").trim();
       
@@ -885,9 +935,11 @@ export default function CopilotKitPage() {
       
       const data: TextDisplayData = {
         content,
-        position: position as GamePosition,
+        position: normalizePosition(position || 'center'),
         title,
-        type: type as "info" | "warning" | "error" | "success"
+        type: type as "info" | "warning" | "error" | "success",
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? []
       };
       return addItem("text_display", name, data);
     },
@@ -904,13 +956,17 @@ export default function CopilotKitPage() {
       { name: "options", type: "string[]", required: true, description: "List of voting options" },
       { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
       { name: "title", type: "string", required: false, description: "Optional voting title/question" },
+      { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']" },
     ],
-    handler: ({ name, votingId, options, position, title }: {
+    handler: ({ name, votingId, options, position, title, audience_type, audience_ids }: {
       name: string;
       votingId: string;
       options: string[];
       position: string;
       title?: string;
+      audience_type?: boolean;
+      audience_ids?: string[];
     }) => {
       const normalized = (name ?? "").trim();
       
@@ -934,10 +990,30 @@ export default function CopilotKitPage() {
       const data: VotingPanelData = {
         votingId,
         options,
-        position: position as GamePosition,
-        title
+        position: normalizePosition(position || 'center'),
+        title,
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? []
       };
       return addItem("voting_panel", name, data);
+    },
+  });
+
+  // Submit a vote without clicking the panel (chat-driven voting)
+  useCopilotAction({
+    name: "submitVote",
+    description: "Submit a vote programmatically for the current player (no click needed)",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "votingId", type: "string", required: true, description: "Target voting ID" },
+      { name: "option", type: "string", required: true, description: "Option to vote for (target name or id)" },
+    ],
+    handler: async ({ votingId, option }: { votingId: string; option: string }) => {
+      const playerId = getCurrentPlayerId();
+      if (!playerId) return "no_player";
+      await handleVote(votingId, playerId, option);
+      return `voted:${option}`;
     },
   });
 
@@ -949,10 +1025,14 @@ export default function CopilotKitPage() {
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "avatarType", type: "string", required: true, description: "Avatar type (select: 'human' | 'wolf' | 'dog' | 'cat')" },
+      { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']" },
     ],
-    handler: ({ name, avatarType }: {
+    handler: ({ name, avatarType, audience_type, audience_ids }: {
       name: string;
       avatarType: string;
+      audience_type?: boolean;
+      audience_ids?: string[];
     }) => {
       const normalized = (name ?? "").trim();
       
@@ -967,7 +1047,9 @@ export default function CopilotKitPage() {
       }
       
       const data: AvatarSetData = {
-        avatarType: avatarType || "human"
+        avatarType: avatarType || "human",
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? []
       };
       return addItem("avatar_set", name, data);
     },
@@ -1017,11 +1099,15 @@ export default function CopilotKitPage() {
       { name: "name", type: "string", required: true, description: "Timer name" },
       { name: "duration", type: "number", required: true, description: "Timer duration in seconds" },
       { name: "label", type: "string", required: false, description: "Optional label to display above timer" },
+      { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Array of player IDs who can see this component (only used when audience_type=false)." },
     ],
-    handler: ({ name, duration, label }: {
+    handler: ({ name, duration, label, audience_type, audience_ids }: {
       name: string;
       duration: number;
       label?: string;
+      audience_type?: boolean;
+      audience_ids?: string[];
     }) => {
       const normalized = (name ?? "").trim();
       
@@ -1038,6 +1124,9 @@ export default function CopilotKitPage() {
       const data: TimerData = {
         duration: duration || 60,
         label: label || "",
+        position: "top-left" as GamePosition,
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? []
       };
       
       const timerId = addItem("timer", name, data);
@@ -1063,17 +1152,21 @@ export default function CopilotKitPage() {
   });
 
   useCopilotAction({
-    name: "changeBackgroundColor",
-    description: "Create background color control panel with multiple color options including white and dark gray.",
+    name: "createBackgroundControl",
+    description: "Create background color control panel.",
     available: "remote",
     followUp: false,
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "backgroundColor", type: "string", required: false, description: "Initial background color (select: 'white' | 'gray-900' | 'blue-50' | 'green-50' | 'purple-50')" },
+      { name: "audience_type", type: "boolean", required: false },
+      { name: "audience_ids", type: "string[]", required: false },
     ],
-    handler: ({ name, backgroundColor }: {
+    handler: ({ name, backgroundColor, audience_type, audience_ids }: {
       name: string;
       backgroundColor?: string;
+      audience_type?: boolean;
+      audience_ids?: string[];
     }) => {
       const normalized = (name ?? "").trim();
       
@@ -1088,9 +1181,37 @@ export default function CopilotKitPage() {
       }
       
       const data: BackgroundControlData = {
-        backgroundColor: backgroundColor || "white"
+        backgroundColor: backgroundColor || "white",
+        position: "center" as GamePosition,
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? []
       };
       return addItem("background_control", name, data);
+    },
+  });
+
+  // Backward-compatible color change tool (no-op create if exists)
+  useCopilotAction({
+    name: "changeBackgroundColor",
+    description: "Change background color (creates control if missing)",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true },
+      { name: "backgroundColor", type: "string", required: true },
+    ],
+    handler: ({ name, backgroundColor }: { name: string; backgroundColor: string }) => {
+      // ensure exists
+      let id = "";
+      const normalized = (name ?? "").trim();
+      const existing = (viewState.items ?? initialState.items).find((it) => it.type === "background_control" && (it.name ?? "").trim() === normalized);
+      if (existing) {
+        id = existing.id;
+      } else {
+        id = addItem("background_control", name, { backgroundColor: backgroundColor || "white", position: "center" as GamePosition, audience_type: true, audience_ids: [] } as BackgroundControlData);
+      }
+      updateItemData(id, (prev) => ({ ...(prev as BackgroundControlData), backgroundColor }));
+      return id;
     },
   });
 
@@ -1123,9 +1244,888 @@ export default function CopilotKitPage() {
       
       const data: ResultDisplayData = {
         content: content || "RESULT",
-        position: position as GamePosition,
+        position: normalizePosition(position || 'center'),
+        audience_type: true,
+        audience_ids: []
       };
       return addItem("result_display", name, data);
+    },
+  });
+
+  // Create a Hands Card (for card games)
+  useCopilotAction({
+    name: "createHandsCard",
+    description: "Create a hand card item for card games (minimal, modern style)",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "cardType", type: "string", required: true, description: "Card classification (e.g., attack, defense, spell)" },
+      { name: "cardName", type: "string", required: true, description: "Display name of the card" },
+      { name: "descriptions", type: "string", required: false, description: "Short description or effect" },
+      { name: "color", type: "string", required: false, description: "Accent color (hex or token). Default neutral" },
+      { name: "position", type: "string", required: false, description: "Grid position (default: bottom-center)" },
+      { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Player IDs who can see this component when audience_type=false" },
+    ],
+    handler: ({ name, cardType, cardName, descriptions, color, position, audience_type, audience_ids }: {
+      name: string;
+      cardType: string;
+      cardName: string;
+      descriptions?: string;
+      color?: string;
+      position?: string;
+      audience_type?: boolean;
+      audience_ids?: string[];
+    }) => {
+      const normalized = (name ?? "").trim();
+      // Name-based idempotency
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => 
+          it.type === "hands_card" && (it.name ?? "").trim() === normalized
+        );
+        if (existing) return existing.id;
+      }
+      const data = {
+        cardType,
+        cardName,
+        descriptions,
+        color: color || "#2563eb",
+        position: normalizePosition(position) || "bottom-center",
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? [],
+      } as HandsCardData;
+      return addItem("hands_card", name, data);
+    },
+  });
+
+  // Create a Score Board
+  useCopilotAction({
+    name: "createScoreBoard",
+    description: "Create a scoreboard component with optional entries and styling",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "title", type: "string", required: false, description: "Scoreboard title" },
+      { name: "entries", type: "object[]", required: false, description: "Array of entries: [{id, name, score}]" },
+      { name: "sort", type: "string", required: false, description: "Sort order (asc|desc)" },
+      { name: "accentColor", type: "string", required: false, description: "Accent color" },
+      { name: "position", type: "string", required: false, description: "Grid position (default: top-right)" },
+      { name: "audience_type", type: "boolean", required: false, description: "true=public; false=private" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Visible player IDs if private" },
+    ],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    handler: ({ name, title, entries, sort, accentColor, position, audience_type, audience_ids }: any) => {
+      const normalized = (name ?? "").trim();
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => it.type === "score_board" && (it.name ?? "").trim() === normalized);
+        if (existing) return existing.id;
+      }
+      const data = {
+        title,
+        entries: Array.isArray(entries) ? entries : [],
+        sort: (sort as "asc" | "desc") || "desc",
+        accentColor: accentColor || "#2563eb",
+        position: (position as GamePosition) || "top-right",
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? [],
+      } as ScoreBoardData;
+      return addItem("score_board", name, data);
+    },
+  });
+
+  // Update scoreboard metadata
+  useCopilotAction({
+    name: "updateScoreBoard",
+    description: "Update scoreboard title/sort/accentColor/position",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target score_board item id" },
+      { name: "title", type: "string", required: false },
+      { name: "sort", type: "string", required: false },
+      { name: "accentColor", type: "string", required: false },
+      { name: "position", type: "string", required: false },
+    ],
+    handler: ({ itemId, title, sort, accentColor, position /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as ScoreBoardData) };
+        if (typeof title === 'string') d.title = title;
+        if (sort === 'asc' || sort === 'desc') d.sort = sort;
+        if (typeof accentColor === 'string') d.accentColor = accentColor;
+        if (typeof position === 'string') (d as any).position = position as GamePosition;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  // Replace scoreboard entries
+  useCopilotAction({
+    name: "setScoreBoardEntries",
+    description: "Replace all scoreboard entries",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "entries", type: "object[]", required: true, description: "Array of {id, name, score}" },
+    ],
+    handler: ({ itemId, entries /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      const list = Array.isArray(entries) ? entries : [];
+      updateItemData(itemId, (prev) => ({ ...(prev as ScoreBoardData), entries: list }));
+      return itemId;
+    },
+  });
+
+  // Upsert a single entry
+  useCopilotAction({
+    name: "upsertScoreEntry",
+    description: "Add or update a scoreboard entry",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "entryId", type: "string", required: true },
+      { name: "name", type: "string", required: false },
+      { name: "score", type: "number", required: false },
+    ],
+    handler: ({ itemId, entryId, name, score /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as ScoreBoardData) };
+        const entries = Array.isArray(d.entries) ? [...d.entries] : [];
+        const idx = entries.findIndex((e) => String(e.id) === String(entryId));
+        if (idx >= 0) {
+          entries[idx] = { ...entries[idx], name: name ?? entries[idx].name, score: typeof score === 'number' ? score : entries[idx].score };
+        } else {
+          entries.push({ id: String(entryId), name: name ?? String(entryId), score: typeof score === 'number' ? score : 0 });
+        }
+        d.entries = entries;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  // Remove one score entry
+  useCopilotAction({
+    name: "removeScoreEntry",
+    description: "Remove a single scoreboard entry by id",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "entryId", type: "string", required: true },
+    ],
+    handler: ({ itemId, entryId /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as ScoreBoardData) };
+        d.entries = (Array.isArray(d.entries) ? d.entries : []).filter((e) => String(e.id) !== String(entryId));
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  // Statement Board tools
+  useCopilotAction({
+    name: "createStatementBoard",
+    description: "Create a statement board (up to 3 statements) with optional highlight",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true },
+      { name: "statements", type: "string[]", required: false },
+      { name: "highlightIndex", type: "number", required: false },
+      { name: "locked", type: "boolean", required: false },
+      { name: "accentColor", type: "string", required: false },
+      { name: "position", type: "string", required: false },
+      { name: "audience_type", type: "boolean", required: false },
+      { name: "audience_ids", type: "string[]", required: false },
+    ],
+    handler: ({ name, statements, highlightIndex, locked, accentColor, position, audience_type, audience_ids /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      const normalized = (name ?? "").trim();
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => it.type === "statement_board" && (it.name ?? "").trim() === normalized);
+        if (existing) return existing.id;
+      }
+      const data: StatementBoardData = {
+        statements: Array.isArray(statements) ? statements.slice(0, 3) : ["", "", ""],
+        highlightIndex: typeof highlightIndex === 'number' ? highlightIndex : -1,
+        locked: typeof locked === 'boolean' ? locked : false,
+        accentColor: accentColor || "#2563eb",
+        position: normalizePosition(position) || "center",
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? [],
+      };
+      return addItem("statement_board", name, data);
+    },
+  });
+
+  useCopilotAction({
+    name: "updateStatementBoard",
+    description: "Update statement board fields",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "statements", type: "string[]", required: false },
+      { name: "highlightIndex", type: "number", required: false },
+      { name: "locked", type: "boolean", required: false },
+      { name: "accentColor", type: "string", required: false },
+    ],
+    handler: ({ itemId, statements, highlightIndex, locked, accentColor /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as StatementBoardData) };
+        if (Array.isArray(statements)) d.statements = statements.slice(0, 3);
+        if (typeof highlightIndex === 'number') d.highlightIndex = highlightIndex;
+        if (typeof locked === 'boolean') d.locked = locked;
+        if (typeof accentColor === 'string') d.accentColor = accentColor;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  // Reaction Timer tools
+  useCopilotAction({
+    name: "createReactionTimer",
+    description: "Create a reaction timer bar with duration and label",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true },
+      { name: "duration", type: "number", required: false },
+      { name: "label", type: "string", required: false },
+      { name: "accentColor", type: "string", required: false },
+      { name: "position", type: "string", required: false },
+      { name: "audience_type", type: "boolean", required: false },
+      { name: "audience_ids", type: "string[]", required: false },
+    ],
+    handler: ({ name, duration, label, accentColor, position, audience_type, audience_ids /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      const normalized = (name ?? "").trim();
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => it.type === "reaction_timer" && (it.name ?? "").trim() === normalized);
+        if (existing) return existing.id;
+      }
+      const data: ReactionTimerData = {
+        duration: typeof duration === 'number' ? Math.max(1, duration) : 10,
+        startedAt: Date.now(), // Auto-start the timer
+        running: true,         // Auto-start the timer
+        label: label || "Reaction Window",
+        accentColor: accentColor || "#22c55e",
+        position: normalizePosition(position) || "top-center",
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? [],
+      };
+      return addItem("reaction_timer", name, data);
+    },
+  });
+
+  useCopilotAction({
+    name: "startReactionTimer",
+    description: "Start a reaction timer (sets startedAt and running)",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "duration", type: "number", required: false },
+    ],
+    handler: ({ itemId, duration /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as ReactionTimerData) };
+        if (typeof duration === 'number') d.duration = Math.max(1, duration);
+        d.startedAt = Date.now();
+        d.running = true;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  useCopilotAction({
+    name: "stopReactionTimer",
+    description: "Stop/pause a reaction timer",
+    available: "remote",
+    followUp: false,
+    parameters: [ { name: "itemId", type: "string", required: true } ],
+    handler: ({ itemId /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(itemId, (prev) => ({ ...(prev as ReactionTimerData), running: false }));
+      return itemId;
+    },
+  });
+
+  useCopilotAction({
+    name: "resetReactionTimer",
+    description: "Reset reaction timer to idle (clears startedAt, running=false)",
+    available: "remote",
+    followUp: false,
+    parameters: [ { name: "itemId", type: "string", required: true } ],
+    handler: ({ itemId /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(itemId, (prev) => ({ ...(prev as ReactionTimerData), startedAt: undefined, running: false }));
+      return itemId;
+    },
+  });
+
+  // Night Overlay tools
+  useCopilotAction({
+    name: "createNightOverlay",
+    description: "Create a global night overlay (toggle visibility, optional text)",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true },
+      { name: "visible", type: "boolean", required: false },
+      { name: "title", type: "string", required: false },
+      { name: "subtitle", type: "string", required: false },
+      { name: "opacity", type: "number", required: false },
+      { name: "blur", type: "boolean", required: false },
+      { name: "audience_type", type: "boolean", required: false },
+      { name: "audience_ids", type: "string[]", required: false },
+    ],
+    handler: ({ name, visible, title, subtitle, opacity, blur, audience_type, audience_ids /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      const normalized = (name ?? "").trim();
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => it.type === "night_overlay" && (it.name ?? "").trim() === normalized);
+        if (existing) return existing.id;
+      }
+      const data: NightOverlayData = {
+        visible: typeof visible === 'boolean' ? visible : true,
+        title,
+        subtitle,
+        opacity: typeof opacity === 'number' ? Math.max(0, Math.min(1, opacity)) : 0.5,
+        blur: typeof blur === 'boolean' ? blur : true,
+        position: "center" as GamePosition,
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? [],
+      };
+      return addItem("night_overlay", name, data as any);
+    },
+  });
+
+  useCopilotAction({
+    name: "setNightOverlay",
+    description: "Toggle night overlay and optionally update text/opacity",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "visible", type: "boolean", required: true },
+      { name: "title", type: "string", required: false },
+      { name: "subtitle", type: "string", required: false },
+      { name: "opacity", type: "number", required: false },
+      { name: "blur", type: "boolean", required: false },
+    ],
+    handler: ({ itemId, visible, title, subtitle, opacity, blur /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as NightOverlayData) };
+        d.visible = !!visible;
+        if (typeof title === 'string') d.title = title;
+        if (typeof subtitle === 'string') d.subtitle = subtitle;
+        if (typeof opacity === 'number') d.opacity = Math.max(0, Math.min(1, opacity));
+        if (typeof blur === 'boolean') d.blur = blur;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  // Turn Indicator tools
+  useCopilotAction({
+    name: "createTurnIndicator",
+    description: "Create a pill turn indicator for the active player",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true },
+      { name: "currentPlayerId", type: "string", required: true },
+      { name: "playerName", type: "string", required: false },
+      { name: "label", type: "string", required: false },
+      { name: "accentColor", type: "string", required: false },
+      { name: "position", type: "string", required: false },
+      { name: "audience_type", type: "boolean", required: false },
+      { name: "audience_ids", type: "string[]", required: false },
+    ],
+    handler: ({ name, currentPlayerId, playerName, label, accentColor, position, audience_type, audience_ids /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      const normalized = (name ?? "").trim();
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => it.type === "turn_indicator" && (it.name ?? "").trim() === normalized);
+        if (existing) return existing.id;
+      }
+      const data: TurnIndicatorData = {
+        currentPlayerId: String(currentPlayerId),
+        playerName,
+        label: label || "Speaker",
+        accentColor: accentColor || "#2563eb",
+        position: normalizePosition(position) || "top-center",
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? [],
+      };
+      return addItem("turn_indicator", name, data);
+    },
+  });
+
+  useCopilotAction({
+    name: "updateTurnIndicator",
+    description: "Update turn indicator fields",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "currentPlayerId", type: "string", required: false },
+      { name: "playerName", type: "string", required: false },
+      { name: "label", type: "string", required: false },
+      { name: "accentColor", type: "string", required: false },
+      { name: "position", type: "string", required: false },
+    ],
+    handler: ({ itemId, currentPlayerId, playerName, label, accentColor, position /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as TurnIndicatorData) };
+        if (typeof currentPlayerId === 'string') d.currentPlayerId = currentPlayerId;
+        if (typeof playerName === 'string') d.playerName = playerName;
+        if (typeof label === 'string') d.label = label;
+        if (typeof accentColor === 'string') d.accentColor = accentColor;
+        if (typeof position === 'string') d.position = position as GamePosition;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  // Health Display (Bang!)
+  useCopilotAction({
+    name: "createHealthDisplay",
+    description: "Create a health/bullets display",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true },
+      { name: "value", type: "number", required: false },
+      { name: "max", type: "number", required: false },
+      { name: "style", type: "string", required: false },
+      { name: "accentColor", type: "string", required: false },
+      { name: "position", type: "string", required: false },
+      { name: "audience_type", type: "boolean", required: false },
+      { name: "audience_ids", type: "string[]", required: false },
+    ],
+    handler: ({ name, value, max, style, accentColor, position, audience_type, audience_ids /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      const normalized = (name ?? "").trim();
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => it.type === "health_display" && (it.name ?? "").trim() === normalized);
+        if (existing) return existing.id;
+      }
+      const data: HealthDisplayData = {
+        value: typeof value === 'number' ? Math.max(0, value) : 3,
+        max: typeof max === 'number' ? Math.max(0, max) : 5,
+        style: (style as any) || 'hearts',
+        accentColor: accentColor || '#ef4444',
+        position: (position as GamePosition) || 'top-right',
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? [],
+      };
+      return addItem('health_display', name, data);
+    },
+  });
+
+  useCopilotAction({
+    name: "updateHealthDisplay",
+    description: "Update health display (value/max/style/accentColor/position)",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "value", type: "number", required: false },
+      { name: "max", type: "number", required: false },
+      { name: "style", type: "string", required: false },
+      { name: "accentColor", type: "string", required: false },
+      { name: "position", type: "string", required: false },
+    ],
+    handler: ({ itemId, value, max, style, accentColor, position /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as HealthDisplayData) };
+        if (typeof value === 'number') d.value = Math.max(0, value);
+        if (typeof max === 'number') d.max = Math.max(0, max);
+        if (typeof style === 'string') d.style = style as any;
+        if (typeof accentColor === 'string') d.accentColor = accentColor;
+        if (typeof position === 'string') d.position = position as GamePosition;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  // Influence Set (Coup)
+  useCopilotAction({
+    name: "createInfluenceSet",
+    description: "Create a 2-card influence set for Coup",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true },
+      { name: "ownerId", type: "string", required: true },
+      { name: "cards", type: "object[]", required: false, description: "[{name, revealed}] length up to 2" },
+      { name: "accentColor", type: "string", required: false },
+      { name: "position", type: "string", required: false },
+      { name: "audience_type", type: "boolean", required: false },
+      { name: "audience_ids", type: "string[]", required: false },
+    ],
+    handler: ({ name, ownerId, cards, accentColor, position, audience_type, audience_ids /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      const normalized = (name ?? "").trim();
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => it.type === "influence_set" && (it.name ?? "").trim() === normalized);
+        if (existing) return existing.id;
+      }
+      const data: InfluenceSetData = {
+        ownerId: String(ownerId),
+        cards: Array.isArray(cards) ? cards.slice(0, 2) : [ { name: "", revealed: false }, { name: "", revealed: false } ],
+        accentColor: accentColor || '#a78bfa',
+        position: (position as GamePosition) || 'bottom-center',
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids ?? [],
+      };
+      return addItem('influence_set', name, data);
+    },
+  });
+
+  useCopilotAction({
+    name: "updateInfluenceSet",
+    description: "Update influence set fields (ownerId/cards/accentColor/position)",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "ownerId", type: "string", required: false },
+      { name: "cards", type: "object[]", required: false },
+      { name: "accentColor", type: "string", required: false },
+      { name: "position", type: "string", required: false },
+    ],
+    handler: ({ itemId, ownerId, cards, accentColor, position /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as InfluenceSetData) };
+        if (typeof ownerId === 'string') d.ownerId = ownerId;
+        if (Array.isArray(cards)) d.cards = cards.slice(0, 2);
+        if (typeof accentColor === 'string') d.accentColor = accentColor;
+        if (typeof position === 'string') d.position = position as GamePosition;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  useCopilotAction({
+    name: "revealInfluenceCard",
+    description: "Reveal one influence card by index (0 or 1)",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "index", type: "number", required: true },
+      { name: "revealed", type: "boolean", required: false },
+    ],
+    handler: ({ itemId, index, revealed /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as InfluenceSetData) };
+        const i = Math.max(0, Math.min(1, Number(index)));
+        const cards = Array.isArray(d.cards) ? [...d.cards] : [];
+        if (!cards[i]) cards[i] = { name: "", revealed: false } as any;
+        cards[i] = { ...cards[i], revealed: typeof revealed === 'boolean' ? revealed : true };
+        d.cards = cards.slice(0, 2);
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  // Update an existing Hands Card's core fields
+  useCopilotAction({
+    name: "updateHandsCard",
+    description: "Update a hands card's basic fields (type, name, descriptions, color).",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target hands_card item id" },
+      { name: "cardType", type: "string", required: false, description: "Card classification" },
+      { name: "cardName", type: "string", required: false, description: "Display name of the card" },
+      { name: "descriptions", type: "string", required: false, description: "Short description or effect" },
+      { name: "color", type: "string", required: false, description: "Accent color (hex or token)" },
+    ],
+    handler: ({ itemId, cardType, cardName, descriptions, color }: {
+      itemId: string;
+      cardType?: string;
+      cardName?: string;
+      descriptions?: string;
+      color?: string;
+    }) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as HandsCardData) };
+        if (typeof cardType === 'string') d.cardType = cardType;
+        if (typeof cardName === 'string') d.cardName = cardName;
+        if (typeof descriptions === 'string') d.descriptions = descriptions;
+        if (typeof color === 'string') d.color = color;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  // Common update tools: PhaseIndicator, TextDisplay, ActionButton, CharacterCard, VotingPanel, ResultDisplay, Timer, Item position
+  useCopilotAction({
+    name: "updatePhaseIndicator",
+    description: "Update phase indicator fields",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "currentPhase", type: "string", required: false },
+      { name: "description", type: "string", required: false },
+      { name: "timeRemaining", type: "number", required: false },
+    ],
+    handler: ({ itemId, currentPhase, description, timeRemaining /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as PhaseIndicatorData) };
+        if (typeof currentPhase === 'string') d.currentPhase = currentPhase;
+        if (typeof description === 'string') d.description = description;
+        if (typeof timeRemaining === 'number') d.timeRemaining = timeRemaining;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  useCopilotAction({
+    name: "updateTextDisplay",
+    description: "Update text display title/content/type",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "title", type: "string", required: false },
+      { name: "content", type: "string", required: false },
+      { name: "type", type: "string", required: false },
+    ],
+    handler: ({ itemId, title, content, type /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as TextDisplayData) };
+        if (typeof title === 'string') d.title = title;
+        if (typeof content === 'string') d.content = content;
+        if (typeof type === 'string') d.type = type as any;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  useCopilotAction({
+    name: "updateActionButton",
+    description: "Update action button fields",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "label", type: "string", required: false },
+      { name: "action", type: "string", required: false },
+      { name: "enabled", type: "boolean", required: false },
+      { name: "variant", type: "string", required: false },
+    ],
+    handler: ({ itemId, label, action, enabled, variant /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as ActionButtonData) };
+        if (typeof label === 'string') d.label = label;
+        if (typeof action === 'string') d.action = action;
+        if (typeof enabled === 'boolean') d.enabled = enabled;
+        if (typeof variant === 'string') d.variant = variant as any;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  useCopilotAction({
+    name: "updateCharacterCard",
+    description: "Update character card fields",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "role", type: "string", required: false },
+      { name: "description", type: "string", required: false },
+      { name: "size", type: "string", required: false },
+    ],
+    handler: ({ itemId, role, description, size /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as CharacterCardData) };
+        if (typeof role === 'string') d.role = role;
+        if (typeof description === 'string') d.description = description;
+        if (typeof size === 'string') (d as any).size = size as any;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  useCopilotAction({
+    name: "updateVotingPanel",
+    description: "Update voting panel title/options",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "title", type: "string", required: false },
+      { name: "options", type: "string[]", required: false },
+    ],
+    handler: ({ itemId, title, options /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as VotingPanelData) };
+        if (typeof title === 'string') d.title = title;
+        if (Array.isArray(options)) d.options = options;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  useCopilotAction({
+    name: "updateResultDisplay",
+    description: "Update result display content",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "content", type: "string", required: false },
+    ],
+    handler: ({ itemId, content /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as ResultDisplayData) };
+        if (typeof content === 'string') d.content = content;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  useCopilotAction({
+    name: "updateTimer",
+    description: "Update timer duration/label",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "duration", type: "number", required: false },
+      { name: "label", type: "string", required: false },
+    ],
+    handler: ({ itemId, duration, label /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as TimerData) };
+        if (typeof duration === 'number') d.duration = duration;
+        if (typeof label === 'string') d.label = label;
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  useCopilotAction({
+    name: "setItemPosition",
+    description: "Update an item's grid position if supported",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true },
+      { name: "position", type: "string", required: true },
+    ],
+    handler: ({ itemId, position /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+}: any) => {
+      updateItemData(String(itemId), (prev) => {
+        const data = { ...(prev as any) };
+        if (typeof position === 'string') data.position = position as GamePosition;
+        return data as ItemData;
+      });
+      return itemId;
+    },
+  });
+
+  // Update Hands Card audience permissions
+  useCopilotAction({
+    name: "setHandsCardAudience",
+    description: "Update audience for a hands card (public vs private players)",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "itemId", type: "string", required: true, description: "Target hands_card item id" },
+      { name: "audience_type", type: "boolean", required: true, description: "true=public, false=private" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Player IDs when private" },
+    ],
+    handler: ({ itemId, audience_type, audience_ids }: { itemId: string; audience_type: boolean; audience_ids?: string[]; }) => {
+      updateItemData(String(itemId), (prev) => {
+        const d = { ...(prev as HandsCardData) };
+        d.audience_type = audience_type;
+        d.audience_ids = audience_ids ?? [];
+        return d;
+      });
+      return itemId;
+    },
+  });
+
+  // Convenience: create a private Hands Card for a specific player
+  useCopilotAction({
+    name: "createHandsCardForPlayer",
+    description: "Create a private hands card visible only to the specified player",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "playerId", type: "string", required: true, description: "Target player id (gamePlayerId)" },
+      { name: "cardType", type: "string", required: true, description: "Card classification" },
+      { name: "cardName", type: "string", required: true, description: "Display name of the card" },
+      { name: "descriptions", type: "string", required: false, description: "Short description or effect" },
+      { name: "color", type: "string", required: false, description: "Accent color (hex or token)" },
+      { name: "position", type: "string", required: false, description: "Grid position (default: bottom-center)" },
+    ],
+    handler: ({ name, playerId, cardType, cardName, descriptions, color, position }: {
+      name: string;
+      playerId: string;
+      cardType: string;
+      cardName: string;
+      descriptions?: string;
+      color?: string;
+      position?: string;
+    }) => {
+      const data: HandsCardData = {
+        cardType,
+        cardName,
+        descriptions,
+        color: color || "#2563eb",
+        position: normalizePosition(position) || "bottom-center",
+        audience_type: false,
+        audience_ids: [String(playerId)],
+      };
+      return addItem("hands_card", name, data);
     },
   });
 
@@ -1203,7 +2203,7 @@ export default function CopilotKitPage() {
         type: (messageType as 'message' | 'system' | 'action') || 'message'
       };
 
-      // 使用内存存储，避免state管理问题
+
       setChatMessages(prev => [...prev, botMessage]);
 
       return `Bot ${botName} sent message: ${message}`;
@@ -1328,7 +2328,7 @@ export default function CopilotKitPage() {
             {/* Chat Content - conditionally rendered to avoid duplicate rendering */}
             {isDesktop && (
               <CopilotChat
-                className="flex-1 overflow-auto w-full"
+                className="flex-1 overflow-auto w-full scroll-smooth"
                 labels={{
                   title: "Game Master",
                   initial:
@@ -1431,10 +2431,12 @@ export default function CopilotKitPage() {
                         const itemsInRegion = (viewState.items ?? []).filter(item => {
                           // Exclude avatar_set items as they render as overlay
                           if (item.type === "avatar_set") return false;
-                          // Exclude timer items as they use fixed positioning
-                          if (item.type === "timer") return false;
+                          // Exclude night_overlay items as they render as global overlays
+                          if (item.type === "night_overlay") return false;
                           const itemData = item.data as ItemData;
-                          return (itemData as { position?: GamePosition })?.position === position;
+                          const itemPosition = (itemData as { position?: string })?.position;
+                          const normalizedPosition = itemPosition ? normalizePosition(itemPosition) : 'center';
+                          return normalizedPosition === position;
                         });
 
                         return (
@@ -1443,39 +2445,70 @@ export default function CopilotKitPage() {
                             style={{ gridArea: position }}
                             className="flex flex-col items-center justify-center gap-4 p-2 rounded-lg min-h-[100px]"
                           >
-                            {itemsInRegion.map((item) => (
-                              <div key={item.id} className="relative group">
-                                <button
-                                  type="button"
-                                  aria-label="Delete card"
-                                  className="absolute -right-2 -top-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-opacity"
-                                  onClick={() => deleteItem(item.id)}
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                                
-                                <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={() => toggleTag()} onButtonClick={handleButtonClick} onVote={handleVote} playerStates={viewState.player_states} deadPlayers={viewState.deadPlayers} />
-                              </div>
-                            ))}
+                            {itemsInRegion.map((item) => {
+                              // Check audience permissions for delete button visibility
+                              const currentPlayerId = getCurrentPlayerId();
+                              const itemData = item.data as ItemData & { audience_type: boolean; audience_ids: string[] };
+                              const hasPermission = !currentPlayerId || 
+                                itemData.audience_type === true || 
+                                itemData.audience_ids?.includes(currentPlayerId);
+                              
+                              return (
+                                <div key={item.id} className="relative group">
+                                  {hasPermission && (
+                                    <button
+                                      type="button"
+                                      aria-label="Delete card"
+                                      className="absolute -right-2 -top-2 z-10 inline-flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition-opacity"
+                                      onClick={() => deleteItem(item.id)}
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                  
+                                  <CardRenderer item={item} onUpdateData={(updater) => updateItemData(item.id, updater)} onToggleTag={() => toggleTag()} onButtonClick={handleButtonClick} onVote={handleVote} playerStates={viewState.player_states} deadPlayers={viewState.deadPlayers} />
+                                </div>
+                              );
+                            })}
                           </div>
                         );
                       })}
                         </div>
                       </div>
-                      
-                      {/* Render timer components with fixed positioning */}
-                      {(viewState.items ?? []).filter(item => item.type === "timer").map((item) => (
-                        <CardRenderer 
-                          key={item.id}
-                          item={item} 
-                          onUpdateData={(updater) => updateItemData(item.id, updater)} 
-                          onToggleTag={() => toggleTag()} 
-                          onButtonClick={handleButtonClick} 
-                          onVote={handleVote} 
-                          playerStates={viewState.player_states} 
-                          deadPlayers={viewState.deadPlayers} 
-                        />
-                      ))}
+
+                      {/* Render night overlay components as global overlays */}
+                      {(viewState.items ?? []).filter(item => item.type === "night_overlay").map((item) => {
+                        // Check audience permissions for delete button visibility
+                        const currentPlayerId = getCurrentPlayerId();
+                        const itemData = item.data as ItemData & { audience_type: boolean; audience_ids: string[] };
+                        const hasPermission = !currentPlayerId || 
+                          itemData.audience_type === true || 
+                          itemData.audience_ids?.includes(currentPlayerId);
+                          
+                        return (
+                          <div key={item.id}>
+                            <CardRenderer 
+                              item={item} 
+                              onUpdateData={(updater) => updateItemData(item.id, updater)} 
+                              onToggleTag={() => toggleTag()} 
+                              onButtonClick={handleButtonClick} 
+                              onVote={handleVote} 
+                              playerStates={viewState.player_states} 
+                              deadPlayers={viewState.deadPlayers} 
+                            />
+                            {hasPermission && (
+                              <button
+                                type="button"
+                                aria-label="Delete night overlay"
+                                className="fixed top-4 right-4 z-[70] inline-flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white hover:bg-red-600 transition-colors pointer-events-auto"
+                                onClick={() => deleteItem(item.id)}
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1501,34 +2534,15 @@ export default function CopilotKitPage() {
           )}
           
           {(viewState.items ?? []).length > 0 ? (
-            <div className={cn(
-              "absolute left-1/2 -translate-x-1/2 bottom-4",
-              "inline-flex rounded-lg shadow-lg bg-card",
-              "[&_button]:bg-card [&_button]:w-22 md:[&_button]:h-10",
-              "[&_button]:shadow-none! [&_button]:hover:bg-accent",
-              "[&_button]:hover:border-accent [&_button]:hover:text-accent",
-              "[&_button]:hover:bg-accent/10!",
-            )}>
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 flex gap-2">
+              <NewItemMenu 
+                onSelect={(type) => addItem(type)}
+                className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
+              />
               <Button
                 type="button"
                 variant="outline"
-                className={cn(
-                  "gap-1.25 text-base font-semibold rounded-r-none border-r-0",
-                  "bg-green-50 hover:bg-green-100 border-green-200 text-green-700",
-                )}
-                onClick={async () => {
-                  // 使用統一交互處理
-                  await handleUserInteraction("Start game.", "start_game");
-                }}
-              >
-                🎮 Start
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className={cn(
-                  "gap-1.25 text-base font-semibold rounded-l-none",
-                )}
+                className="gap-1.25 text-base font-semibold"
                 onClick={() => setShowJsonView((v) => !v)}
               >
                 {showJsonView
@@ -1541,21 +2555,24 @@ export default function CopilotKitPage() {
         </main>
         
         {/* Right Chat Area */}
-        <aside className="max-md:hidden flex flex-col min-w-80 w-[25vw] max-w-96 h-full">
-          <GameChatArea
-            messages={chatMessages}
-            currentPlayerId={typeof window !== 'undefined' ? getCurrentPlayerId() : null}
-            currentPlayerName={viewState.player_states?.[getCurrentPlayerId() || '']?.name as string || ''}
-            onSendMessage={handleSendChatMessage}
-            playerCount={Object.keys(viewState.player_states || {}).length}
-            availableBots={getAvailableBots()}
-          />
+        <aside className="max-md:hidden flex flex-col min-w-80 w-[30vw] max-w-120 p-4 pl-0">
+          <div className="h-full flex flex-col w-full shadow-lg rounded-2xl border border-sidebar-border overflow-hidden">
+            <GameChatArea
+              messages={chatMessages}
+              currentPlayerId={typeof window !== 'undefined' ? getCurrentPlayerId() : null}
+              currentPlayerName={viewState.player_states?.[getCurrentPlayerId() || '']?.name as string || ''}
+              onSendMessage={handleSendChatMessage}
+              playerCount={(viewState.roomSession?.players?.length ?? viewState.roomSession?.totalPlayers ?? Object.keys(viewState.player_states || {}).length)}
+              availableBots={getAvailableBots()}
+            />
+          </div>
         </aside>
       </div>
       <div className="md:hidden">
         {/* Mobile Chat Popup - conditionally rendered to avoid duplicate rendering */}
         {!isDesktop && (
           <CopilotPopup
+            className="scroll-smooth"
             Header={PopupHeader}
             labels={{
               title: "Game Master", 
@@ -1576,22 +2593,53 @@ export default function CopilotKitPage() {
       <Dialog open={!!pendingTextPrompt} onOpenChange={(open) => { if (!open) { setPendingTextPrompt(null); setPendingTextValue(""); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{pendingTextPrompt?.title || '输入你要发送的内容'}</DialogTitle>
+            <DialogTitle>{pendingTextPrompt?.title || 'Enter the text you want to send'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             <Textarea
               value={pendingTextValue}
               onChange={(e) => setPendingTextValue(e.target.value)}
-              placeholder={pendingTextPrompt?.placeholder || '请输入...'}
+              placeholder={pendingTextPrompt?.placeholder || 'Please enter...'}
               rows={6}
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setPendingTextPrompt(null); setPendingTextValue(""); }}>取消</Button>
-            <Button onClick={handleConfirmPromptText}>确认发送</Button>
+            <Button variant="outline" onClick={() => { setPendingTextPrompt(null); setPendingTextValue(""); }}>Cancel</Button>
+            <Button onClick={handleConfirmPromptText}>Send</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Floating Broadcast Input */}
+      <BroadcastInput
+        open={broadcastOpen}
+        title={pendingBroadcast?.title || "Broadcast"}
+        placeholder={pendingBroadcast?.placeholder || "Type a broadcast message..."}
+        initialValue={pendingBroadcast?.prefill || ""}
+        onConfirm={async (text: string) => {
+          // Add a system-style message to chat (local memory store)
+          const sysMessage: ChatMessage = {
+            id: `bc-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+            playerId: "broadcast",
+            playerName: "Broadcast",
+            message: text,
+            timestamp: Date.now(),
+            type: 'system',
+          };
+          setChatMessages(prev => [...prev, sysMessage]);
+          // Sync minimal info to shared state for agent context
+          setState(prev => ({ ...(prev ?? initialState), lastBroadcast: text } as AgentState));
+          // Notify agent
+          await handleUserInteraction(`Broadcast: ${text}`, 'broadcast');
+          // Close UI
+          setBroadcastOpen(false);
+          setPendingBroadcast(null);
+        }}
+        onClose={() => {
+          setBroadcastOpen(false);
+          setPendingBroadcast(null);
+        }}
+      />
     </div>
   );
 }

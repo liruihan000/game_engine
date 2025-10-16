@@ -8,16 +8,30 @@ interface DynamicCopilotProviderProps {
 }
 
 export default function DynamicCopilotProvider({ children }: DynamicCopilotProviderProps) {
-  const [threadId, setThreadId] = useState<string>('default');
+  const [threadId, setThreadId] = useState<string>(() => {
+    if (typeof window === 'undefined') return 'default';
+    try {
+      const gameContext = sessionStorage.getItem('gameContext');
+      if (gameContext) {
+        const context = JSON.parse(gameContext);
+        if (context?.threadId && typeof context.threadId === 'string') {
+          return context.threadId;
+        }
+      }
+    } catch {
+      // ignore and fallback
+    }
+    return 'default';
+  });
 
   useEffect(() => {
-    // 统一的 threadId 加载函数
+    // Unified loader for threadId
     const loadThreadId = () => {
       const gameContext = sessionStorage.getItem('gameContext');
       if (gameContext) {
         try {
           const context = JSON.parse(gameContext);
-          if (context.threadId) {
+          if (context.threadId && context.threadId !== threadId) {
             console.log('🧵 Setting threadId for CopilotKit:', context.threadId);
             setThreadId(context.threadId);
           }
@@ -27,23 +41,23 @@ export default function DynamicCopilotProvider({ children }: DynamicCopilotProvi
       }
     };
 
-    // 初始加载
+    // Initial load
     loadThreadId();
 
-    // 监听自定义房间切换事件
+    // Listen for custom room change events
     const handleRoomChanged = (event: CustomEvent) => {
       console.log('🏠 Room changed event received:', event.detail);
-      loadThreadId(); // 重新加载 threadId
+      loadThreadId(); // Reload threadId
     };
 
-    // 添加事件监听器
+    // Add event listener
     window.addEventListener('roomChanged', handleRoomChanged as EventListener);
     
-    // 清理函数
+    // Cleanup
     return () => {
       window.removeEventListener('roomChanged', handleRoomChanged as EventListener);
     };
-  }, []); // 只在组件挂载时执行一次
+  }, [threadId]); // Depend on current threadId to avoid unnecessary resets
 
   return (
     <CopilotKit
@@ -52,7 +66,7 @@ export default function DynamicCopilotProvider({ children }: DynamicCopilotProvi
       showDevConsole={false}
       publicApiKey={process.env.NEXT_PUBLIC_COPILOT_CLOUD_PUBLIC_API_KEY}
       headers={{
-        'X-Thread-ID': threadId, // 🔑 传递房间特定的 threadId
+        'X-Thread-ID': threadId, // 🔑 Pass room-specific threadId
       }}
       // Disable all UI components
       // chatComponentsConfig={{
