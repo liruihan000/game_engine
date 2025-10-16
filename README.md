@@ -9,11 +9,11 @@ Built in less than five days — almost no sleep, complete focus.
 
 ## Overview
 
-This project was born from obsession.  
-Over five sleepless nights — maybe ten hours of rest in total — I built a prototype that could turn pure text into playable, dynamic AI-driven worlds.
+This project was born from obsession.
+Over five sleepless nights — maybe ten hours of rest in total — I poured everything I had into building a prototype that could turn pure text into playable, dynamic AI-driven worlds.
 
-What began as a technical test became a personal mission:  
-to prove that AI should not only describe worlds, but build them, run them, and evolve them.
+What started as a “technical test” quickly became a personal mission:
+to prove that AI shouldn’t just describe worlds — *it should build them, run them, and evolve them*.
 
 This is a full-stack AI game engine that composes both backend logic and frontend UI directly from YAML DSL files — no hardcoded logic, no templates, no shortcuts.
 
