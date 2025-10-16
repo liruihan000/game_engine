@@ -100,6 +100,23 @@ graph TB
     style Runtime fill:#f3e5f5
 ```
 
+## 🔧 Available Scripts
+
+```bash
+# Development
+pnpm dev          # Start both UI and agent servers
+pnpm dev:ui       # Frontend only (:3000)
+pnpm dev:agent    # Backend only (:8123)
+
+# Production
+pnpm build        # Build for production
+pnpm start        # Start production server
+
+# Utilities  
+pnpm lint         # Code linting
+pnpm install:agent # Reinstall Python dependencies
+```
+
 ## 🎯 How It Works
 
 ### 1. **DSL-Driven Game Logic**
@@ -158,24 +175,7 @@ useCopilotAction({
 });
 ```
 
-## 🔧 Available Scripts
-
-```bash
-# Development
-pnpm dev          # Start both UI and agent servers
-pnpm dev:ui       # Frontend only (:3000)
-pnpm dev:agent    # Backend only (:8123)
-
-# Production
-pnpm build        # Build for production
-pnpm start        # Start production server
-
-# Utilities  
-pnpm lint         # Code linting
-pnpm install:agent # Reinstall Python dependencies
-```
-
-## 🎨 Game Components
+##  Game Components
 
 The engine provides rich UI components that work across all games:
 
