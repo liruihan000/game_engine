@@ -86,5 +86,17 @@ export async function getPlayers(
  */
 export function getCurrentPlayerId(): string | null {
   if (typeof window === 'undefined') return null;
-  return sessionStorage.getItem('playerId');
+  
+  // 从playerSession中读取playerId
+  const playerSession = sessionStorage.getItem('playerSession');
+  if (playerSession) {
+    try {
+      const session = JSON.parse(playerSession);
+      return String(session.playerId || '');
+    } catch {
+      return null;
+    }
+  }
+  
+  return null;
 }

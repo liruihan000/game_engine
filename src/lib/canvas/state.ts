@@ -11,6 +11,7 @@ export const initialState: AgentState = {
   currentStepIndex: -1,
   planStatus: "",
   gameName: undefined, // No game selected initially
+  chatMessages: [], // Initialize empty chat messages array
 };
 
 export function isNonEmptyAgentState(value: unknown): value is AgentState {

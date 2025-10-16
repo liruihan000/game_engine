@@ -130,6 +130,15 @@ export interface VoteRecord {
   option: string;
 }
 
+export interface ChatMessage {
+  id: string;
+  playerId: string;
+  playerName: string;
+  message: string;
+  timestamp: number;
+  type?: 'message' | 'system' | 'action';
+}
+
 export interface AgentState {
   items: Item[];
   lastAction?: string;
@@ -142,6 +151,13 @@ export interface AgentState {
   planStatus?: string;
   gameName?: string; // Current game DSL name (e.g., "werewolf", "coup")
   roomSession?: Record<string, any>; // Room session data from frontend
+  playerActions?: Record<string, {
+    name: string;
+    actions: string;
+    timestamp: number;
+    phase: string;
+  }>; // Player action tracking by ID: {"1": {name: "Alice", actions: "voted for Bob", timestamp: 1634567890, phase: "day_voting"}}
+  chatMessages?: ChatMessage[]; // Chat messages array
 }
 
 

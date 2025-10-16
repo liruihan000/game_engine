@@ -102,6 +102,7 @@ class AgentState(CopilotKitState):
     gameName: str = ""  # Current game DSL name (e.g., "werewolf", "coup")
     deadPlayers: List[str] = []  # List of dead player IDs
     vote: List[Dict[str, Any]] = []  # List of vote records
+    playerActions: Dict[str, Dict[str, Any]] = {}  # Player action tracking by ID: {"1": {"name": "Alice", "actions": "voted for Bob", "timestamp": 1634567890, "phase": "day_voting"}}
 
 async def load_game_dsl() -> dict:
     """Deprecated default DSL loader.

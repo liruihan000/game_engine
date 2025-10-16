@@ -6,6 +6,8 @@ import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type React from "react";
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import AppChatHeader, { PopupHeader } from "@/components/canvas/AppChatHeader";
 import { X, Check, Loader2 } from "lucide-react"
@@ -14,11 +16,13 @@ import ShikiHighlighter from "react-shiki/web";
 import { motion, useScroll, useTransform, useMotionValueEvent } from "motion/react";
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
-import type { AgentState, PlanStep, Item, ItemData, CardType, GamePosition, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, ComponentSize } from "@/lib/canvas/types";
+import type { AgentState, PlanStep, Item, ItemData, CardType, GamePosition, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, ComponentSize, ChatMessage } from "@/lib/canvas/types";
 import { GAME_GRID_STYLE } from "@/lib/canvas/types";
 import { initialState, isNonEmptyAgentState, defaultDataFor } from "@/lib/canvas/state";
 // import { projectAddField4Item, projectSetField4ItemText, projectSetField4ItemDone, projectRemoveField4Item, chartAddField1Metric, chartSetField1Label, chartSetField1Value, chartRemoveField1Metric } from "@/lib/canvas/updates";
 import useMediaQuery from "@/hooks/use-media-query";
+import { GameChatArea } from "@/components/chat/GameChatArea";
+import { getPlayersFromStates, getCurrentPlayerId } from "@/lib/player-utils";
 
 export default function CopilotKitPage() {
   // Use consistent agent name across all components - room isolation via threadId
@@ -89,7 +93,12 @@ export default function CopilotKitPage() {
               console.log('🔄 補充 roomSession from sessionStorage');
             }
             
-            return { ...base, ...updates } as AgentState;
+            // 保持现有的chatMessages，避免覆盖
+            const result = { ...base, ...updates } as AgentState;
+            if (base.chatMessages && base.chatMessages.length > 0) {
+              result.chatMessages = base.chatMessages;
+            }
+            return result;
           });
         }
         // 2️⃣ sessionStorage 沒有才用 URL 備份
@@ -170,8 +179,104 @@ export default function CopilotKitPage() {
   // we use viewState to avoid transient flicker; TODO: troubleshoot and remove this workaround
   const viewState: AgentState = isNonEmptyAgentState(state) ? (state as AgentState) : cachedStateRef.current;
 
+  // Handle chat messages with bot selection
+  const handleSendChatMessage = useCallback(async (message: string, targetBotId?: string) => {
+    const playerId = getCurrentPlayerId();
+    const playerName = viewState.player_states?.[playerId || '']?.name as string || `Player ${playerId}`;
+    
+    if (!playerId) return;
+
+    // 1. 立即添加用户消息到内存存储
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+      playerId: playerId,
+      playerName: playerName,
+      message: message,
+      timestamp: Date.now(),
+      type: 'message'
+    };
+
+    setChatMessages(prev => [...prev, userMessage]);
+
+    // 2. 发送给Agent处理Bot回复
+    if (targetBotId) {
+      await handleUserInteraction(
+        `Player ${playerName} to Bot ${targetBotId}: ${message}`,
+        'direct_chat'
+      );
+    } else {
+      await handleUserInteraction(
+        `Player ${playerName} in game chat: ${message}`,
+        'game_chat'
+      );
+    }
+  }, [handleUserInteraction, viewState.player_states]);
+
+  // State declarations - move before useCallback to avoid hoisting issues
+  const [pendingTextPrompt, setPendingTextPrompt] = useState<{
+    speakerId?: string;
+    title?: string;
+    placeholder?: string;
+    toBotId?: string;
+  } | null>(null);
+  const [pendingTextValue, setPendingTextValue] = useState<string>("");
+
+  // Confirm handler for promptUserText dialog
+  const handleConfirmPromptText = useCallback(async () => {
+    if (!pendingTextPrompt) return;
+    const speakerId = pendingTextPrompt.speakerId || getCurrentPlayerId();
+    if (!speakerId) {
+      setPendingTextPrompt(null);
+      setPendingTextValue("");
+      return;
+    }
+    const playerName = viewState.player_states?.[speakerId]?.name as string || `Player ${speakerId}`;
+    const text = (pendingTextValue || "").trim();
+    if (!text) return;
+    if (pendingTextPrompt.toBotId) {
+      await handleUserInteraction(`Player ${playerName} to Bot ${pendingTextPrompt.toBotId}: ${text}`, 'direct_chat');
+    } else {
+      await handleUserInteraction(`Player ${playerName} in game chat: ${text}`, 'user_input');
+    }
+    setPendingTextPrompt(null);
+    setPendingTextValue("");
+  }, [pendingTextPrompt, pendingTextValue, viewState.player_states, handleUserInteraction]);
+
+  // Get available bots from roomSession in sessionStorage
+  const getAvailableBots = useCallback(() => {
+    const roomSession = viewState.roomSession;
+    const deadPlayers = viewState.deadPlayers || [];
+    
+    if (!roomSession?.players) return [];
+    
+    return roomSession.players
+      .filter((player: any) => player.is_bot === true) // 只返回Bot玩家
+      .map((player: any) => ({
+        id: player.id,
+        name: player.name,
+        role: player.role,
+        isAlive: !deadPlayers.includes(player.id)
+      }));
+  }, [viewState.roomSession, viewState.deadPlayers]);
+
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const [showJsonView, setShowJsonView] = useState<boolean>(false);
+  
+  // 聊天消息存储在本地内存中，不依赖Agent状态
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  
+  // 监听房间变化，清空聊天记录
+  const currentRoomId = viewState.roomSession?.roomId;
+  const previousRoomIdRef = useRef<string | undefined>(undefined);
+  
+  useEffect(() => {
+    if (currentRoomId && previousRoomIdRef.current && currentRoomId !== previousRoomIdRef.current) {
+      // 房间切换，清空聊天记录
+      console.log('🏠 Room changed, clearing chat messages');
+      setChatMessages([]);
+    }
+    previousRoomIdRef.current = currentRoomId;
+  }, [currentRoomId]);
   const scrollAreaRef = useRef<HTMLDivElement | null>(null);
   const { scrollY } = useScroll({ container: scrollAreaRef });
   const headerScrollThreshold = 64;
@@ -1047,6 +1152,7 @@ export default function CopilotKitPage() {
     followUp: false,
     parameters: [],
     handler: () => {
+      console.log("🔧 clearCanvas handler called - starting execution");
       setState((prev) => {
         const base = prev ?? initialState;
         const items = base.items ?? [];
@@ -1064,7 +1170,61 @@ export default function CopilotKitPage() {
       const originalCount = (viewState.items ?? []).length;
       const avatarCount = (viewState.items ?? []).filter(item => item.type === "avatar_set").length;
       const removedCount = originalCount - avatarCount;
-      return `Canvas cleared. Removed ${removedCount} items, kept ${avatarCount} avatar sets.`;
+      const result = `Canvas cleared. Removed ${removedCount} items, kept ${avatarCount} avatar sets.`;
+      console.log("✅ clearCanvas handler completed, returning:", result);
+      return result;
+    },
+  });
+
+  // Chat-related Agent tools
+  useCopilotAction({
+    name: "addBotChatMessage",
+    description: "Add a bot message to the game chat area",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "botId", type: "string", required: true, description: "ID of the bot sending the message" },
+      { name: "botName", type: "string", required: true, description: "Name of the bot sending the message" },
+      { name: "message", type: "string", required: true, description: "Bot's chat message" },
+      { name: "messageType", type: "string", required: false, description: "Message type: 'message', 'system', or 'action'" },
+    ],
+    handler: ({ botId, botName, message, messageType }: { 
+      botId: string; 
+      botName: string; 
+      message: string; 
+      messageType?: string;
+    }) => {
+      const botMessage: ChatMessage = {
+        id: `bot-msg-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+        playerId: botId,
+        playerName: botName,
+        message: message,
+        timestamp: Date.now(),
+        type: (messageType as 'message' | 'system' | 'action') || 'message'
+      };
+
+      // 使用内存存储，避免state管理问题
+      setChatMessages(prev => [...prev, botMessage]);
+
+      return `Bot ${botName} sent message: ${message}`;
+    },
+  });
+
+  // A UI tool for the Agent to prompt user for a text paragraph, then send it with a specified speaker
+  useCopilotAction({
+    name: "promptUserText",
+    description: "Open a dialog for the user to input a paragraph and confirm; reported as spoken by a specific player.",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "speakerId", type: "string", required: false, description: "Player ID who is speaking (default: current player)" },
+      { name: "title", type: "string", required: false, description: "Dialog title" },
+      { name: "placeholder", type: "string", required: false, description: "Textarea placeholder" },
+      { name: "toBotId", type: "string", required: false, description: "Optional target bot id for direct message" },
+    ],
+    handler: ({ speakerId, title, placeholder, toBotId }: { speakerId?: string; title?: string; placeholder?: string; toBotId?: string }) => {
+      setPendingTextPrompt({ speakerId, title, placeholder, toBotId });
+      return "prompt_opened";
     },
   });
 
@@ -1379,6 +1539,18 @@ export default function CopilotKitPage() {
             </div>
           ) : null}
         </main>
+        
+        {/* Right Chat Area */}
+        <aside className="max-md:hidden flex flex-col min-w-80 w-[25vw] max-w-96 h-full">
+          <GameChatArea
+            messages={chatMessages}
+            currentPlayerId={typeof window !== 'undefined' ? getCurrentPlayerId() : null}
+            currentPlayerName={viewState.player_states?.[getCurrentPlayerId() || '']?.name as string || ''}
+            onSendMessage={handleSendChatMessage}
+            playerCount={Object.keys(viewState.player_states || {}).length}
+            availableBots={getAvailableBots()}
+          />
+        </aside>
       </div>
       <div className="md:hidden">
         {/* Mobile Chat Popup - conditionally rendered to avoid duplicate rendering */}
@@ -1399,6 +1571,27 @@ export default function CopilotKitPage() {
           />
         )}
       </div>
+
+      {/* Dialog for promptUserText */}
+      <Dialog open={!!pendingTextPrompt} onOpenChange={(open) => { if (!open) { setPendingTextPrompt(null); setPendingTextValue(""); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{pendingTextPrompt?.title || '输入你要发送的内容'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Textarea
+              value={pendingTextValue}
+              onChange={(e) => setPendingTextValue(e.target.value)}
+              placeholder={pendingTextPrompt?.placeholder || '请输入...'}
+              rows={6}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setPendingTextPrompt(null); setPendingTextValue(""); }}>取消</Button>
+            <Button onClick={handleConfirmPromptText}>确认发送</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
