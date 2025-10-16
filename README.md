@@ -3,7 +3,7 @@
 <div align="center">
 
 **DSL-Driven, Zero-Code Game Platform**  
-*Add new games by writing YAML files, not code*
+*Add new games by one sentence, not code*
 
 </div>
 
