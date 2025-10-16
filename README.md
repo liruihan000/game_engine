@@ -1,50 +1,91 @@
-# Full-Stack AI Game Canvas
+# 🎮 Full-Stack AI Game Canvas
 
-Built in less than five days — almost no sleep, complete focus.
+*Built in under 5 days — with almost no sleep and endless curiosity.*
 
-**Documentation:** [https://docs.google.com/document/d/1CugOHIvGYZ7J339M6bQpwU7fyY-Dg1BHJ__HTwXXYDA/edit?usp=drive_link](https://docs.google.com/document/d/1CugOHIvGYZ7J339M6bQpwU7fyY-Dg1BHJ__HTwXXYDA/edit?usp=drive_link)  
-**Demo Video:** [https://drive.google.com/file/d/18px28PHM45-oy7GmVgpQ5uknrBUTeqyM/view?usp=sharing](https://drive.google.com/file/d/18px28PHM45-oy7GmVgpQ5uknrBUTeqyM/view?usp=sharing)
-
----
-
-## Overview
-
-This project was born from obsession.
-Over five sleepless nights — maybe ten hours of rest in total — I poured everything I had into building a prototype that could turn pure text into playable, dynamic AI-driven worlds.
-
-What started as a “technical test” quickly became a personal mission:
-to prove that AI shouldn’t just describe worlds — *it should build them, run them, and evolve them*.
-
-This is a full-stack AI game engine that composes both backend logic and frontend UI directly from YAML DSL files — no hardcoded logic, no templates, no shortcuts.
+**Documentation:** [Google Doc](https://docs.google.com/document/d/1CugOHIvGYZ7J339M6bQpwU7fyY-Dg1BHJ__HTwXXYDA/edit?usp=drive_link)  
+**Demo Video:** [Watch Demo](https://drive.google.com/file/d/18px28PHM45-oy7GmVgpQ5uknrBUTeqyM/view?usp=sharing)
 
 ---
 
-## Architecture
+## 💡 Overview
+
+This project was born from obsession.  
+Over five sleepless nights — maybe ten hours of rest in total — I poured everything I had into building a prototype that could **turn pure text into playable, dynamic AI-driven worlds**.
+
+What started as a technical test quickly became a personal mission:  
+to prove that **AI shouldn’t just describe worlds — it should *build* them, *run* them, and *evolve* them.**
+
+It’s a system where games are not programmed but described —  
+where an agent reads a rule set, generates logic, composes UI, and plays *with* or *against* you.  
+The result is a full-stack AI game engine that can orchestrate both logic and interface in real time.
+
+---
+
+## ⚙️ Architecture Overview
 
 | Layer | Technology | Responsibility |
 |-------|-------------|----------------|
-| Frontend | **Next.js + CopilotKit** | Render dynamic canvas, expose UI tools, sync state |
-| API Layer | **Next.js Routes** | Bridge between client and backend |
-| Backend | **Python + LangGraph** | Interpret DSL, orchestrate logic, control UI |
-| Future | **Redis + PostgreSQL** | Persistent sessions and structured data |
+| **Frontend** | Next.js + CopilotKit | Render canvas, expose UI tools, sync state |
+| **API Layer** | Next.js Routes | Bridge between client and backend |
+| **Backend** | Python + LangGraph | Interpret YAML DSL, orchestrate logic, control UI |
+| **Storage (Future)** | Redis + PostgreSQL | Persistent sessions & structured data |
 
-Each game session runs in an isolated `threadId`, maintaining independent state and logic.  
-The agent acts directly on the UI via CopilotKit tool calls — dynamically creating, modifying, or destroying interface components such as cards, timers, votes, and player lists.
-
----
-
-## Technical Highlights
-
-- **YAML DSL Engine** — Games are defined, not coded.  
-- **Atomic Operations** — Shared primitives handle all gameplay mechanics.  
-- **Custom Copilot Bridge** — Backend tool calls trigger frontend actions via `useCopilotAction`.  
-- **Multi-Agent Runtime** — Referee, bots, and human players coexist under a single orchestration layer.  
-- **Open Broadcast Protocol (Experimental)** — Prototype for decentralized multi-agent communication and delegation.  
-- **Reliability Pipeline** — Deterministic replay, validation, and recovery ensure >90% completion rates.  
+Each session runs in an isolated `threadId`, maintaining full separation of state and reasoning context.  
+The AI agent communicates via **CopilotKit tool calls**, dynamically creating and modifying UI components — cards, votes, timers, text panels — with no manual code.
 
 ---
 
-## Installation
+## 🧠 System Design
+
+### Frontend (Next.js + React)
+- Data-driven **canvas** rendering from agent state.
+- Exposes frontend functions via `useCopilotAction`, enabling backend agents to modify UI in real time.
+- Synchronization through `useCoAgent` ensures frontend and backend stay perfectly aligned.
+
+### Middleware (CopilotKit)
+- Acts as a **WebSocket bridge** between logic and presentation.
+- Handles bi-directional state updates and tool calls.
+- Ensures every UI action and state mutation can be triggered or observed by the agent.
+
+### Backend (LangGraph + FastAPI)
+- LangGraph orchestrates game flow from YAML DSL files.
+- Multi-node architecture:
+  - **ActionExecutor** — renders and updates UI components.  
+  - **RefereeNode** — enforces rules and scoring.  
+  - **BotBehaviorNode** — controls NPC logic.  
+  - **PhaseNode** — manages transitions and timing.
+
+---
+
+## 🔬 Exploration and Experiments
+
+I didn’t take the easy path.  
+In five days, I tested and discarded multiple architectures before convergence:
+
+1. **Recursive Research Agent** — deep reasoning, unstable under real-time load.  
+2. **ReWOO-style Planner** — structured decomposition, slower but interpretable.  
+3. **Single-Node Real-Time Agent** — reduced latency, stable end-to-end control.  
+
+I also:
+- Hand-coded the **backend-to-frontend Copilot bridge**.  
+- Experimented with **multi-agent broadcast and delegation protocols**.  
+- Tested nearly every available agent orchestration pattern (ReWOO, Deep Research, AutoPlan, custom graph loops).  
+- Began exploring a **top-level intermediate agent** — a design that could unify all logic and coordination under a single reasoning substrate.
+
+---
+
+## 🧩 What Works
+
+- **Component-based AI Canvas** — The UI is fully generated by the agent.  
+- **YAML DSL Engine** — Add new games by writing YAML, not code.  
+- **Multi-Agent Runtime** — Referee, bots, and human players coexist in the same session.  
+- **Bi-Directional Sync** — Zero refresh, consistent across client and agent.  
+- **Evaluation Tools** — Completion metrics, validation, and replay logs.  
+- **>90% Reliability** — Achieved through strict output validation and controlled retries.
+
+---
+
+## ⚡ Installation
 
 ### Requirements
 - Node.js ≥ 18  
@@ -52,10 +93,10 @@ The agent acts directly on the UI via CopilotKit tool calls — dynamically crea
 - pnpm (recommended)  
 - OpenAI API key  
 
-### Steps
+### Setup
 ```bash
 git clone https://github.com/liruihan000/game_engine.git
 cd game_engine
 pnpm install
-echo 'OPENAI_API_KEY=your-api-key' > agent/.env
-pnpm dev     # runs frontend (:3000) and backend (:8123)
+echo 'OPENAI_API_KEY=your-key' > agent/.env
+pnpm dev  # launches frontend (:3000) + backend (:8123)
