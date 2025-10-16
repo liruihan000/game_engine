@@ -5,16 +5,17 @@
 **DSL-Driven, Zero-Code Game Platform**  
 *Add new games by writing YAML files, not code*
 
-*Doc: https: https://docs.google.com/document/d/1CugOHIvGYZ7J339M6bQpwU7fyY-Dg1BHJ__HTwXXYDA/edit?usp=drive_link*
-*Demo Viseo: https://drive.google.com/file/d/18px28PHM45-oy7GmVgpQ5uknrBUTeqyM/view?usp=sharing*
-
 </div>
 
-## 🌟 What Makes This Special
+**Documentation:**  [https://docs.google.com/document/d/1CugOHIvGYZ7J339M6bQpwU7fyY-Dg1BHJ__HTwXXYDA/edit?usp=drive_link](https://docs.google.com/document/d/1CugOHIvGYZ7J339M6bQpwU7fyY-Dg1BHJ__HTwXXYDA/edit?usp=drive_link)
+
+**Demo Video:**  [https://drive.google.com/file/d/18px28PHM45-oy7GmVgpQ5uknrBUTeqyM/view?usp=sharing](https://drive.google.com/file/d/18px28PHM45-oy7GmVgpQ5uknrBUTeqyM/view?usp=sharing)
+
+## What Makes This Special
 
 This is **not just another game platform**. It's a **reusable LLM game engine** where games are described in YAML DSL files, not programmed. Add new games by writing configuration files, not code.
 
-### 🎯 Core Philosophy
+### Core Philosophy
 - **One-Sentence Game Creation**: Generate complete games from simple text descriptions
 - **DSL-First**: Games defined in human-readable YAML files
 - **Zero Game-Specific Code**: No `if game === "werewolf"` conditions anywhere
@@ -55,7 +56,7 @@ pnpm dev  # Runs both UI (:3000) and agent (:8123)
    - The AI game master will guide you through everything
 
 
-## 🏗️ Architecture
+## Architecture
 
 ```mermaid
 graph TB
@@ -63,14 +64,14 @@ graph TB
         DSL[Game DSL Files<br/>werewolf.yaml<br/>coup.yaml<br/>+ DSL Generator]
     end
     
-    subgraph "🧠 AI Engine (Python + LangGraph)"
+    subgraph "AI Engine (Python + LangGraph)"
         Agent[LangGraph Agent<br/>Game Master<br/>GPT-4o]
         Referee[RefereeNode<br/>State & Scoring]
         ActionEx[ActionExecutor<br/>UI & Display]
         BotNodes[BotBehaviorNode<br/>NPC Players]
     end
     
-    subgraph "🎨 Frontend (Next.js 14+)"
+    subgraph "Frontend (Next.js 14+)"
         UI[Game Canvas<br/>React Components<br/>Tailwind CSS]
         Actions[CopilotKit Actions<br/>useCopilotAction]
         State[State Sync<br/>useCoAgent]
@@ -78,7 +79,7 @@ graph TB
         Chat[CopilotKit Chat<br/>Player Communication]
     end
     
-    subgraph "⚡ CopilotKit Runtime"
+    subgraph "CopilotKit Runtime"
         Runtime[AU-GI Bridge<br/>Real-time Sync<br/>Tool Execution]
     end
     
@@ -174,26 +175,11 @@ useCopilotAction({
 });
 ```
 
-##  Game Components
 
-The engine provides rich UI components that work across all games:
-
-### Core Components
-- **🎭 Character Cards**: Role assignments and descriptions
-- **🗳️ Voting Panels**: Dynamic voting interfaces
-- **⏱️ Timers**: Phase and action timers
-- **📊 Scoreboards**: Real-time score tracking
-- **💬 Text Displays**: Information and evidence
-- **🎯 Turn Indicators**: Current player highlighting
-
-### Layout System
-- **Grid-based**: 9-position grid system (top/middle/bottom × left/center/right)
-- **Center-first**: Important UI placed in center positions first
-- **Audience-aware**: Components can be public, private, or group-specific
 
 ## ➕ Adding New Games
 
-### 🚀 Method 1: DSL Generator (Recommended)
+### 🚀 DSL Generator (Recommended)
 
 **Generate games with a single sentence!** Our AI-powered DSL Generator creates complete game configurations from simple descriptions.
 
@@ -211,26 +197,7 @@ The engine provides rich UI components that work across all games:
 - *"A memory game where players must repeat an increasing sequence of actions"*
 - *"Players work together to solve puzzles before time runs out"*
 
-### 🛠️ Method 2: Manual DSL Creation
 
-For advanced users who want full control:
-
-1. **Create DSL file**: `games/your-game.yaml`
-2. **Define structure**:
-   ```yaml
-   declaration:
-     name: "Your Game"
-     min_players: 2
-     max_players: 8
-     description: "Game description here"
-   
-   phases:
-     0:
-       name: "Setup"
-       actions: ["initialize_game"]
-     1:
-       name: "Main Phase" 
-       actions: ["player_actions", "voting"]
    ```
 3. **Test**: The AI game master will automatically understand and run your game!
 
