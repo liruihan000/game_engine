@@ -5,9 +5,8 @@
 **DSL-Driven, Zero-Code Game Platform**  
 *Add new games by writing YAML files, not code*
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](#)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
-[![Platform](https://img.shields.io/badge/Platform-CopilotKit%20%2B%20LangGraph-blue)](#)
+Doc: https: https://docs.google.com/document/d/1CugOHIvGYZ7J339M6bQpwU7fyY-Dg1BHJ__HTwXXYDA/edit?usp=drive_link
+Demo Viseo: https://drive.google.com/file/d/18px28PHM45-oy7GmVgpQ5uknrBUTeqyM/view?usp=sharing
 
 </div>
 
