@@ -86,13 +86,13 @@ In five days, I tested and discarded multiple architectures before convergence:
 
 1. **Recursive Research Agent** — deep reasoning, unstable under real-time load.  
 2. **ReWOO-style Planner** — structured decomposition, slower but interpretable.  
-3. **Single-Node Real-Time Agent** — reduced latency, stable end-to-end control.  
+3. **Single-Node Real-Time Agent** — reduce latency, but DSL execution is inaccurate..  
 
 I also:
 - Hand-coded the **backend-to-frontend Copilot bridge**.  
 - Experimented with **multi-agent broadcast and delegation protocols**.  
 - Tested nearly every available agent orchestration pattern (ReWOO, Deep Research, AutoPlan, custom graph loops).  
-- Began exploring a **top-level intermediate agent** — a design that could unify all logic and coordination under a single reasoning substrate.
+- Began exploring a **intermediate agent** — a design that could unify all logic and coordination under a single reasoning substrate.
 
 ---
 
@@ -103,7 +103,6 @@ I also:
 - **Multi-Agent Runtime** — Referee, bots, and human players coexist in the same session.  
 - **Bi-Directional Sync** — Zero refresh, consistent across client and agent.  
 - **Evaluation Tools** — Completion metrics, validation, and replay logs.  
-- **>90% Reliability** — Achieved through strict output validation and controlled retries.
 
 ---
 
