@@ -18,9 +18,11 @@ Over five sleepless nights — maybe ten hours of rest in total — I poured eve
 What started as a technical test quickly became a personal mission:  
 to prove that **AI shouldn’t just describe worlds — it should *build* them, *run* them, and *evolve* them.**
 
-It’s a system where games are not programmed but described —  
+It's a system where games are not programmed but described —  
 where an agent reads a rule set, generates logic, composes UI, and plays *with* or *against* you.  
 The result is a full-stack AI game engine that can orchestrate both logic and interface in real time.
+
+Note: The multi-player system is not fully implemented yet. The missing piece is agent broadcasting, but once that's resolved, all other interfaces are already in place.
 
 ---
 
