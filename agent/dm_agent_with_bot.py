@@ -769,6 +769,7 @@ async def FeedbackDecisionNode(state: AgentState, config: RunnableConfig) -> Com
     logger.info(f"[FeedbackDecisionNode] raw_messages: {messages}")
     
     trimmed_messages = messages[-10:] if messages else []  # Keep last 10 messages for context
+    # trimmed_messages = messages
     player_states = state.get("player_states", {})
     current_phase_id = state.get("current_phase_id", 0)
     dsl_content = state.get("dsl", {})
@@ -1004,7 +1005,7 @@ async def FeedbackDecisionNode(state: AgentState, config: RunnableConfig) -> Com
         logger.info(f"[FeedbackDecisionNode][OUTPUT] Updates player_states: {phasenode_updates.get('player_states', 'NOT_SET')}")
         logger.info(f"[FeedbackDecisionNode][OUTPUT] Updates playerActions: {phasenode_updates.get('playerActions', 'NOT_SET')}")
         
-        return Command(goto="PhaseNode", update=phasenode_updates)    
+        return Command(goto="PhaseNode", update={**phasenode_updates, "messages": [response]})    
     else:
         logger.info("[FeedbackDecisionNode] Players need feedback - routing to BotBehaviorNode")
         # Note: Player 1 feedback will be handled by ActionExecutor UI creation
@@ -1016,7 +1017,7 @@ async def FeedbackDecisionNode(state: AgentState, config: RunnableConfig) -> Com
         logger.info(f"[FeedbackDecisionNode][OUTPUT] Updates player_states: {botbehavior_updates.get('player_states', 'NOT_SET')}")
         logger.info(f"[FeedbackDecisionNode][OUTPUT] Updates playerActions: {botbehavior_updates.get('playerActions', 'NOT_SET')}")
         
-        return Command(goto="BotBehaviorNode", update=botbehavior_updates)
+        return Command(goto="BotBehaviorNode", update={**botbehavior_updates, "messages": [response]})
 
 
 async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["RefereeNode"]]:
@@ -1050,6 +1051,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
     # Extract inputs - simplified with BaseMessage
     messages = state.get("messages", [])  # Safe dictionary access to BaseMessage list
     trimmed_messages = messages[-10:] if messages else []
+    # trimmed_messages = messages
     player_states = state.get("player_states", {})
     current_phase_id = state.get("current_phase_id", 0)
     need_feed_back_dict = state.get("need_feed_back_dict", {})
@@ -1183,7 +1185,8 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
             "player_states": current_player_states,
             "playerActions": current_player_actions,
             "roomSession": state.get("roomSession", {}),
-            "dsl": state.get("dsl", {})
+            "dsl": state.get("dsl", {}),
+            "messages": [response]
         }
     )
 
@@ -1214,6 +1217,7 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     # Extract inputs - simplified with BaseMessage
     messages = state.get("messages", [])  # Safe dictionary access to BaseMessage list
     trimmed_messages = messages[-10:] if messages else []
+    # trimmed_messages = messages
     player_states = state.get("player_states", {})
     current_phase_id = state.get("current_phase_id", 0)
     dsl_content = state.get("dsl", {})
@@ -1384,7 +1388,8 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             "player_states": current_player_states,
             "referee_conclusions": conclusions,
             "roomSession": state.get("roomSession", {}),
-            "dsl": state.get("dsl", {})
+            "dsl": state.get("dsl", {}),
+            "messages": [response]
         }
     )
 
@@ -1537,6 +1542,7 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
                 "dsl": dsl_content,
                 "phase_completion": state.get("phase_completion", {}),
                 "playerActions": state.get("playerActions", {}),
+                "messages": [response]
             }
         )
         
@@ -1631,6 +1637,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
     
     messages = state.get("messages", []) or []
     trimmed_messages = messages[-10:]
+    # trimmed_messages = messages
     # PhaseNode focuses purely on phase transition - no role assignment
     
     system_message = SystemMessage(
@@ -1831,7 +1838,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
     
     return Command(
         goto="RoleAssignmentNode",
-        update=phasenode_outputs
+        update={**phasenode_outputs, "messages": [response]}
     )
 
 
@@ -1851,6 +1858,58 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     # Log raw_messages at node start
     raw_messages = state.get("messages", [])
     logger.info(f"[ActionExecutor] raw_messages: {raw_messages}")
+    
+    # === DETAILED MESSAGE ANALYSIS ===
+    tool_messages = []
+    ai_messages_with_tool_calls = []
+    
+    for i, msg in enumerate(raw_messages):
+        if isinstance(msg, ToolMessage):
+            tool_messages.append({
+                "index": i,
+                "tool_call_id": getattr(msg, "tool_call_id", None),
+                "name": getattr(msg, "name", None),
+                "content": msg.content,
+                "type": "ToolMessage"
+            })
+        elif isinstance(msg, AIMessage) and getattr(msg, "tool_calls", None):
+            tool_calls_info = []
+            for tc in msg.tool_calls:
+                tc_info = {
+                    "id": tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None),
+                    "name": tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None),
+                    "args": tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
+                }
+                tool_calls_info.append(tc_info)
+            
+            ai_messages_with_tool_calls.append({
+                "index": i,
+                "content": msg.content,
+                "tool_calls": tool_calls_info,
+                "tool_calls_count": len(tool_calls_info),
+                "type": "AIMessage"
+            })
+    
+    logger.info(f"[ActionExecutor][TOOLMESSAGES] Total ToolMessages found: {len(tool_messages)}")
+    for tm in tool_messages:
+        logger.info(f"[ActionExecutor][TOOLMESSAGES] [{tm['index']}] tool_call_id={tm['tool_call_id']}, name={tm['name']}, content_preview={str(tm['content'])[:100]}...")
+    
+    logger.info(f"[ActionExecutor][TOOLCALLS] Total AIMessages with tool_calls: {len(ai_messages_with_tool_calls)}")
+    for ai_msg in ai_messages_with_tool_calls:
+        logger.info(f"[ActionExecutor][TOOLCALLS] [{ai_msg['index']}] content_preview={str(ai_msg['content'])[:50]}..., tool_calls_count={ai_msg['tool_calls_count']}")
+        for tc in ai_msg['tool_calls']:
+            logger.info(f"[ActionExecutor][TOOLCALLS]   -> id={tc['id']}, name={tc['name']}, args={tc['args']}")
+    
+    # === MESSAGE PAIRING ANALYSIS ===
+    logger.info(f"[ActionExecutor][PAIRING] Analyzing tool_call -> tool_message pairing...")
+    for ai_msg in ai_messages_with_tool_calls:
+        for tc in ai_msg['tool_calls']:
+            tc_id = tc['id']
+            matching_tool_msgs = [tm for tm in tool_messages if tm['tool_call_id'] == tc_id]
+            logger.info(f"[ActionExecutor][PAIRING] tool_call id={tc_id} name={tc['name']} -> {len(matching_tool_msgs)} matching ToolMessage(s)")
+            for tm in matching_tool_msgs:
+                logger.info(f"[ActionExecutor][PAIRING]   -> ToolMessage at index {tm['index']}, name={tm['name']}")
+    
     
     logger.info(f"[ActionExecutor][start] ==== start ActionExecutor ====")
     
@@ -2070,49 +2129,49 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     # 4. Trim messages and filter out orphaned ToolMessages
     full_messages = state.get("messages", []) or []
     trimmed_messages = full_messages[-30:]  # Increased to accommodate multiple tool calls
-    
-    # # Filter out incomplete AIMessage + ToolMessage sequences
-    # filtered_messages = []
-    # i = 0
-    # while i < len(trimmed_messages):
-    #     msg = trimmed_messages[i]
+    # trimmed_messages=full_messages
+    # Filter out incomplete AIMessage + ToolMessage sequences
+    filtered_messages = []
+    i = 0
+    while i < len(trimmed_messages):
+        msg = trimmed_messages[i]
         
-    #     if isinstance(msg, AIMessage) and msg.tool_calls:
-    #         # Collect expected tool_call_ids - handle both dict and object formats
-    #         expected_ids = set()
-    #         for tc in msg.tool_calls:
-    #             if isinstance(tc, dict):
-    #                 tc_id = tc.get("id")
-    #             else:
-    #                 tc_id = getattr(tc, "id", None)
-    #             if tc_id:
-    #                 expected_ids.add(tc_id)
+        if isinstance(msg, AIMessage) and msg.tool_calls:
+            # Collect expected tool_call_ids - handle both dict and object formats
+            expected_ids = set()
+            for tc in msg.tool_calls:
+                if isinstance(tc, dict):
+                    tc_id = tc.get("id")
+                else:
+                    tc_id = getattr(tc, "id", None)
+                if tc_id:
+                    expected_ids.add(tc_id)
             
-    #         # Collect following ToolMessages
-    #         tool_messages = []
-    #         j = i + 1
-    #         while j < len(trimmed_messages) and isinstance(trimmed_messages[j], ToolMessage):
-    #             tool_messages.append(trimmed_messages[j])
-    #             j += 1
+            # Collect following ToolMessages
+            tool_messages = []
+            j = i + 1
+            while j < len(trimmed_messages) and isinstance(trimmed_messages[j], ToolMessage):
+                tool_messages.append(trimmed_messages[j])
+                j += 1
             
-    #         # Check if all expected tool_call_ids have responses
-    #         received_ids = {tm.tool_call_id for tm in tool_messages if tm.tool_call_id}
+            # Check if all expected tool_call_ids have responses
+            received_ids = {tm.tool_call_id for tm in tool_messages if tm.tool_call_id}
             
-    #         # Only keep if ALL tool_calls have responses
-    #         if expected_ids and expected_ids == received_ids:
-    #             filtered_messages.append(msg)
-    #             filtered_messages.extend(tool_messages)
+            # Only keep if ALL tool_calls have responses
+            if expected_ids and expected_ids == received_ids:
+                filtered_messages.append(msg)
+                filtered_messages.extend(tool_messages)
             
-    #         i = j
-    #     elif isinstance(msg, ToolMessage):
-    #         # Orphaned ToolMessage, skip
-    #         i += 1
-    #     else:
-    #         # Keep other messages (HumanMessage, SystemMessage, etc.)
-    #         filtered_messages.append(msg)
-    #         i += 1
+            i = j
+        elif isinstance(msg, ToolMessage):
+            # Orphaned ToolMessage, skip
+            i += 1
+        else:
+            # Keep other messages (HumanMessage, SystemMessage, etc.)
+            filtered_messages.append(msg)
+            i += 1
     
-    # trimmed_messages = filtered_messages
+    trimmed_messages = filtered_messages
     
     latest_state_system = SystemMessage(
         content=(
