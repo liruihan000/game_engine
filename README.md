@@ -1,325 +1,106 @@
-# 🎮 Reusable LLM Game Engine
+# 🎮 Full-Stack AI Game Canvas
 
-<div align="center">
+*Built in under 5 days — with almost no sleep and endless curiosity.*
 
-**DSL-Driven, Zero-Code Game Platform**  
-*Add new games by writing YAML files, not code*
+**Documentation:** [Google Doc](https://docs.google.com/document/d/1CugOHIvGYZ7J339M6bQpwU7fyY-Dg1BHJ__HTwXXYDA/edit?usp=drive_link)  
+**Demo Video:** [Watch Demo](https://drive.google.com/file/d/18px28PHM45-oy7GmVgpQ5uknrBUTeqyM/view?usp=sharing)
 
-[![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](#)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](#license)
-[![Platform](https://img.shields.io/badge/Platform-CopilotKit%20%2B%20LangGraph-blue)](#)
+---
 
-</div>
+## 💡 Overview
 
-## 🌟 What Makes This Special
+This project was born from obsession.  
+Over five sleepless nights — maybe ten hours of rest in total — I poured everything I had into building a prototype that could **turn pure text into playable, dynamic AI-driven worlds**.
 
-This is **not just another game platform**. It's a **reusable LLM game engine** where games are described in YAML DSL files, not programmed. Add new games by writing configuration files, not code.
+What started as a technical test quickly became a personal mission:  
+to prove that **AI shouldn’t just describe worlds — it should *build* them, *run* them, and *evolve* them.**
 
-### 🎯 Core Philosophy
-- **One-Sentence Game Creation**: Generate complete games from simple text descriptions
-- **DSL-First**: Games defined in human-readable YAML files
-- **Zero Game-Specific Code**: No `if game === "werewolf"` conditions anywhere
-- **Atomic Operations**: Generic tools work across all game types
-- **AI Game Master**: Intelligent host that understands rules and guides players
-- **Real-time Synchronization**: Frontend and backend stay perfectly in sync
+It’s a system where games are not programmed but described —  
+where an agent reads a rule set, generates logic, composes UI, and plays *with* or *against* you.  
+The result is a full-stack AI game engine that can orchestrate both logic and interface in real time.
 
-## 🚀 Quick Start
+---
 
-### Prerequisites
-- Node.js 18+ 
-- Python 3.12+
-- pnpm (recommended) or npm/yarn/bun
-- OpenAI API Key
+## ⚡ Installation
 
-### Installation
+### Requirements
+- Node.js ≥ 18  
+- Python ≥ 3.12  
+- pnpm (recommended)  
+- OpenAI API key  
 
-1. **Clone and install dependencies:**
+### Setup
 ```bash
 git clone https://github.com/liruihan000/game_engine.git
 cd game_engine
-pnpm install  # This also installs Python dependencies
+pnpm install
+echo 'OPENAI_API_KEY=your-key' > agent/.env
+pnpm dev  # launches frontend (:3000) + backend (:8123)
 ```
 
-2. **Set up OpenAI API key:**
-```bash
-echo 'OPENAI_API_KEY=your-openai-api-key-here' > agent/.env
-```
+---
 
-3. **Start the game engine:**
-```bash
-pnpm dev  # Runs both UI (:3000) and agent (:8123)
-```
+## ⚙️ Architecture Overview
 
-4. **Play your first game!**
-   - Navigate to http://localhost:3000
-   - Select a game (Werewolf, Two Truths and a Lie, etc.)
-   - The AI game master will guide you through everything
+| Layer | Technology | Responsibility |
+|-------|-------------|----------------|
+| **Frontend** | Next.js + CopilotKit | Render canvas, expose UI tools, sync state |
+| **API Layer** | Next.js Routes | Bridge between client and backend |
+| **Backend** | Python + LangGraph | Interpret YAML DSL, orchestrate logic, control UI |
+| **Storage (Future)** | Redis + PostgreSQL | Persistent sessions & structured data |
 
+Each session runs in an isolated `threadId`, maintaining full separation of state and reasoning context.  
+The AI agent communicates via **CopilotKit tool calls**, dynamically creating and modifying UI components — cards, votes, timers, text panels — with no manual code.
 
-## 🏗️ Architecture
+---
 
-```mermaid
-graph TB
-    subgraph "🎮 Game Layer"
-        DSL[Game DSL Files<br/>werewolf.yaml<br/>coup.yaml<br/>+ DSL Generator]
-    end
-    
-    subgraph "🧠 AI Engine (Python + LangGraph)"
-        Agent[LangGraph Agent<br/>Game Master<br/>GPT-4o]
-        Referee[RefereeNode<br/>State & Scoring]
-        ActionEx[ActionExecutor<br/>UI & Display]
-        BotNodes[BotBehaviorNode<br/>NPC Players]
-    end
-    
-    subgraph "🎨 Frontend (Next.js 14+)"
-        UI[Game Canvas<br/>React Components<br/>Tailwind CSS]
-        Actions[CopilotKit Actions<br/>useCopilotAction]
-        State[State Sync<br/>useCoAgent]
-        API[Next.js API Routes<br/>RESTful Endpoints]
-        Chat[CopilotKit Chat<br/>Player Communication]
-    end
-    
-    subgraph "⚡ CopilotKit Runtime"
-        Runtime[WebSocket Bridge<br/>Real-time Sync<br/>Tool Execution]
-    end
-    
-    DSL --> Agent
-    Agent --> Referee
-    Agent --> ActionEx
-    Agent --> BotNodes
-    ActionEx --> Runtime
-    Runtime <--> UI
-    Runtime <--> Actions
-    Runtime <--> State
-    Runtime <--> Chat
-    Runtime <--> API
-    
-    style DSL fill:#e8f5e8
-    style Agent fill:#fff3e0
-    style UI fill:#e1f5fe
-    style Runtime fill:#f3e5f5
-```
+## 🧠 System Design
 
-## 🎯 How It Works
+### Frontend (Next.js + React)
+- Data-driven **canvas** rendering from agent state.
+- Exposes frontend functions via `useCopilotAction`, enabling backend agents to modify UI in real time.
+- Synchronization through `useCoAgent` ensures frontend and backend stay perfectly aligned.
 
-### 1. **DSL-Driven Game Logic**
-Games can be generated from simple text descriptions, or manually defined in YAML files with phases, actions, and rules:
+### Middleware (CopilotKit)
+- Acts as a **WebSocket bridge** between logic and presentation.
+- Handles bi-directional state updates and tool calls.
+- Ensures every UI action and state mutation can be triggered or observed by the agent.
 
-```yaml
-# games/werewolf.yaml
-declaration:
-  name: "Werewolf"
-  min_players: 4
-  max_players: 12
-  roles:
-    - name: "Werewolf"
-      count: 1
-      description: "Eliminate villagers during night phases"
-    - name: "Villager"  
-      count: "remaining"
-      description: "Find and eliminate werewolves"
+### Backend (LangGraph + FastAPI)
+- LangGraph orchestrates game flow from YAML DSL files.
+- Multi-node architecture:
+  - **ActionExecutor** — renders and updates UI components.  
+  - **RefereeNode** — enforces rules and scoring.  
+  - **BotBehaviorNode** — controls NPC logic.  
+  - **PhaseNode** — manages transitions and timing.
 
-phases:
-  0:
-    name: "Role Assignment"
-    description: "Secretly assign roles to players"
-    actions: ["assign_roles", "display_roles"]
-  1:
-    name: "Day Discussion"
-    description: "Players discuss and vote to eliminate"
-    actions: ["open_discussion", "voting_panel"]
-```
+---
 
-### 2. **Intelligent AI Game Master**
-The LangGraph agent acts as an intelligent game master that:
-- **Understands rules** from DSL files
-- **Guides players** through each phase
-- **Manages state** and scoring automatically
-- **Creates UI components** dynamically
-- **Handles NPC players** with realistic behavior
+## 🔬 Exploration and Experiments
 
-### 3. **Real-time UI Synchronization**
-Frontend and backend stay perfectly synchronized:
+I didn’t take the easy path.  
+In five days, I tested and discarded multiple architectures before convergence:
 
-```typescript
-// Frontend tools are exposed to the AI agent
-useCopilotAction({
-  name: "createVotingPanel",
-  description: "Display voting interface",
-  available: "remote",
-  parameters: [
-    { name: "options", type: "array", required: true },
-    { name: "audience_ids", type: "array", required: true }
-  ],
-  handler: ({ options, audience_ids }) => {
-    // AI calls this to create voting UI
-    updateGameState({ votingPanel: { options, audience_ids } });
-  }
-});
-```
+1. **Recursive Research Agent** — deep reasoning, unstable under real-time load.  
+2. **ReWOO-style Planner** — structured decomposition, slower but interpretable.  
+3. **Single-Node Real-Time Agent** — reduced latency, stable end-to-end control.  
 
-## 🔧 Available Scripts
+I also:
+- Hand-coded the **backend-to-frontend Copilot bridge**.  
+- Experimented with **multi-agent broadcast and delegation protocols**.  
+- Tested nearly every available agent orchestration pattern (ReWOO, Deep Research, AutoPlan, custom graph loops).  
+- Began exploring a **top-level intermediate agent** — a design that could unify all logic and coordination under a single reasoning substrate.
 
-```bash
-# Development
-pnpm dev          # Start both UI and agent servers
-pnpm dev:ui       # Frontend only (:3000)
-pnpm dev:agent    # Backend only (:8123)
+---
 
-# Production
-pnpm build        # Build for production
-pnpm start        # Start production server
+## 🧩 What Works
 
-# Utilities  
-pnpm lint         # Code linting
-pnpm install:agent # Reinstall Python dependencies
-```
+- **Component-based AI Canvas** — The UI is fully generated by the agent.  
+- **YAML DSL Engine** — Add new games by writing a sentence in dsl generator page.  
+- **Multi-Agent Runtime** — Referee, bots, and human players coexist in the same session.  
+- **Bi-Directional Sync** — Zero refresh, consistent across client and agent.  
+- **Evaluation Tools** — Completion metrics, validation, and replay logs.  
+- **>90% Reliability** — Achieved through strict output validation and controlled retries.
 
-## 🎨 Game Components
+---
 
-The engine provides rich UI components that work across all games:
-
-### Core Components
-- **🎭 Character Cards**: Role assignments and descriptions
-- **🗳️ Voting Panels**: Dynamic voting interfaces
-- **⏱️ Timers**: Phase and action timers
-- **📊 Scoreboards**: Real-time score tracking
-- **💬 Text Displays**: Information and evidence
-- **🎯 Turn Indicators**: Current player highlighting
-
-### Layout System
-- **Grid-based**: 9-position grid system (top/middle/bottom × left/center/right)
-- **Center-first**: Important UI placed in center positions first
-- **Audience-aware**: Components can be public, private, or group-specific
-
-## ➕ Adding New Games
-
-### 🚀 Method 1: DSL Generator (Recommended)
-
-**Generate games with a single sentence!** Our AI-powered DSL Generator creates complete game configurations from simple descriptions.
-
-1. **Start the game engine**: `pnpm dev`
-2. **Open DSL Generator**: Navigate to the DSL Generator section in the frontend
-3. **Describe your game**: 
-   - **Title**: "Spy Hunt"
-   - **Description**: "Players try to identify the spy among them by asking questions, while the spy tries to blend in without revealing their identity"
-4. **Wait 2-3 minutes**: The AI will generate a complete DSL file
-5. **Play immediately**: Your new game is ready to play!
-
-**Examples of one-sentence game descriptions:**
-- *"A bluffing game where players claim to have certain cards and others can challenge them"*
-- *"Players take turns telling stories and others vote on which story is the most creative"*  
-- *"A memory game where players must repeat an increasing sequence of actions"*
-- *"Players work together to solve puzzles before time runs out"*
-
-### 🛠️ Method 2: Manual DSL Creation
-
-For advanced users who want full control:
-
-1. **Create DSL file**: `games/your-game.yaml`
-2. **Define structure**:
-   ```yaml
-   declaration:
-     name: "Your Game"
-     min_players: 2
-     max_players: 8
-     description: "Game description here"
-   
-   phases:
-     0:
-       name: "Setup"
-       actions: ["initialize_game"]
-     1:
-       name: "Main Phase" 
-       actions: ["player_actions", "voting"]
-   ```
-3. **Test**: The AI game master will automatically understand and run your game!
-
-### 🔧 Advanced Features
-
-For complex games, you can specify:
-- **Dynamic roles** with conditional counts
-- **Multi-stage phases** with sub-actions  
-- **Conditional logic** based on game state
-- **Victory conditions** and scoring rules
-- **Special actions** for different roles
-
-## 🏆 Success Stories
-
-- **90%+ completion rate** across diverse game types
-- **Zero game-specific code** - everything is reusable
-- **Sub-second response times** for state synchronization
-- **Scalable architecture** - designed for 12+ players with scaling framework ready
-
-## 🛠️ Technical Deep Dive
-
-### State Management
-```typescript
-interface AgentState {
-  items: UIComponent[];           // Visual game components
-  player_states: PlayerStates;    // Current player data  
-  current_phase_id: number;      // Active game phase
-  playerActions: ActionHistory;   // Player action log
-  dsl: GameDSL;                  // Loaded game rules
-  chatMessages: ChatMessage[];    // Game communication
-}
-```
-
-### AI Agent Nodes
-- **ActionExecutor**: Creates and manages UI components
-- **RefereeNode**: Updates player states and scoring
-- **BotBehaviorNode**: Controls NPC player behavior
-- **PhaseNode**: Manages game flow and transitions
-
-### Frontend-Backend Architecture
-
-**Frontend Stack (Next.js):**
-- **Next.js 14+**: Full-stack React framework with API routes
-- **CopilotKit**: Real-time AI integration and state synchronization
-- **Tailwind CSS**: Utility-first styling with shadcn/ui components
-- **TypeScript**: Type-safe development with strict typing
-
-**Backend Stack (Python):**
-- **LangGraph**: AI agent workflow orchestration
-- **OpenAI GPT-4o**: Large language model for game mastering
-- **FastAPI**: High-performance async API endpoints
-- **YAML DSL**: Human-readable game configuration files
-
-### Real-time Synchronization
-```typescript
-// Frontend-Backend sync via CopilotKit
-const { state, setState } = useCoAgent<AgentState>({
-  name: "game_agent",
-  initialState
-});
-
-// Bi-directional flow:
-// Frontend → setState() → CopilotKit → LangGraph Agent
-// Agent → createVotingPanel() → CopilotKit → Frontend UI Update
-```
-
-
-
-**Python dependency issues:**
-```bash
-cd agent
-rm -rf .venv
-python -m venv .venv --clear
-.venv/bin/pip install -r requirements.txt
-```
-
-**State sync problems:**
-- Check browser console for WebSocket errors
-- Verify OpenAI API key is set correctly
-- Ensure both servers started successfully
-
-
-<div align="center">
-
-**Built with using CopilotKit + LangGraph**
-
-*Turn your game ideas into reality with just a YAML file*
-
-[🎮 Start Playing](#quick-start) • [📖 Read Docs](#documentation) • [🤝 Contribute](#contributing)
-
-</div>
