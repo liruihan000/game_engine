@@ -24,34 +24,34 @@ import json
 # Monitoring configuration
 VERBOSE_LOGGING = True  # Set to False to disable detailed logging
 
-# 直接配置 logger，不依赖 basicConfig
+# Configure logger directly, not depending on basicConfig
 logger = logging.getLogger('DMAgentWithBot')
-logger.handlers.clear()  # 清除现有 handlers
+logger.handlers.clear()  # Clear existing handlers
 
 if VERBOSE_LOGGING:
     logger.setLevel(logging.INFO)
     
-    # 创建格式器
+    # Create formatter
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
     
-    # 文件处理器 - 开发态按"天"合并日志（避免热重载生成多文件）
+    # File handler - merge daily logs in dev mode (avoid multiple files from hot reload)
     from datetime import datetime
     date_str = datetime.now().strftime('%Y%m%d')
     log_file = f'/home/lee/canvas-with-langgraph-python/logs/dm_agent_bot_{date_str}.log'
     
-    # 确保日志目录存在
+    # Ensure log directory exists
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     
-    # 控制台处理器
+    # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     
-    logger.propagate = False  # 防止传播到root logger
+    logger.propagate = False  # Prevent propagation to root logger
     logger.info(f"Logging to: {log_file}")
 else:
     logger.setLevel(logging.CRITICAL)

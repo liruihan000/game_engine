@@ -1,13 +1,13 @@
 ---
 alwaysApply: true
 ---
-## 添加新UI组件需要更新的位置
+## Locations to Update When Adding New UI Components
 
-基于代码分析，要添加一个新的UI组件需要更新以下位置：
+Based on code analysis, adding a new UI component requires updating the following locations:
 
-1. 类型定义 (src/lib/canvas/types.ts)
+1. Type Definition (src/lib/canvas/types.ts)
 
-// 添加新的数据类型
+// Add new data type
 export interface NewComponentData {
 property1: string;
 property2?: boolean;
@@ -15,23 +15,23 @@ position: GamePosition;
 size?: ComponentSize;
 }
 
-// 更新 ItemData 联合类型
+// Update ItemData union type
 export type ItemData =
 | CharacterCardData
 | ActionButtonData
 | PhaseIndicatorData
 | TextDisplayData
-| NewComponentData;  // ← 添加新类型
+| NewComponentData;  // ← Add new type
 
-// 更新 CardType 联合类型
+// Update CardType union type
 export type CardType =
 | "character_card"
 | "action_button"
 | "phase_indicator"
 | "text_display"
-| "new_component";  // ← 添加新类型
+| "new_component";  // ← Add new type
 
-1. 默认数据 (src/lib/canvas/state.ts)
+1. Default Data (src/lib/canvas/state.ts)
 
 export const defaultDataFor = (type: CardType): ItemData => {
 switch (type) {
@@ -39,7 +39,7 @@ case "character_card": return { /* ... */ };
 case "action_button": return { /* ... */ };
 case "phase_indicator": return { /* ... */ };
 case "text_display": return { /* ... */ };
-case "new_component": return {  // ← 添加新组件默认数据
+case "new_component": return {  // ← Add new component default data
 property1: "",
 property2: false,
 position: "center",
@@ -49,9 +49,9 @@ default: return { position: "center" };
 }
 };
 
-1. 渲染组件 (src/components/canvas/CardRenderer.tsx)
+1. Render Component (src/components/canvas/CardRenderer.tsx)
 
-// 在 CardRenderer 函数中添加新的渲染逻辑
+// Add new rendering logic in CardRenderer function
 if (item.type === "new_component") {
 const d = item.data as NewComponentData;
 const getSizeClasses = (size: string = 'medium') => {
@@ -66,7 +66,7 @@ return sizeMap[size] || sizeMap.medium;
 ```
 return (
   <div className={`${getSizeClasses(d.size)} bg-card border rounded-lg p-3`}>
-    {/* 新组件的UI实现 */}
+    {/* New component UI implementation */}
     <div>{d.property1}</div>
   </div>
 );
@@ -75,7 +75,7 @@ return (
 
 }
 
-1. Agent工具注册 (src/app/page.tsx)
+1. Agent Tool Registration (src/app/page.tsx)
 
 useCopilotAction({
 name: "createNewComponent",
@@ -88,18 +88,18 @@ parameters: [
 description" },
 { name: "position", type: "string", required: true, description: "Grid
 position" },
-// ... 其他参数
+// ... other parameters
 ],
-handler: ({ name, property1, position, /* 其他参数 */ }: {
+handler: ({ name, property1, position, /* other parameters */ }: {
 name: string;
 property1: string;
 position: string;
-// ... 其他类型
+// ... other types
 }) => {
 const normalized = (name ?? "").trim();
 
 ```
-  // 重复性检查
+  // Duplicate check
   if (normalized) {
     const existing = (viewState.items ?? initialState.items).find((it) =>
       it.type === "new_component" && (it.name ?? "").trim() === normalized
@@ -112,7 +112,7 @@ const normalized = (name ?? "").trim();
   const data: NewComponentData = {
     property1,
     position: position as GamePosition,
-    // ... 其他属性
+    // ... other properties
   };
   return addItem("new_component", name, data);
 },
@@ -123,27 +123,27 @@ const normalized = (name ?? "").trim();
 
 1. NewItemMenu (src/components/canvas/NewItemMenu.tsx)
 
-// 如果需要手动创建菜单，添加新选项
+// If manual creation menu is needed, add new option
 const options: { id: CardType; label: string }[] = [
 { id: "character_card", label: "Character Card" },
 { id: "action_button", label: "Action Button" },
 { id: "phase_indicator", label: "Phase Indicator" },
 { id: "text_display", label: "Text Display" },
-{ id: "new_component", label: "New Component" },  // ← 添加
+{ id: "new_component", label: "New Component" },  // ← Add
 ];
 
-🎯 总结
+🎯 Summary
 
-必须更新的核心位置 (5个):
+Required core update locations (5):
 
-1. 类型定义 - types.ts
-2. 默认数据 - state.ts
-3. 渲染组件 - CardRenderer.tsx
-4. Agent工具 - page.tsx (useCopilotAction)
-5.Agent文件 (agent/agent_no_loop.py)
+1. Type Definition - types.ts
+2. Default Data - state.ts
+3. Render Component - CardRenderer.tsx
+4. Agent Tool - page.tsx (useCopilotAction)
+5. Agent File (agent/agent_no_loop.py)
 
-可选更新的位置 (1个):
-6. 创建菜单 - NewItemMenu.tsx
+Optional update locations (1):
+6. Creation Menu - NewItemMenu.tsx
 
 
 FRONTEND_TOOL_ALLOWLIST = set([
@@ -152,7 +152,7 @@ FRONTEND_TOOL_ALLOWLIST = set([
 "createActionButton",
 "createPhaseIndicator",
 "createTextDisplay",
-"createNewComponent",  # ← 添加新工具
+"createNewComponent",  # ← Add new tool
 # Component management tools
 "deleteItem"
 ])
