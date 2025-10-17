@@ -4,7 +4,7 @@
 
 **Documentation:** [Google Doc](https://docs.google.com/document/d/1CugOHIvGYZ7J339M6bQpwU7fyY-Dg1BHJ__HTwXXYDA/edit?usp=drive_link)  
 
-**Demo Video:** [Watch Demo](https://drive.google.com/file/d/18px28PHM45-oy7GmVgpQ5uknrBUTeqyM/view?usp=sharing)
+**Demo Video:** [Watch Demo](https://youtu.be/wgIr_062JH8)
 *The video shows two cases: Werewolf (Mafia) and Two Truths and a Lie (this one still has some bugs; I will solve it soon).
 I haven't made any customized operations on any DSLs. They are all automatically generated based on a description.*
 
