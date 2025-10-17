@@ -1,0 +1,435 @@
+declaration:
+  description: A lightweight social deduction microgame codenamed DSFGS. Players secretly
+    join one of two teams and take short turns to act or bluff. Private information
+    can be revealed over time.
+  is_multiplayer: true
+  min_players: 3
+  roles:
+  - name: Agent
+    description: Works with teammates to identify and expose opposing players.
+  - name: Mole
+    description: Deceives opponents and aids their own team from the shadows.
+  player_states:
+    name:
+      type: string
+      example: Player A
+      description: Public display name used in announcements and targeting.
+    role:
+      type: string
+      example: Agent
+      description: Player's hidden role. Visibility controlled by role_revealed.
+    team:
+      type: string
+      example: alpha
+      description: Team affiliation for audience targeting and team-specific UI.
+    is_alive:
+      type: boolean
+      example: true
+      description: Whether the player is still active in the game.
+    is_active:
+      type: boolean
+      example: false
+      description: Whose turn it currently is. Controls turn-specific UI components.
+    secret_info_access:
+      type: boolean
+      example: false
+      description: Permission flag for viewing private panels or logs.
+    role_revealed:
+      type: boolean
+      example: false
+      description: If true, the player's role is public to all.
+  player_states_template:
+    player_states:
+      1:
+        name: ''
+        role: ''
+        team: ''
+        is_alive: true
+        is_active: false
+        secret_info_access: false
+        role_revealed: false
+  players_example:
+    player_states:
+      1:
+        name: Aria
+        role: Agent
+        team: alpha
+        is_alive: true
+        is_active: true
+        secret_info_access: true
+        role_revealed: false
+      2:
+        name: Blaise
+        role: Mole
+        team: bravo
+        is_alive: true
+        is_active: false
+        secret_info_access: true
+        role_revealed: false
+      3:
+        name: Cass
+        role: Agent
+        team: alpha
+        is_alive: true
+        is_active: false
+        secret_info_access: false
+        role_revealed: false
+  audience_groups:
+    active_player:
+      description: Player whose turn it is
+      selection_criteria: player.is_active == true
+    alive_players:
+      description: Players still in the game
+      selection_criteria: player.is_alive == true
+    team_alpha:
+      description: Alive members of team alpha
+      selection_criteria: player.team == 'alpha' and player.is_alive == true
+    team_bravo:
+      description: Alive members of team bravo
+      selection_criteria: player.team == 'bravo' and player.is_alive == true
+    secret_holders:
+      description: Players with access to private information panels
+      selection_criteria: player.secret_info_access == true
+    revealed_roles:
+      description: Players whose roles are public
+      selection_criteria: player.role_revealed == true
+phases:
+  0:
+    name: Game Introduction
+    description: Introduce DSFGS rules, objectives, and setup to all players; explain
+      secret teams (Agents vs Moles), turn flow, and reveal mechanics.
+    actions:
+    - description: Reset UI for a clean start
+      tools:
+      - clearCanvas
+    - description: 'TIER 1 - PUBLIC: Show phase indicator and overview instructions
+        for everyone'
+      tools:
+      - createPhaseIndicator
+      - createTextDisplay
+    - description: 'TIER 1 - PUBLIC: Display player list and basic configuration summary
+        (no hidden info)'
+      tools:
+      - createTextDisplay
+    completion_criteria:
+      type: UI_displayed
+      description: Game introduction and setup information have been displayed to
+        all players.
+    next_phase:
+      id: 1
+      name: Role Assignment
+  1:
+    name: Role Assignment
+    description: Randomly assign hidden roles (Agent, Mole) and corresponding teams
+      (alpha for Agents, bravo for Moles). Display each player's role privately using
+      character cards.
+    actions:
+    - description: 'TIER 1 - PUBLIC: Show role assignment phase indicator and general
+        announcement'
+      tools:
+      - createPhaseIndicator
+      - createTextDisplay
+    - description: 'TIER 2 - GROUP: Provide team-specific guidance visible only to
+        team alpha and team bravo respectively'
+      tools:
+      - createTextDisplay
+    - description: 'TIER 3 - INDIVIDUAL: Create private role character cards for each
+        player (only visible to the assigned player)'
+      tools:
+      - createCharacterCard
+    completion_criteria:
+      type: UI_displayed
+      description: Roles and teams assigned; private role cards displayed to the correct
+        individual players with proper audience permissions.
+    next_phase:
+      id: 2
+      name: Select First Active Player
+  2:
+    name: Select First Active Player
+    description: System determines the first active player among alive players and
+      updates is_active; announce turn start.
+    actions:
+    - description: 'TIER 1 - PUBLIC: Show turn setup indicator and announce how the
+        first player is chosen'
+      tools:
+      - createPhaseIndicator
+      - createTextDisplay
+    - description: 'TIER 1 - PUBLIC: Display active turn pill highlighting the selected
+        player'
+      tools:
+      - createTurnIndicator
+    completion_criteria:
+      type: UI_displayed
+      description: First active player has been selected and indicated to all players.
+    next_phase:
+      id: 3
+      name: Active Player — Choose Action
+  3:
+    name: Active Player — Choose Action
+    description: 'Active player chooses one action: Reveal Self, Peek Player, Accuse
+      Player, or Pass.'
+    actions:
+    - description: 'TIER 1 - PUBLIC: Show phase indicator and turn context to all
+        players'
+      tools:
+      - createPhaseIndicator
+      - createTextDisplay
+    - description: 'TIER 2 - GROUP: Display waiting/status message to non-active alive
+        players'
+      tools:
+      - createTextDisplay
+    - description: 'TIER 3 - INDIVIDUAL: Present action choice voting panel to the
+        active player only'
+      tools:
+      - createVotingPanel
+    completion_criteria:
+      type: player_action
+      description: Active player has selected an action via the voting panel, and
+        relevant player state (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Current active player
+        condition: player.is_active == true and player.is_alive == true
+    next_phase:
+      If the active player chooses 'Reveal Self':
+        id: 4
+        name: Resolve Self Reveal
+      If the active player chooses 'Peek Player':
+        id: 5
+        name: Select Peek Target
+      If the active player chooses 'Accuse Player':
+        id: 7
+        name: Select Accusation Target
+      If the active player chooses 'Pass':
+        id: 10
+        name: Turn End Summary
+  4:
+    name: Resolve Self Reveal
+    description: Reveal the active player's role to everyone and set role_revealed
+      to true for that player.
+    actions:
+    - description: 'TIER 1 - PUBLIC: Update phase indicator and announce self-reveal'
+      tools:
+      - createPhaseIndicator
+      - createTextDisplay
+    - description: 'TIER 1 - PUBLIC: Display revealed role to all players'
+      tools:
+      - createCharacterCard
+      - createResultDisplay
+    completion_criteria:
+      type: UI_displayed
+      description: Self-reveal has been announced publicly and the player's role is
+        now visible to all.
+    next_phase:
+      id: 10
+      name: Turn End Summary
+  5:
+    name: Select Peek Target
+    description: Active player selects one alive target (not themselves) to privately
+      peek at their role.
+    actions:
+    - description: 'TIER 1 - PUBLIC: Show phase indicator and general instructions'
+      tools:
+      - createPhaseIndicator
+      - createTextDisplay
+    - description: 'TIER 2 - GROUP: Display waiting/status message to non-active alive
+        players'
+      tools:
+      - createTextDisplay
+    - description: 'TIER 3 - INDIVIDUAL: Present target selection voting panel to
+        the active player only (options: alive players excluding self)'
+      tools:
+      - createVotingPanel
+    completion_criteria:
+      type: player_action
+      description: Active player has selected a peek target via voting panel, and
+        relevant player state (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Current active player selecting a peek target
+        condition: player.is_active == true and player.is_alive == true
+    next_phase:
+      id: 6
+      name: Private Peek Result
+  6:
+    name: Private Peek Result
+    description: Privately show the peeked target’s role to the active player while
+      others see a waiting message.
+    actions:
+    - description: 'TIER 1 - PUBLIC: Show waiting/processing status for all non-active
+        players'
+      tools:
+      - createTextDisplay
+    - description: 'TIER 3 - INDIVIDUAL: Display a private role info card to the active
+        player only'
+      tools:
+      - createHandsCard
+    completion_criteria:
+      type: UI_displayed
+      description: Peek result shown privately to the active player with proper audience
+        targeting.
+    next_phase:
+      id: 10
+      name: Turn End Summary
+  7:
+    name: Select Accusation Target
+    description: Active player selects one alive target to accuse; this may trigger
+      a support vote.
+    actions:
+    - description: 'TIER 1 - PUBLIC: Show phase indicator and instructions for accusation
+        targeting'
+      tools:
+      - createPhaseIndicator
+      - createTextDisplay
+    - description: 'TIER 2 - GROUP: Display waiting/status message to non-active players'
+      tools:
+      - createTextDisplay
+    - description: 'TIER 3 - INDIVIDUAL: Present target selection voting panel to
+        the active player only (options: alive players excluding self)'
+      tools:
+      - createVotingPanel
+    completion_criteria:
+      type: player_action
+      description: Active player has selected an accusation target via voting panel,
+        and relevant player state (player_states) has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: Current active player selecting an accusation target
+        condition: player.is_active == true and player.is_alive == true
+    next_phase:
+      id: 8
+      name: Accusation Support Vote
+  8:
+    name: Accusation Support Vote
+    description: All alive players vote to Support or Reject forcing the accused player
+      to publicly reveal their role.
+    actions:
+    - description: 'TIER 1 - PUBLIC: Show phase indicator and identify the accused'
+      tools:
+      - createPhaseIndicator
+      - createTextDisplay
+    - description: 'TIER 1 - PUBLIC: Create voting panel visible only to alive players
+        with options [''Support Reveal'',''Do Not Support'']'
+      tools:
+      - createVotingPanel
+    completion_criteria:
+      type: player_action
+      description: Votes have been received from all surviving players, and relevant
+        player state (player_states) has been updated.
+      wait_for: all_players_action
+      target_players:
+        description: All surviving players voting to support or reject the reveal
+        condition: player.is_alive == true
+    next_phase:
+      id: 9
+      name: Announce Accusation Outcome
+  9:
+    name: Announce Accusation Outcome
+    description: Announce whether the support threshold was met; if supported, reveal
+      the accused player's role to all.
+    actions:
+    - description: Clean up voting UI from the previous phase
+      tools:
+      - deleteItem
+    - description: 'TIER 1 - PUBLIC: Display outcome (supported or rejected) to all
+        players'
+      tools:
+      - createResultDisplay
+      - createTextDisplay
+    - description: 'TIER 1 - PUBLIC: If supported, display the accused player''s role
+        card to everyone and set role_revealed to true'
+      tools:
+      - createCharacterCard
+    completion_criteria:
+      type: UI_displayed
+      description: Accusation outcome has been publicly announced and any reveal has
+        been shown to all players.
+    next_phase:
+      id: 10
+      name: Turn End Summary
+  10:
+    name: Turn End Summary
+    description: Summarize the turn’s outcome and prepare to check win conditions.
+    actions:
+    - description: 'TIER 1 - PUBLIC: Show phase indicator and turn summary to all
+        players'
+      tools:
+      - createPhaseIndicator
+      - createTextDisplay
+    completion_criteria:
+      type: UI_displayed
+      description: Turn summary has been displayed.
+    next_phase:
+      id: 11
+      name: Check Win Conditions
+  11:
+    name: Check Win Conditions
+    description: Evaluate whether a team has won based on public reveals; otherwise
+      continue to next turn.
+    actions:
+    - description: 'TIER 1 - PUBLIC: Display brief status check notice while evaluating
+        win conditions'
+      tools:
+      - createTextDisplay
+    completion_criteria:
+      type: UI_displayed
+      description: Win condition evaluation finished; state prepared for routing.
+    next_phase:
+      If all players with role 'Mole' have role_revealed == true:
+        id: 98
+        name: Game Over — Agents Win
+      If all players with role 'Agent' have role_revealed == true:
+        id: 99
+        name: Game Over — Moles Win
+      Otherwise, continue to the next player's turn:
+        id: 12
+        name: Select Next Active Player
+  12:
+    name: Select Next Active Player
+    description: Rotate is_active to the next alive player and announce the upcoming
+      turn.
+    actions:
+    - description: 'TIER 1 - PUBLIC: Update indicator and announce next player'
+      tools:
+      - createPhaseIndicator
+      - createTextDisplay
+    - description: 'TIER 1 - PUBLIC: Update or create turn indicator to highlight
+        the next active player'
+      tools:
+      - createTurnIndicator
+    completion_criteria:
+      type: UI_displayed
+      description: Next active player has been highlighted and announced.
+    next_phase:
+      id: 3
+      name: Active Player — Choose Action
+  98:
+    name: Game Over — Agents Win
+    description: All Moles have been revealed; Agents win. Display final results.
+    actions:
+    - description: Clear transient UI and show final victory message
+      tools:
+      - clearCanvas
+      - createResultDisplay
+      - createTextDisplay
+    completion_criteria:
+      type: UI_displayed
+      description: Final results for Agents' victory have been displayed.
+    next_phase:
+      id: null
+      name: null
+  99:
+    name: Game Over — Moles Win
+    description: All Agents have been revealed; Moles win. Display final results.
+    actions:
+    - description: Clear transient UI and show final victory message
+      tools:
+      - clearCanvas
+      - createResultDisplay
+      - createTextDisplay
+    completion_criteria:
+      type: UI_displayed
+      description: Final results for Moles' victory have been displayed.
+    next_phase:
+      id: null
+      name: null

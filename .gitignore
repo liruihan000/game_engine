@@ -50,5 +50,10 @@ bun.lockb
 
 # LangGraph API
 .langgraph_api
+<<<<<<< HEAD
 
 .log
+=======
+.logs/
+*.log
+>>>>>>> custom-graph

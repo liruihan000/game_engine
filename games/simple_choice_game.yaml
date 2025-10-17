@@ -1,0 +1,140 @@
+declaration:
+  description: 'A short, single-player narrative choice game: choose Ronin or Witch
+    and see the outcome.'
+  is_multiplayer: false
+  min_players: 1
+  roles:
+  - name: Ronin
+    description: 'A wandering warrior: choosing Ronin leads to a victorious outcome;
+      the character survives as a wise warrior.'
+  - name: Witch
+    description: 'A magic user: choosing Witch leads to a tragic outcome; the character
+      falls in defeat.'
+  player_states:
+    name:
+      type: string
+      example: Player A
+      description: Player's display name.
+    player_choice:
+      type: string
+      example: ronin
+      description: 'The path selected by the player: "ronin" or "witch".'
+    is_alive:
+      type: boolean
+      example: true
+      description: Character survival status based on choice (Ronin=true; Witch=false).
+    result_title:
+      type: string
+      example: Victory
+      description: 'Short heading reflecting the outcome: "Victory" or "Defeat".'
+    result_message:
+      type: string
+      example: You walk the land as a wise warrior.
+      description: Narrative result text displayed to the player.
+    result_type:
+      type: string
+      example: success
+      description: 'UI message style for the result: "success" for Ronin; "error"
+        for Witch.'
+  player_states_template:
+    player_states:
+      1:
+        name: ''
+        player_choice: ''
+        is_alive: true
+        result_title: ''
+        result_message: ''
+        result_type: ''
+  players_example:
+    player_states:
+      1:
+        name: Akira
+        player_choice: ronin
+        is_alive: true
+        result_title: Victory
+        result_message: You stand tall, a wise warrior who survives the trials.
+        result_type: success
+      2:
+        name: Mira
+        player_choice: witch
+        is_alive: false
+        result_title: Defeat
+        result_message: Your magic falters and you fall into darkness.
+        result_type: error
+phases:
+  0:
+    name: Game Introduction
+    description: 'Introduce the game''s premise: choose Ronin or Witch to see the
+      narrative outcome, and explain that this is a single-player experience.'
+    actions:
+    - description: Clear any previous UI and prepare the introduction screen
+      tools:
+      - clear_previous_ui
+    - description: Display game rules, objectives, and available paths (Ronin or Witch)
+      tools:
+      - display_game_intro
+    - description: Show single-player setup and confirm readiness
+      tools:
+      - display_player_setup
+    completion_criteria:
+      type: UI_displayed
+      description: Game introduction has been displayed to the player.
+    next_phase:
+      id: 1
+      name: Role Assignment
+  1:
+    name: Role Assignment
+    description: 'Allow the player to choose their path: Ronin (victory) or Witch
+      (defeat).'
+    actions:
+    - description: Clear introduction UI and present role choices
+      tools:
+      - clear_previous_ui
+    - description: Display choices 'Ronin' and 'Witch' with brief descriptions
+      tools:
+      - display_choice_prompt
+    - description: Capture the player's selection and store it in player_states.player_choice
+      tools:
+      - prompt_player_choice
+      - update_player_state
+    completion_criteria:
+      type: player_action
+      description: The player has selected a path, and relevant player state (player_states)
+        has been updated.
+      wait_for: single_player_choice
+      target_players:
+        description: The single player chooses a path
+        condition: 'Single-player game: the only active player in this session'
+    next_phase:
+      id: 2
+      name: Resolve Outcome
+  2:
+    name: Resolve Outcome
+    description: Derive and set the outcome fields based on player_states.player_choice.
+    actions:
+    - description: Clear choice UI and compute outcome; set is_alive, result_title,
+        result_message, and result_type based on the player's choice (Ronin → Victory/success,
+        Witch → Defeat/error)
+      tools:
+      - clear_previous_ui
+      - update_player_state
+    completion_criteria:
+      type: UI_displayed
+      description: Outcome has been computed and saved to player_states.
+    next_phase:
+      id: 3
+      name: Display Outcome
+  3:
+    name: Display Outcome
+    description: Present the narrative result to the player using the computed outcome
+      fields.
+    actions:
+    - description: Clear previous UI and display result_title, result_message with
+        styling from result_type
+      tools:
+      - clear_previous_ui
+      - display_outcome_ui
+    completion_criteria:
+      type: UI_displayed
+      description: Outcome has been displayed to the player.
+    next_phase: null

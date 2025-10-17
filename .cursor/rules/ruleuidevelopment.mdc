@@ -1,0 +1,158 @@
+---
+alwaysApply: true
+---
+## Locations to Update When Adding New UI Components
+
+Based on code analysis, adding a new UI component requires updating the following locations:
+
+1. Type Definition (src/lib/canvas/types.ts)
+
+// Add new data type
+export interface NewComponentData {
+property1: string;
+property2?: boolean;
+position: GamePosition;
+size?: ComponentSize;
+}
+
+// Update ItemData union type
+export type ItemData =
+| CharacterCardData
+| ActionButtonData
+| PhaseIndicatorData
+| TextDisplayData
+| NewComponentData;  // ← Add new type
+
+// Update CardType union type
+export type CardType =
+| "character_card"
+| "action_button"
+| "phase_indicator"
+| "text_display"
+| "new_component";  // ← Add new type
+
+1. Default Data (src/lib/canvas/state.ts)
+
+export const defaultDataFor = (type: CardType): ItemData => {
+switch (type) {
+case "character_card": return { /* ... */ };
+case "action_button": return { /* ... */ };
+case "phase_indicator": return { /* ... */ };
+case "text_display": return { /* ... */ };
+case "new_component": return {  // ← Add new component default data
+property1: "",
+property2: false,
+position: "center",
+size: "medium"
+};
+default: return { position: "center" };
+}
+};
+
+1. Render Component (src/components/canvas/CardRenderer.tsx)
+
+// Add new rendering logic in CardRenderer function
+if (item.type === "new_component") {
+const d = item.data as NewComponentData;
+const getSizeClasses = (size: string = 'medium') => {
+const sizeMap: Record<string, string> = {
+small: "w-30 h-20",
+medium: "w-50 h-30",
+large: "w-70 h-40"
+};
+return sizeMap[size] || sizeMap.medium;
+};
+
+```
+return (
+  <div className={`${getSizeClasses(d.size)} bg-card border rounded-lg p-3`}>
+    {/* New component UI implementation */}
+    <div>{d.property1}</div>
+  </div>
+);
+
+```
+
+}
+
+1. Agent Tool Registration (src/app/page.tsx)
+
+useCopilotAction({
+name: "createNewComponent",
+description: "Create a new component for the game.",
+available: "remote",
+parameters: [
+{ name: "name", type: "string", required: true, description: "Component name"
+},
+{ name: "property1", type: "string", required: true, description: "Property
+description" },
+{ name: "position", type: "string", required: true, description: "Grid
+position" },
+// ... other parameters
+],
+handler: ({ name, property1, position, /* other parameters */ }: {
+name: string;
+property1: string;
+position: string;
+// ... other types
+}) => {
+const normalized = (name ?? "").trim();
+
+```
+  // Duplicate check
+  if (normalized) {
+    const existing = (viewState.items ?? initialState.items).find((it) =>
+      it.type === "new_component" && (it.name ?? "").trim() === normalized
+    );
+    if (existing) {
+      return existing.id;
+    }
+  }
+
+  const data: NewComponentData = {
+    property1,
+    position: position as GamePosition,
+    // ... other properties
+  };
+  return addItem("new_component", name, data);
+},
+
+```
+
+});
+
+1. NewItemMenu (src/components/canvas/NewItemMenu.tsx)
+
+// If manual creation menu is needed, add new option
+const options: { id: CardType; label: string }[] = [
+{ id: "character_card", label: "Character Card" },
+{ id: "action_button", label: "Action Button" },
+{ id: "phase_indicator", label: "Phase Indicator" },
+{ id: "text_display", label: "Text Display" },
+{ id: "new_component", label: "New Component" },  // ← Add
+];
+
+🎯 Summary
+
+Required core update locations (5):
+
+1. Type Definition - types.ts
+2. Default Data - state.ts
+3. Render Component - CardRenderer.tsx
+4. Agent Tool - page.tsx (useCopilotAction)
+5. Agent File (agent/agent_no_loop.py)
+
+Optional update locations (1):
+6. Creation Menu - NewItemMenu.tsx
+
+
+FRONTEND_TOOL_ALLOWLIST = set([
+# Game component creation tools
+"createCharacterCard",
+"createActionButton",
+"createPhaseIndicator",
+"createTextDisplay",
+"createNewComponent",  # ← Add new tool
+# Component management tools
+"deleteItem"
+])
