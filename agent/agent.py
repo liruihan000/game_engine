@@ -31,7 +31,7 @@ if VERBOSE_LOGGING:
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
     
     # 文件处理器
-    file_handler = logging.FileHandler('/home/lee/canvas-with-langgraph-python/logs/agent.log')
+    file_handler = logging.FileHandler('/home/lee/game_engine/logs/agent.log')
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     

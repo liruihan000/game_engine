@@ -18,7 +18,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import StateGraph, END
 from copilotkit import CopilotKitState
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage, BaseMessage
 from langchain.tools import tool
 import json
 # Monitoring configuration
@@ -37,7 +37,7 @@ if VERBOSE_LOGGING:
     # File handler - merge daily logs in dev mode (avoid multiple files from hot reload)
     from datetime import datetime
     date_str = datetime.now().strftime('%Y%m%d')
-    log_file = f'/home/lee/canvas-with-langgraph-python/logs/dm_agent_bot_{date_str}.log'
+    log_file = f'/home/lee/game_engine/logs/dm_agent_bot_{date_str}.log'
     
     # Ensure log directory exists
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
@@ -65,7 +65,6 @@ class AgentState(CopilotKitState):
     items: List[Dict[str, Any]] = []  # Game elements (character cards, UI components, game objects)
     # Game DM state (for interactive game engine)
     current_phase_id: int = 0
-    messages: List[Any] = []
     player_states: Dict[str, Any] = {}
     gameName: str = ""  # Current game DSL name (e.g., "werewolf", "coup")
     dsl: dict = {}
@@ -79,6 +78,336 @@ class AgentState(CopilotKitState):
     chat_active: bool = False  # Whether chat is currently active
     phase_completion: Dict[str, bool] = {}  # Phase completion status
     playerActions: Dict[str, Any] = {}  # Player actions
+
+
+def clean_llm_json_response(response_content: str) -> str:
+    """Clean LLM response by extracting JSON from markdown code blocks if present."""
+    response_content = response_content.strip()
+    
+    # Handle markdown code blocks if present - check if content contains ```json anywhere
+    if '```json' in response_content:
+        # Extract JSON from markdown code block
+        lines = response_content.split('\n')
+        json_lines = []
+        inside_json = False
+        for line in lines:
+            if line.strip() == '```json':
+                inside_json = True
+                continue
+            elif line.strip() == '```' and inside_json:
+                break
+            elif inside_json:
+                json_lines.append(line)
+        
+        # Return extracted JSON if found
+        if json_lines:
+            response_content = '\n'.join(json_lines).strip()
+    
+    return response_content
+
+# async def ActionValidatorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["PhaseNode", "ActionExecutor"]]:
+#     """
+#     ActionValidatorNode - Currently in BYPASS mode (validation disabled).
+#     Simply passes through to allow execution to continue without validation.
+#     """
+#     # Log raw_messages at node start
+#     raw_messages = state.get("messages", [])
+#     logger.info(f"[ActionValidatorNode] raw_messages: {raw_messages}")
+    
+#     logger.info("[ActionValidatorNode] ⚡ BYPASS MODE - Skipping validation, allowing execution to continue")
+    
+#     # Reset retry count and continue to PhaseNode for phase progression
+#     return Command(goto="PhaseNode", update={"retry_count": 0})
+
+def summarize_items_for_prompt(state: AgentState) -> str:
+    """Summarize current UI items with ID, type, name, position - formatted for ActionExecutor deletion/creation decisions."""
+    try:
+        items = state.get("items", []) or []
+        if not items:
+            return "(no items)"
+        
+        # Build detailed summary with IDs for deletion
+        lines: List[str] = []
+        for it in items[:15]:  # Show more items for better context
+            try:
+                item_id = it.get("id", "unknown")
+                item_type = it.get("type", "unknown")
+                item_name = it.get("name", "unnamed")
+                
+                # Get position from data or fallback to item level
+                data = it.get("data", {}) or {}
+                position = data.get("position") or it.get("position") or "none"
+                
+                # Format: [ID] type:name@position
+                lines.append(f"  [{item_id}] {item_type}:{item_name}@{position}")
+            except Exception:
+                continue
+        
+        more = "" if len(items) <= 15 else f"\n  (+{len(items)-15} more items...)"
+        header = f"Canvas Items ({len(items)} total):"
+        return header + "\n" + "\n".join(lines) + more
+        
+    except Exception as e:
+        return f"(unable to summarize items: {e})"
+
+@tool
+def set_next_phase(transition: bool, next_phase_id: int, transition_reason: str) -> str:
+    """
+    Backend tool for PhaseNode to set phase transition decision.
+    
+    Args:
+        transition: True if conditions are met and should transition, False to stay at current phase
+        next_phase_id: The ID of the next phase to transition to (or current phase if transition=False)
+        transition_reason: Brief explanation of the decision
+    
+    Returns:
+        Confirmation message
+    """
+    action = "transitioning to" if transition else "staying at"
+    return f"Phase decision: {action} phase {next_phase_id}. Reason: {transition_reason}"
+
+@tool
+def update_player_state(player_id: str, state_name: str, state_value: Any):
+    """
+    Update a single state value for a specific player.
+    Player states structure: player_states[player_id][state_name] = state_value
+    
+    Args:
+        player_id: Player identifier (e.g., "1", "2", "player_001")
+        state_name: Name of the state to update (e.g., "role", "alive", "votes", "target")  
+        state_value: New value for the state (can be string, int, bool, list, etc.)
+        
+    Returns:
+        Confirmation message about the state update
+    """
+    return f"Will update player {player_id} state: {state_name} = {state_value}"
+
+
+def _execute_update_player_state(current_player_states: dict, player_id: str, state_name: str, state_value: Any) -> dict:
+    """
+    Execute the actual logic to update player state. Returns updated player_states dict.
+    
+    Args:
+        current_player_states: Current player states dict
+        player_id: Player identifier
+        state_name: Name of the state to update
+        state_value: New value for the state
+        
+    Returns:
+        Updated player_states dict
+    """
+    logger.info(f"[_execute_update_player_state] Player {player_id}: {state_name} = {state_value}")
+    
+    # Initialize player state if not exists
+    if str(player_id) not in current_player_states:
+        current_player_states[str(player_id)] = {}
+    
+    # Update the specific state
+    current_player_states[str(player_id)][state_name] = state_value
+    
+    return current_player_states
+
+@tool
+def update_player_name(player_id: str, name: str, role: str) -> str:
+    """
+    Update player role information.
+    
+    Args:
+        player_id: Player ID (e.g. '1', '2', '3')
+        name: Player name (for display only)
+        role: Player role to set
+        
+    Returns:
+        Confirmation message about the role update
+    """
+    return f"Will update player {player_id} ({name}) role: {role}"
+
+
+def _execute_update_player_name(current_player_states: dict, player_id: str, name: str, role: str) -> dict:
+    """
+    Execute the actual logic to update player role. Returns updated player_states dict.
+    
+    Args:
+        current_player_states: Current player states dict
+        player_id: Player identifier
+        name: Player name (for display only)
+        role: Player role
+        
+    Returns:
+        Updated player_states dict, or original dict if player_id doesn't exist
+    """
+    # Check if player exists
+    if str(player_id) not in current_player_states:
+        logger.warning(f"[_execute_update_player_name] Player {player_id} not found, returning original state")
+        return current_player_states
+    
+    logger.info(f"[_execute_update_player_name] Player {player_id} ({name}): role={role}")
+    
+    # Update only role
+    current_player_states[str(player_id)]["role"] = role
+    
+    return current_player_states
+
+
+@tool
+def update_player_actions(player_id: str, actions: str, phase: str) -> str:
+    """
+    Record player actions for AI tracking. Use this to log what players (including bots) did in each phase.
+    
+    Args:
+        player_id: Player ID (e.g. '1', '2', '3')
+        actions: Description of what the player did (e.g. 'voted for Alice, defended Bob')
+        phase: Current game phase (e.g. 'day_voting', 'night_action', 'discussion')
+    
+    Returns:
+        Confirmation message about the recorded action
+    """
+    return f"Will record actions for player {player_id} in {phase}: {actions}"
+
+
+def _execute_update_player_actions(current_player_actions: dict, player_id: str, actions: str, phase: str, state: AgentState, current_player_states: dict) -> dict:
+    """
+    Execute the actual logic to add player actions. Returns updated player_actions dict.
+    
+    Args:
+        current_player_actions: Current player actions state
+        player_id: Player ID
+        actions: Action description  
+        phase: Current phase
+        state: AgentState for getting room/player info
+        current_player_states: Current player states
+        
+    Returns:
+        Updated player_actions dict
+    """
+    import time
+    
+    # Get player name: prioritize player_states (updated), fallback to roomSession (original)
+    player_name = f"Player {player_id}"
+    
+    # First try player_states (may contain updated name after role assignment)
+    if player_id in current_player_states and "name" in current_player_states[player_id]:
+        player_name = current_player_states[player_id]["name"]
+    else:
+        # Fallback to roomSession for original player name
+        room_session = state.get("roomSession", {})
+        if room_session and "players" in room_session:
+            for p in room_session["players"]:
+                if str(p.get("gamePlayerId", "")) == str(player_id):
+                    player_name = p.get("name", player_name)
+                    break
+    
+    # Initialize player actions if not exists
+    if str(player_id) not in current_player_actions:
+        current_player_actions[str(player_id)] = {
+            "name": player_name,
+            "actions": {}  # Dictionary of action_id -> action_data
+        }
+    
+    # Generate simple action ID from 1
+    all_action_ids = []
+    for player_data in current_player_actions.values():
+        if isinstance(player_data, dict) and "actions" in player_data:
+            for action_data in player_data["actions"].values():
+                if isinstance(action_data, dict) and "id" in action_data:
+                    try:
+                        all_action_ids.append(int(action_data["id"]))
+                    except (ValueError, TypeError):
+                        pass
+    action_id = str(max(all_action_ids, default=0) + 1)
+    timestamp = int(time.time() * 1000)
+    
+    current_player_actions[str(player_id)]["name"] = player_name  # Update name
+    current_player_actions[str(player_id)]["actions"][action_id] = {
+        "action": actions,
+        "timestamp": timestamp,
+        "phase": phase,
+        "id": action_id
+    }
+    
+    logger.info(f"📝 Added action for {player_name} ({player_id}) in {phase}: {actions}")
+    
+    return current_player_actions
+
+# Centralized backend tools (shared across nodes)
+backend_tools = [
+    update_player_state,
+    update_player_actions,
+    set_next_phase,
+]
+
+# Frontend tool allowlist for game engine (DM tools)
+FRONTEND_TOOL_ALLOWLIST = set([
+    # Game component creation tools
+    "createCharacterCard",
+    "createActionButton", 
+    "createPhaseIndicator",
+    "createTextDisplay",
+    "createVotingPanel",
+    "createAvatarSet",
+    "changeBackgroundColor",
+    "createResultDisplay",
+    "createTimer",
+    "createBackgroundControl",
+    "promptUserText",
+    # Card game UI
+    "createHandsCard",
+    "updateHandsCard",
+    "setHandsCardAudience",
+    "createHandsCardForPlayer",
+    # Broadcast input tool
+    "displayBroadcastInput",
+    # Scoreboard tools
+    "createScoreBoard",
+    "updateScoreBoard",
+    "setScoreBoardEntries",
+    "upsertScoreEntry",
+    "removeScoreEntry",
+    # Update tools for common components
+    "updatePhaseIndicator",
+    "updateTextDisplay",
+    "updateActionButton",
+    "updateCharacterCard",
+    "updateVotingPanel",
+    "updateResultDisplay",
+    "updateTimer",
+    "setItemPosition",
+    # Chat-driven vote
+    "submitVote",
+    # Coins UI tools
+    "createCoinDisplay",
+    "updateCoinDisplay",
+    "incrementCoinCount",
+    "setCoinAudience",
+    # Statement board & Reaction timer
+    "createStatementBoard",
+    "updateStatementBoard",
+    "createReactionTimer",
+    "startReactionTimer",
+    "stopReactionTimer",
+    "resetReactionTimer",
+    # Night overlay & Turn indicator
+    "createTurnIndicator",
+    "updateTurnIndicator",
+    # Health & Influence
+    "createHealthDisplay",
+    "updateHealthDisplay",
+    "createInfluenceSet",
+    "updateInfluenceSet",
+    "revealInfluenceCard",
+    # Score tracking UI  
+    "createScoreBoard",
+    # Component management tools
+    "deleteItem",
+    "clearCanvas",
+    # Player state management
+    "markPlayerDead",
+    # Chat tools
+    "addBotChatMessage"
+])
+
+
+BACKEND_TOOL_NAMES = {t.name for t in backend_tools}
 
 async def load_dsl_by_gamename(gamename: str) -> dict:
     """Load DSL content from YAML file based on gameName"""
@@ -188,6 +517,7 @@ async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Comman
     game_name = state.get("gameName", "")
     logger.info(f"[InitialRouterNode] Game name from state: {game_name}")
     
+    
     # === DETAILED INPUT LOGGING ===
     current_phase_id = state.get('current_phase_id', 0)
     player_states = state.get("player_states", {})
@@ -282,57 +612,38 @@ async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Comman
     #         return Command(goto="PhaseNode", update=updates)
     # else:
     # Check latest message for game chat and route to ChatBotNode if needed
+    messages = state.get("messages", [])
     try:
-        if full_messages:
-            last_msg = full_messages[-1]
-            logger.info(f"[InitialRouter] Last message type: {type(last_msg)}")
-            logger.info(f"[InitialRouter] Last message content: {last_msg}")
+        if messages:
+            last_msg = messages[-1]
             
-            # Handle both LangChain Message objects and dict format
-            is_human_message = False
-            content = ''
-            
-            if hasattr(last_msg, 'type') and last_msg.type == 'human':
-                # LangChain Message object
-                is_human_message = True
-                content = getattr(last_msg, 'content', '')
-                logger.info(f"[InitialRouter] LangChain Message detected: {content[:100]}")
-            elif isinstance(last_msg, dict) and (last_msg.get('type') == 'human' or last_msg.get('role') == 'user'):
-                # Dict format message (CopilotKit format)
-                is_human_message = True
-                content = last_msg.get('content', '')
-                logger.info(f"[InitialRouter] Dict Message detected: {content[:100]}")
-            
-            logger.info(f"[InitialRouter] Message check: is_human={is_human_message}")
-            
-            if is_human_message and content:
+            # Check if it's a human message using isinstance
+            if isinstance(last_msg, HumanMessage):
+                content = last_msg.content
+                
                 # Check for game chat patterns
                 if 'in game chat:' in content or 'to Bot' in content:
-                    logger.info(f"[InitialRouter] Detected game chat: {content[:100]}")
                     final_dsl = dsl_content if dsl_content else state.get("dsl", {})
                     updates["dsl"] = final_dsl
                     return Command(goto="ChatBotNode", update=updates)
     except Exception as e:
         logger.error(f"[InitialRouter] Error checking chat message: {e}")
 
-    logger.info(f"[InitialRouter] Routing to FeedbackDecisionNode (phase {current_phase_id})")
     # Ensure DSL is properly passed - use dsl_content if loaded, otherwise fallback to state
     final_dsl = dsl_content if dsl_content else state.get("dsl", {})
     updates["dsl"] = final_dsl
-    logger.info(f"[InitialRouter] Passing DSL with keys: {list(final_dsl.keys()) if final_dsl else 'empty'}")
-    updates["messages"] = last_msg
+
     
-    # === DETAILED OUTPUT LOGGING ===
-    logger.info(f"[InitialRouter][OUTPUT] Command goto: FeedbackDecisionNode")
-    logger.info(f"[InitialRouter][OUTPUT] Updates keys: {list(updates.keys())}")
-    logger.info(f"[InitialRouter][OUTPUT] Updates player_states: {updates.get('player_states', 'NOT_SET')}")
-    logger.info(f"[InitialRouter][OUTPUT] Updates playerActions: {updates.get('playerActions', 'NOT_SET')}")
     
     return Command(goto="FeedbackDecisionNode", update=updates)
 
 async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Literal["__end__"]]:
     """LLM-driven chat bot node"""
     logger.info("[ChatBotNode] Processing chat message")
+    
+    # Log raw_messages at node start
+    raw_messages = state.get("messages", [])
+    logger.info(f"[ChatBotNode] raw_messages: {raw_messages}")
     
     # Get basic state information
     messages = state.get("messages", [])
@@ -349,6 +660,15 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
     declaration = dsl_content.get('declaration', {}) if dsl_content else {}
     if not messages:
+        return Command(goto=END, update={})
+    
+    # Check if last message is game chat - hardcoded logic
+    last_msg = messages[-1]
+    if not isinstance(last_msg, HumanMessage):
+        return Command(goto=END, update={})
+    
+    content = last_msg.content.lower()
+    if 'in game chat:' not in content and 'to bot' not in content:
         return Command(goto=END, update={})
     
     model = init_chat_model("openai:gpt-4o")
@@ -386,30 +706,27 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     
     # Let LLM analyze message and call tool
     system_prompt = f"""
-You are a game bot AI. Analyze the latest chat message and respond if appropriate.
+                You are a game bot AI. Analyze the latest chat message and respond if appropriate.
 
-Game State:
-- Current Phase: {current_phase_id}
-- Player States: {player_states}
-- Player Actions: {playerActions}
-- Room Session: {roomSession}
-- Available bots: {[f"{pid}: {data.get('name', f'Bot {pid}')}" for pid, data in player_states.items() if pid != "1"]}
+                Game State:
+                - Current Phase: {current_phase_id}
+                - Player States: {player_states}
+                - Player Actions: {playerActions}
+                - Room Session: {roomSession}
+                - Available bots: {[f"{pid}: {data.get('name', f'Bot {pid}')}" for pid, data in player_states.items() if pid != "1"]}
 
-Latest Message: {messages[-1] if messages else 'None'}
+                Chat Message: {last_msg.content}
 
-Instructions:
-1. Check if this is a game chat message (contains 'in game chat:' or 'to Bot')
-2. If user targeted specific bot ('to Bot [name]:'), use that bot
-3. Otherwise, choose appropriate bot (non-player 1) 
-4. Generate natural response based on bot's role and game context
-5. MUST call addBotChatMessage tool with:
-   - botId: the bot's player ID (e.g., "2", "3") 
-   - botName: the bot's name
-   - message: your generated response
-   - messageType: "message"
-
-Call the addBotChatMessage tool now if this is a chat message.
-"""
+                Instructions:
+                1. If user targeted specific bot ('to Bot [name]:'), use that bot
+                2. Otherwise, choose appropriate bot (non-player 1) 
+                3. Generate natural response based on bot's role and game context
+                4. MUST call addBotChatMessage tool with:
+                - botId: the bot's player ID (e.g., "2", "3") 
+                - botName: the bot's name
+                - message: your generated response
+                - messageType: "message"
+                """
     
     try:
         response = await model_with_tools.ainvoke([SystemMessage(content=system_prompt)])
@@ -446,56 +763,17 @@ async def FeedbackDecisionNode(state: AgentState, config: RunnableConfig) -> Com
     """
     # Print game name from state
     game_name = state.get("gameName", "")
-    logger.info(f"[FeedbackDecisionNode] Game name from state: {game_name}")
     
-    logger.info("[FeedbackDecisionNode] Starting feedback decision analysis")
+    # Extract inputs - simplified with BaseMessage
+    messages = state.get("messages", [])  # Safe dictionary access to BaseMessage list
+    logger.info(f"[FeedbackDecisionNode] raw_messages: {messages}")
     
-    # Extract inputs for logging - use full_messages like InitialRouter
-    raw_messages = state.get("messages", []) or []
-    # Handle different message formats
-    if isinstance(raw_messages, dict):
-        # If messages is a dict, it might be a single message or a dict with message keys
-        logger.warning(f"[FeedbackDecisionNode] messages is a dict: {type(raw_messages)}, keys: {list(raw_messages.keys()) if raw_messages else []}")
-        if 'content' in raw_messages or 'type' in raw_messages:
-            # Single message as dict
-            full_messages = [raw_messages]
-        else:
-            # Multiple messages with numeric/string keys
-            full_messages = list(raw_messages.values()) if raw_messages else []
-    elif isinstance(raw_messages, list):
-        full_messages = raw_messages
-    else:
-        logger.warning(f"[FeedbackDecisionNode] messages is unexpected type: {type(raw_messages)}, converting to empty list")
-        full_messages = []
-    
-    trimmed_messages = full_messages[-10:] if full_messages else []  # Keep last 10 messages for context
+    trimmed_messages = messages[-10:] if messages else []  # Keep last 10 messages for context
     player_states = state.get("player_states", {})
     current_phase_id = state.get("current_phase_id", 0)
     dsl_content = state.get("dsl", {})
     playerActions = state.get("playerActions", {})
     
-    # === DETAILED INPUT LOGGING ===
-    logger.info(f"[FeedbackDecisionNode][INPUT] current_phase_id: {current_phase_id}")
-    logger.info(f"[FeedbackDecisionNode][INPUT] player_states: {player_states}")
-    logger.info(f"[FeedbackDecisionNode][INPUT] playerActions: {playerActions}")
-    logger.info(f"[FeedbackDecisionNode][INPUT] state keys: {list(state.keys())}")
-    
-    # Debug message arrays
-    logger.info(f"[FeedbackDecisionNode][DEBUG] full_messages count: {len(full_messages)}")
-    logger.info(f"[FeedbackDecisionNode][DEBUG] trimmed_messages count: {len(trimmed_messages)}")
-    if full_messages and isinstance(full_messages, list):
-        logger.info(f"[FeedbackDecisionNode][DEBUG] Last full message: {full_messages[-1]}")
-        logger.info(f"[FeedbackDecisionNode][DEBUG] Last full message type: {type(full_messages[-1])}")
-    if trimmed_messages and isinstance(trimmed_messages, list):
-        logger.info(f"[FeedbackDecisionNode][DEBUG] Last trimmed message: {trimmed_messages[-1]}")
-        logger.info(f"[FeedbackDecisionNode][DEBUG] Last trimmed message type: {type(trimmed_messages[-1])}")
-    
-    # Debug DSL content
-    logger.info(f"[FeedbackDecisionNode] DSL content keys: {list(dsl_content.keys()) if dsl_content else 'empty'}")
-    if dsl_content and 'phases' in dsl_content:
-        logger.info(f"[FeedbackDecisionNode] Phases available: {list(dsl_content['phases'].keys())}")
-    else:
-        logger.info("[FeedbackDecisionNode] No phases found in DSL content")
     
     # Get current phase details
     phases = dsl_content.get('phases', {}) if dsl_content else {}
@@ -503,12 +781,6 @@ async def FeedbackDecisionNode(state: AgentState, config: RunnableConfig) -> Com
     current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
     declaration = dsl_content.get('declaration', {}) if dsl_content else {}
     playerActions = state.get("playerActions", {})
-    
-    # player_states should have been initialized by InitialRouterNode
-    if not player_states:
-        logger.warning("[FeedbackDecisionNode] player_states is empty! InitialRouterNode should have initialized it.")
-    else:
-        logger.info(f"[FeedbackDecisionNode] Using player_states: {len(player_states)} players")
     
     # Log phase info
     logger.info(f"[FeedbackDecisionNode] current_phase_id: {current_phase_id}")
@@ -521,27 +793,14 @@ async def FeedbackDecisionNode(state: AgentState, config: RunnableConfig) -> Com
     model_with_tools = model.bind_tools([update_player_actions])
     
     # Extract last human message - Handle both LangChain Message objects and dict format
+    # Get last message and check if it's human - simplified
     last_human_message = ""
-    for _m in reversed(trimmed_messages):
-        is_human_message = False
-        content = ''
-        
-        # Check for LangChain Message object
-        if hasattr(_m, 'type') and _m.type == 'human':
-            is_human_message = True
-            content = getattr(_m, 'content', '')
-        # Check for dict format message (CopilotKit format)
-        elif isinstance(_m, dict) and (_m.get('type') == 'human' or _m.get('role') == 'user'):
-            is_human_message = True
-            content = _m.get('content', '')
-        # Check for legacy HumanMessage object
-        elif isinstance(_m, HumanMessage) and getattr(_m, "content", None):
-            is_human_message = True
-            content = str(_m.content)
-        
-        if is_human_message and content:
-            last_human_message = str(content)
-            break
+    if messages and isinstance(messages[-1], HumanMessage):
+        last_msg = messages[-1]
+        content_lower = str(last_msg.content).lower().strip()
+        # Skip generic control messages
+        if content_lower not in ['continue', 'start game', 'start game.']:
+            last_human_message = str(last_msg.content)
 
     logger.info(f"[FeedbackDecisionNode] last_human_message: {last_human_message}")
 
@@ -682,12 +941,9 @@ async def FeedbackDecisionNode(state: AgentState, config: RunnableConfig) -> Com
     except Exception as e:
         logger.error(f"[FeedbackDecisionNode][LLM_OUTPUT] Failed to parse LLM response: {e}")
         logger.error(f"[FeedbackDecisionNode][LLM_OUTPUT] Raw response was: {response.content}")
-        # Fallback hardcoded response
-        need_feed_back_dict = {
-            "player_id_list": [1, 2, 4, 5, 7],
-            "need_feedback_message": "ask feedback"
-        }
-        logger.info(f"[FeedbackDecisionNode][LLM_OUTPUT] Using fallback: {need_feed_back_dict}")
+        # Don't use fallback - let it proceed without need_feed_back_dict updates
+        need_feed_back_dict = {}
+        logger.info(f"[FeedbackDecisionNode][LLM_OUTPUT] No fallback used, proceeding without feedback dict")
     
     # Apply backend tool effects inline (no ToolMessage)
     tool_calls = getattr(response, "tool_calls", []) or []
@@ -710,30 +966,24 @@ async def FeedbackDecisionNode(state: AgentState, config: RunnableConfig) -> Com
             actions = args.get("actions")
             phase = args.get("phase")
             if pid and actions and phase:
-                import time as _time
-                player_name = f"Player {pid}"
-                room_session = state.get("roomSession", {})
-                if room_session and "players" in room_session:
-                    for p in room_session["players"]:
-                        if str(p.get("gamePlayerId", "")) == str(pid):
-                            player_name = p.get("name", player_name)
-                            break
-                elif pid in current_player_states and "name" in current_player_states[pid]:
-                    player_name = current_player_states[pid]["name"]
-                current_player_actions[str(pid)] = {
-                    "name": player_name,
-                    "actions": actions,
-                    "timestamp": int(_time.time() * 1000),
-                    "phase": phase,
-                }
+                current_player_actions = _execute_update_player_actions(
+                    current_player_actions, pid, actions, phase, state, current_player_states
+                )
                 if str(pid) == "1":
                     logged_human = True
+        elif name == "update_player_state":
+            pid = args.get("player_id")
+            state_name = args.get("state_name")
+            state_value = args.get("state_value")
+            if pid and state_name is not None:
+                current_player_states = _execute_update_player_state(
+                    current_player_states, pid, state_name, state_value
+                )
 
     # No fallback: only log when there is actual new human action/tool call
 
     # Save need_feed_back_dict as state
     player_id_list = need_feed_back_dict.get("player_id_list", [])
-    need_feedback_message = need_feed_back_dict.get("need_feedback_message", "")
     
     # Prepare common updates for all routes
     common_updates = {
@@ -746,7 +996,7 @@ async def FeedbackDecisionNode(state: AgentState, config: RunnableConfig) -> Com
     # Route based on feedback requirements
     if len(player_id_list) == 0:
         logger.info("[FeedbackDecisionNode] No players need feedback - routing to PhaseNode")
-        phasenode_updates = {**common_updates, "dsl": state.get("dsl", {}), "messages": ([])}
+        phasenode_updates = {**common_updates, "dsl": state.get("dsl", {})}
         
         # === DETAILED OUTPUT LOGGING ===
         logger.info(f"[FeedbackDecisionNode][OUTPUT] Command goto: PhaseNode")
@@ -786,6 +1036,10 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
     game_name = state.get("gameName", "")
     logger.info(f"[BotBehaviorNode] Game name from state: {game_name}")
     
+    # Log raw_messages at node start
+    raw_messages = state.get("messages", [])
+    logger.info(f"[BotBehaviorNode] raw_messages: {raw_messages}")
+    
     logger.info("[BotBehaviorNode] Starting bot behavior analysis")
     
     # Import LLM dependencies
@@ -793,23 +1047,8 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
     from langchain_core.messages import SystemMessage
     import json
     
-    # Extract inputs
-    raw_messages = state.get("messages", []) or []
-    # Handle different message formats
-    if isinstance(raw_messages, dict):
-        logger.warning(f"[BotBehaviorNode] messages is a dict: {type(raw_messages)}, keys: {list(raw_messages.keys()) if raw_messages else []}")
-        if 'content' in raw_messages or 'type' in raw_messages:
-            # Single message as dict
-            messages = [raw_messages]
-        else:
-            # Multiple messages with numeric/string keys
-            messages = list(raw_messages.values()) if raw_messages else []
-    elif isinstance(raw_messages, list):
-        messages = raw_messages
-    else:
-        logger.warning(f"[BotBehaviorNode] messages is unexpected type: {type(raw_messages)}, converting to empty list")
-        messages = []
-    
+    # Extract inputs - simplified with BaseMessage
+    messages = state.get("messages", [])  # Safe dictionary access to BaseMessage list
     trimmed_messages = messages[-10:] if messages else []
     player_states = state.get("player_states", {})
     current_phase_id = state.get("current_phase_id", 0)
@@ -833,35 +1072,29 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
     model_with_tools = model.bind_tools([update_player_actions])
     
     # Simplified system message - only essential data
-    phase_name = current_phase.get('name', f'Phase {current_phase_id}') if current_phase else f'Phase {current_phase_id}'
-    acting_players = need_feed_back_dict.get("player_id_list", [])
+    need_feed_back_dict = need_feed_back_dict.get("player_id_list", [])
     
-    # Extract only relevant player info for acting bots
-    relevant_players = {}
-    for pid in acting_players:
-        if pid != '1' and pid in player_states:  # Exclude human player
-            relevant_players[pid] = {
-                'name': player_states[pid].get('name', f'Player {pid}'),
-                'role': player_states[pid].get('role', 'unknown'),
-                'is_alive': player_states[pid].get('is_alive', True)
-            }
     
     system_message = SystemMessage(
         content=(
             "BOT BEHAVIOR GENERATION (FAST MODE)\n"
-            f"Phase: {phase_name}\n"
-            f"Acting Players: {acting_players}\n"
-            f"Player Info: {relevant_players}\n"
+            f"current Phase: {current_phase}\n"
+            f"declaration: {declaration}\n"
+            f"need_feed_back_dict: {need_feed_back_dict}\n"
+            f"Players Info: {player_states}\n"
             
             "\n"
             "TASK: Generate quick bot behaviors for current phase.\n"
             "\n"
             "INSTRUCTIONS:\n"
-            "- For each bot in Acting Players list (excluding '1'), call update_player_actions tool once\n"
-            "- Generate role-appropriate actions for the current phase\n"
+            "- need_feed_back_dict is a list of player ids that need to act\n"
+            "- Get the roles and the status of the players in Players Info \n"
+            "- Your task is to generate role-appropriate actions for the current phase and the players in need_feed_back_dict (excluding '1')\n"
+            "- call update_player_actions tool for each bot player's generated role-appropriate actions, multiple times if needed\n"
             "- Keep actions simple and realistic\n" 
             "- NO text output - only tool calls\n"
-            "- If no bots to act, make no tool calls"
+            "- If no bots to act, make no tool calls\n"
+            "- If the need_feed_back_dict is empty, make no tool calls"
         )
     )
     
@@ -937,22 +1170,9 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
             if pid is not None and str(pid) not in _acting_ids:
                 continue
             if pid and actions and phase:
-                import time as _time
-                player_name = f"Player {pid}"
-                room_session = state.get("roomSession", {})
-                if room_session and "players" in room_session:
-                    for p in room_session["players"]:
-                        if str(p.get("gamePlayerId", "")) == str(pid):
-                            player_name = p.get("name", player_name)
-                            break
-                elif pid in current_player_states and "name" in current_player_states[pid]:
-                    player_name = current_player_states[pid]["name"]
-                current_player_actions[str(pid)] = {
-                    "name": player_name,
-                    "actions": actions,
-                    "timestamp": int(_time.time() * 1000),
-                    "phase": phase,
-                }
+                current_player_actions = _execute_update_player_actions(
+                    current_player_actions, pid, actions, phase, state, current_player_states
+                )
     
     # Save botbehavior as state and route to RefereeNode
     logger.info("[BotBehaviorNode] Routing to RefereeNode")
@@ -963,8 +1183,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
             "player_states": current_player_states,
             "playerActions": current_player_actions,
             "roomSession": state.get("roomSession", {}),
-            "dsl": state.get("dsl", {}),
-            "messages": ([]),
+            "dsl": state.get("dsl", {})
         }
     )
 
@@ -986,38 +1205,20 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     game_name = state.get("gameName", "")
     logger.info(f"[RefereeNode] Game name from state: {game_name}")
     
+    # Log raw_messages at node start
+    raw_messages = state.get("messages", [])
+    logger.info(f"[RefereeNode] raw_messages: {raw_messages}")
+    
     logger.info("[RefereeNode] Starting referee analysis and state updates")
     
-    # Extract inputs
-    raw_messages = state.get("messages", []) or []
-    # Handle different message formats
-    if isinstance(raw_messages, dict):
-        logger.warning(f"[RefereeNode] messages is a dict: {type(raw_messages)}, keys: {list(raw_messages.keys()) if raw_messages else []}")
-        if 'content' in raw_messages or 'type' in raw_messages:
-            # Single message as dict
-            messages = [raw_messages]
-        else:
-            # Multiple messages with numeric/string keys
-            messages = list(raw_messages.values()) if raw_messages else []
-    elif isinstance(raw_messages, list):
-        messages = raw_messages
-    else:
-        logger.warning(f"[RefereeNode] messages is unexpected type: {type(raw_messages)}, converting to empty list")
-        messages = []
-    
+    # Extract inputs - simplified with BaseMessage
+    messages = state.get("messages", [])  # Safe dictionary access to BaseMessage list
     trimmed_messages = messages[-10:] if messages else []
     player_states = state.get("player_states", {})
     current_phase_id = state.get("current_phase_id", 0)
     dsl_content = state.get("dsl", {})
     botbehavior = state.get("botbehavior", {})
     
-    # Get last human message (from player 1)
-    last_human_message = ""
-    for msg in reversed(trimmed_messages):
-        # Assume human messages can be identified by some property
-        if hasattr(msg, 'content') and msg.content:
-            last_human_message = str(msg.content)
-            break
     
     # Get current phase details
     phases = dsl_content.get('phases', {}) if dsl_content else {}
@@ -1046,7 +1247,6 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             f"Game Declaration: {declaration}\n"
             f"Game Phases: {phases}\n"
             f"Current Player States: {player_states}\n"
-            f"Last Human Message: {last_human_message}\n"
             f"Bot Behaviors: {botbehavior}\n"
             f"Recent Messages: {[str(msg) for msg in trimmed_messages]}\n\n"
             f"Player Actions: {playerActions}\n\n"
@@ -1152,12 +1352,11 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     updated_player_states = player_states
     conclusions = []
     
-    # Apply ONLY the first update_player_state tool call inline (no ToolMessage)
+    # Apply update_player_state tool calls inline (no ToolMessage)
     tool_calls = getattr(response, "tool_calls", []) or []
     logger.info(f"[RefereeNode][TOOL_CALLS] Total tool calls: {len(tool_calls)}")
     logger.info(f"[RefereeNode][TOOL_CALLS] Tool calls details: {tool_calls}")
     current_player_states = dict(updated_player_states)
-    first_applied = False
     for tc in tool_calls:
         name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
         if name != "update_player_state":
@@ -1170,13 +1369,12 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             except Exception:
                 args = {}
         pid = args.get("player_id")
-        key = args.get("state_name")
-        val = args.get("state_value")
-        if pid and key is not None:
-            current_player_states.setdefault(pid, {})
-            current_player_states[pid][key] = val
-            first_applied = True
-        break
+        state_name = args.get("state_name")
+        state_value = args.get("state_value")
+        if pid and state_name is not None:
+            current_player_states = _execute_update_player_state(
+                current_player_states, pid, state_name, state_value
+            )
 
     # Route to PhaseNode with updated player states and conclusions
     logger.info("[RefereeNode] Routing to PhaseNode with updated player states and conclusions")
@@ -1186,8 +1384,7 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             "player_states": current_player_states,
             "referee_conclusions": conclusions,
             "roomSession": state.get("roomSession", {}),
-            "dsl": state.get("dsl", {}),
-            "messages": ([]),
+            "dsl": state.get("dsl", {})
         }
     )
 
@@ -1198,6 +1395,7 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
     - ActionExecutor continues normally with DSL-defined role assignment actions
     - Ensures balanced game setup and proper role distribution
     """
+    
     logger.info("[RoleAssignmentNode] Starting intelligent role assignment")
     
     # Extract inputs
@@ -1248,7 +1446,6 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
                 "player_states": player_states,
                 "roomSession": state.get("roomSession", {}),
                 "dsl": dsl_content,
-                "messages": state.get("messages", []),
                 "phase_completion": state.get("phase_completion", {}),
                 "playerActions": state.get("playerActions", {}),
             }
@@ -1258,7 +1455,7 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
     logger.info(f"[RoleAssignmentNode] Using LLM to assign roles to {len(unassigned_players)} players")
     
     model = init_chat_model("openai:gpt-4o")
-    model_with_tools = model.bind_tools([update_player_state], parallel_tool_calls=True)
+    model_with_tools = model.bind_tools([update_player_name], parallel_tool_calls=True)
     
     # Create intelligent role assignment prompt
     system_message = SystemMessage(
@@ -1275,7 +1472,7 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
             
             "ASSIGNMENT RULES:\n"
             "- NEVER overwrite existing roles (skip players who already have roles)\n"
-            "- Use update_player_state tool for each assignment\n"
+            "- Use update_player_name tool for each assignment\n"
             "- Ensure game balance based on player count and game mechanics\n"
             "- Consider role interactions and win conditions\n"
             "- Player 1 is the human - give them an engaging role when possible\n"
@@ -1294,7 +1491,7 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
             "- Balance information roles vs action roles\n"
             "- Consider faction balance for multiplayer games\n\n"
             
-            "Execute role assignments using update_player_state tools now."
+            "Execute role assignments using update_player_name tools now."
         )
     )
     
@@ -1312,7 +1509,7 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
         if tool_calls:
             for tc in tool_calls:
                 name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-                if name == "update_player_state":
+                if name == "update_player_name":
                     args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
                     if not isinstance(args, dict):
                         try:
@@ -1321,12 +1518,13 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
                         except Exception:
                             args = {}
                     pid = args.get("player_id")
-                    key = args.get("state_name")
-                    val = args.get("state_value")
-                    if pid and key is not None:
-                        updated_player_states.setdefault(pid, {})
-                        updated_player_states[pid][key] = val
-                        logger.info(f"[RoleAssignmentNode] LLM assigned: Player {pid} -> {key}={val}")
+                    player_name = args.get("name")
+                    role = args.get("role")
+                    if pid and role:
+                        updated_player_states = _execute_update_player_name(
+                            updated_player_states, pid, player_name, role
+                        )
+                        logger.info(f"[RoleAssignmentNode] LLM assigned: Player {pid} ({player_name}) -> role={role}")
         
         logger.info("[RoleAssignmentNode] Role assignment completed, routing to ActionExecutor")
         
@@ -1337,7 +1535,6 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
                 "player_states": updated_player_states,
                 "roomSession": state.get("roomSession", {}),
                 "dsl": dsl_content,
-                "messages": state.get("messages", []),
                 "phase_completion": state.get("phase_completion", {}),
                 "playerActions": state.get("playerActions", {}),
             }
@@ -1353,7 +1550,6 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
                 "player_states": player_states,
                 "roomSession": state.get("roomSession", {}),
                 "dsl": dsl_content,
-                "messages": state.get("messages", []),
                 "phase_completion": state.get("phase_completion", {}),
                 "playerActions": state.get("playerActions", {}),
             }
@@ -1375,6 +1571,10 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
     # Print game name from state
     game_name = state.get("gameName", "")
     logger.info(f"[PhaseNode] Game name from state: {game_name}")
+    
+    # Log raw_messages at node start
+    raw_messages = state.get("messages", [])
+    logger.info(f"[PhaseNode] raw_messages: {raw_messages}")
     
     logger.info("[PhaseNode] Starting phase transition analysis")
     
@@ -1406,8 +1606,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
                     "current_phase_id": 0,
                     "player_states": player_states,
                     "roomSession": state.get("roomSession", {}),
-                    "dsl": dsl_content,
-                    "messages": ([]),
+                    "dsl": dsl_content
                 }
             )
         else:
@@ -1431,7 +1630,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
     logger.info(f"[PhaseNode] Phase {current_phase_id}: Phase transition analysis with set_next_phase tool")
     
     messages = state.get("messages", []) or []
-    trimmed_messages = messages[-10:] if isinstance(messages, list) and messages else []
+    trimmed_messages = messages[-10:]
     # PhaseNode focuses purely on phase transition - no role assignment
     
     system_message = SystemMessage(
@@ -1620,8 +1819,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
         "current_phase_id": target_phase_id,
         "player_states": state.get("player_states", {}),
         "roomSession": state.get("roomSession", {}),
-        "dsl": state.get("dsl", {}),
-        "messages": ([]),
+        "dsl": state.get("dsl", {})
     }
     
     # === DETAILED OUTPUT LOGGING ===
@@ -1636,230 +1834,8 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
         update=phasenode_outputs
     )
 
-# Frontend tool allowlist for game engine (DM tools)
-FRONTEND_TOOL_ALLOWLIST = set([
-    # Game component creation tools
-    "createCharacterCard",
-    "createActionButton", 
-    "createPhaseIndicator",
-    "createTextDisplay",
-    "createVotingPanel",
-    "createAvatarSet",
-    "changeBackgroundColor",
-    "createResultDisplay",
-    "createTimer",
-    "createBackgroundControl",
-    "promptUserText",
-    # Card game UI
-    "createHandsCard",
-    "updateHandsCard",
-    "setHandsCardAudience",
-    "createHandsCardForPlayer",
-    # Broadcast input tool
-    "displayBroadcastInput",
-    # Scoreboard tools
-    "createScoreBoard",
-    "updateScoreBoard",
-    "setScoreBoardEntries",
-    "upsertScoreEntry",
-    "removeScoreEntry",
-    # Update tools for common components
-    "updatePhaseIndicator",
-    "updateTextDisplay",
-    "updateActionButton",
-    "updateCharacterCard",
-    "updateVotingPanel",
-    "updateResultDisplay",
-    "updateTimer",
-    "setItemPosition",
-    # Chat-driven vote
-    "submitVote",
-    # Coins UI tools
-    "createCoinDisplay",
-    "updateCoinDisplay",
-    "incrementCoinCount",
-    "setCoinAudience",
-    # Statement board & Reaction timer
-    "createStatementBoard",
-    "updateStatementBoard",
-    "createReactionTimer",
-    "startReactionTimer",
-    "stopReactionTimer",
-    "resetReactionTimer",
-    # Night overlay & Turn indicator
-    "createTurnIndicator",
-    "updateTurnIndicator",
-    # Health & Influence
-    "createHealthDisplay",
-    "updateHealthDisplay",
-    "createInfluenceSet",
-    "updateInfluenceSet",
-    "revealInfluenceCard",
-    # Score tracking UI  
-    "createScoreBoard",
-    # Component management tools
-    "deleteItem",
-    "clearCanvas",
-    # Player state management
-    "markPlayerDead",
-    # Chat tools
-    "addBotChatMessage"
-])
 
-def clean_llm_json_response(response_content: str) -> str:
-    """Clean LLM response by extracting JSON from markdown code blocks if present."""
-    response_content = response_content.strip()
-    
-    # Handle markdown code blocks if present - check if content contains ```json anywhere
-    if '```json' in response_content:
-        # Extract JSON from markdown code block
-        lines = response_content.split('\n')
-        json_lines = []
-        inside_json = False
-        for line in lines:
-            if line.strip() == '```json':
-                inside_json = True
-                continue
-            elif line.strip() == '```' and inside_json:
-                break
-            elif inside_json:
-                json_lines.append(line)
-        
-        # Return extracted JSON if found
-        if json_lines:
-            response_content = '\n'.join(json_lines).strip()
-    
-    return response_content
 
-async def ActionValidatorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["PhaseNode", "ActionExecutor"]]:
-    """
-    ActionValidatorNode - Currently in BYPASS mode (validation disabled).
-    Simply passes through to allow execution to continue without validation.
-    """
-    logger.info("[ActionValidatorNode] ⚡ BYPASS MODE - Skipping validation, allowing execution to continue")
-    
-    # Reset retry count and continue to PhaseNode for phase progression
-    return Command(goto="PhaseNode", update={"retry_count": 0})
-
-def summarize_items_for_prompt(state: AgentState) -> str:
-    """Summarize current UI items with ID, type, name, position - formatted for ActionExecutor deletion/creation decisions."""
-    try:
-        items = state.get("items", []) or []
-        if not items:
-            return "(no items)"
-        
-        # Build detailed summary with IDs for deletion
-        lines: List[str] = []
-        for it in items[:15]:  # Show more items for better context
-            try:
-                item_id = it.get("id", "unknown")
-                item_type = it.get("type", "unknown")
-                item_name = it.get("name", "unnamed")
-                
-                # Get position from data or fallback to item level
-                data = it.get("data", {}) or {}
-                position = data.get("position") or it.get("position") or "none"
-                
-                # Format: [ID] type:name@position
-                lines.append(f"  [{item_id}] {item_type}:{item_name}@{position}")
-            except Exception:
-                continue
-        
-        more = "" if len(items) <= 15 else f"\n  (+{len(items)-15} more items...)"
-        header = f"Canvas Items ({len(items)} total):"
-        return header + "\n" + "\n".join(lines) + more
-        
-    except Exception as e:
-        return f"(unable to summarize items: {e})"
-
-@tool
-def set_next_phase(transition: bool, next_phase_id: int, transition_reason: str) -> str:
-    """
-    Backend tool for PhaseNode to set phase transition decision.
-    
-    Args:
-        transition: True if conditions are met and should transition, False to stay at current phase
-        next_phase_id: The ID of the next phase to transition to (or current phase if transition=False)
-        transition_reason: Brief explanation of the decision
-    
-    Returns:
-        Confirmation message
-    """
-    action = "transitioning to" if transition else "staying at"
-    return f"Phase decision: {action} phase {next_phase_id}. Reason: {transition_reason}"
-
-@tool
-def update_player_state(player_id: str, state_name: str, state_value: Any):
-    """
-    Update a single state value for a specific player.
-    Player states structure: player_states[player_id][state_name] = state_value
-    
-    Args:
-        player_id: Player identifier (e.g., "1", "2", "player_001")
-        state_name: Name of the state to update (e.g., "role", "alive", "votes", "target")  
-        state_value: New value for the state (can be string, int, bool, list, etc.)
-        
-    Returns:
-        Dict with update confirmation
-    """
-    logger.info(f"[update_player_state] Player {player_id}: {state_name} = {state_value}")
-    
-    result = {
-        "success": True,
-        "player_id": player_id,
-        "state_name": state_name, 
-        "state_value": state_value,
-        "updated": True
-    }
-    
-    return result
-
-@tool
-def update_player_actions(state: AgentState, player_id: str, actions: str, phase: str) -> str:
-    """
-    Record player actions for AI tracking. Use this to log what players (including bots) did in each phase.
-    
-    Args:
-        player_id: Player ID (e.g. '1', '2', '3')
-        actions: Description of what the player did (e.g. 'voted for Alice, defended Bob')
-        phase: Current game phase (e.g. 'day_voting', 'night_action', 'discussion')
-    
-    Returns:
-        Confirmation message about the recorded action
-    """
-    import time
-    
-    # Get player name from roomSession or player_states
-    player_name = f"Player {player_id}"
-    if state.roomSession and "players" in state.roomSession:
-        for player in state.roomSession["players"]:
-            if str(player.get("gamePlayerId", "")) == str(player_id):
-                player_name = player.get("name", player_name)
-                break
-    elif player_id in state.player_states and "name" in state.player_states[player_id]:
-        player_name = state.player_states[player_id]["name"]
-    
-    # Update player actions
-    current_phase_id = state.get("current_phase_id", 0)
-    state.playerActions[player_id] = {
-        "name": player_name,
-        "actions": actions,
-        "timestamp": int(time.time() * 1000),  # milliseconds
-        "phase": phase,
-        "current_phase_id": current_phase_id,
-    }
-    
-    logger.info(f"📝 Recorded actions for {player_name} ({player_id}) in {phase}: {actions}")
-    
-    return f"Recorded actions for {player_name} (ID: {player_id}): {actions}"
-
-# Centralized backend tools (shared across nodes)
-backend_tools = [
-    update_player_state,
-    update_player_actions,
-    set_next_phase,
-]
-BACKEND_TOOL_NAMES = {t.name for t in backend_tools}
 
 async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[Literal["__end__"]]:
     """
@@ -1871,6 +1847,10 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     # Print game name from state
     game_name = state.get("gameName", "")
     logger.info(f"[ActionExecutor] Game name from state: {game_name}")
+    
+    # Log raw_messages at node start
+    raw_messages = state.get("messages", [])
+    logger.info(f"[ActionExecutor] raw_messages: {raw_messages}")
     
     logger.info(f"[ActionExecutor][start] ==== start ActionExecutor ====")
     
@@ -2091,44 +2071,48 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     full_messages = state.get("messages", []) or []
     trimmed_messages = full_messages[-30:]  # Increased to accommodate multiple tool calls
     
-    # Filter out incomplete AIMessage + ToolMessage sequences
-    filtered_messages = []
-    i = 0
-    while i < len(trimmed_messages):
-        msg = trimmed_messages[i]
+    # # Filter out incomplete AIMessage + ToolMessage sequences
+    # filtered_messages = []
+    # i = 0
+    # while i < len(trimmed_messages):
+    #     msg = trimmed_messages[i]
         
-        if hasattr(msg, 'tool_calls') and getattr(msg, "tool_calls", None):
-            # Collect expected tool_call_ids
-            tool_calls = getattr(msg, "tool_calls", [])
-            expected_ids = {tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", None) for tc in tool_calls}
-            expected_ids.discard(None)
+    #     if isinstance(msg, AIMessage) and msg.tool_calls:
+    #         # Collect expected tool_call_ids - handle both dict and object formats
+    #         expected_ids = set()
+    #         for tc in msg.tool_calls:
+    #             if isinstance(tc, dict):
+    #                 tc_id = tc.get("id")
+    #             else:
+    #                 tc_id = getattr(tc, "id", None)
+    #             if tc_id:
+    #                 expected_ids.add(tc_id)
             
-            # Collect following ToolMessages
-            tool_messages = []
-            j = i + 1
-            while j < len(trimmed_messages) and hasattr(trimmed_messages[j], "tool_call_id"):
-                tool_messages.append(trimmed_messages[j])
-                j += 1
+    #         # Collect following ToolMessages
+    #         tool_messages = []
+    #         j = i + 1
+    #         while j < len(trimmed_messages) and isinstance(trimmed_messages[j], ToolMessage):
+    #             tool_messages.append(trimmed_messages[j])
+    #             j += 1
             
-            # Check if all expected tool_call_ids have responses
-            received_ids = {getattr(tm, "tool_call_id", None) for tm in tool_messages}
-            received_ids.discard(None)
+    #         # Check if all expected tool_call_ids have responses
+    #         received_ids = {tm.tool_call_id for tm in tool_messages if tm.tool_call_id}
             
-            # Only keep if ALL tool_calls have responses
-            if expected_ids and expected_ids == received_ids:
-                filtered_messages.append(msg)
-                filtered_messages.extend(tool_messages)
+    #         # Only keep if ALL tool_calls have responses
+    #         if expected_ids and expected_ids == received_ids:
+    #             filtered_messages.append(msg)
+    #             filtered_messages.extend(tool_messages)
             
-            i = j
-        elif hasattr(msg, "tool_call_id"):
-            # Orphaned ToolMessage, skip
-            i += 1
-        else:
-            # Keep other messages (HumanMessage, SystemMessage)
-            filtered_messages.append(msg)
-            i += 1
+    #         i = j
+    #     elif isinstance(msg, ToolMessage):
+    #         # Orphaned ToolMessage, skip
+    #         i += 1
+    #     else:
+    #         # Keep other messages (HumanMessage, SystemMessage, etc.)
+    #         filtered_messages.append(msg)
+    #         i += 1
     
-    trimmed_messages = filtered_messages
+    # trimmed_messages = filtered_messages
     
     latest_state_system = SystemMessage(
         content=(
@@ -2240,15 +2224,12 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     # Check if currently in progress (similar to agent.py logic)
     plan_status = state.get("planStatus", "")
     currently_in_progress = (plan_status == "in_progress")
-    
-    # Only show chat messages when not actively in progress; always deliver frontend tool calls
-    final_messages = [AIMessage(content="", tool_calls=tool_calls)] if (has_frontend_tool_calls or not currently_in_progress) else ([])
-    
+
     return Command(
         goto="__end__",
         update={
             # Use final_messages like agent.py
-            "messages": final_messages,
+            "messages": response,
             "items": state.get("items", []),
             "player_states": final_player_states,  # Updated with role assignments
             "current_phase_id": updated_phase_id,
@@ -2272,7 +2253,7 @@ workflow.add_node("RefereeNode", RefereeNode)
 workflow.add_node("PhaseNode", PhaseNode)
 workflow.add_node("RoleAssignmentNode", RoleAssignmentNode)
 workflow.add_node("ActionExecutor", ActionExecutor)
-workflow.add_node("ActionValidatorNode", ActionValidatorNode)
+# workflow.add_node("ActionValidatorNode", ActionValidatorNode)
 
 # Set entry point
 workflow.set_entry_point("InitialRouterNode")

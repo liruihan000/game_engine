@@ -47,7 +47,7 @@ if VERBOSE_LOGGING:
     # 文件处理器 - 使用时间戳创建新的日志文件
     from datetime import datetime
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    log_file = f'/home/lee/canvas-with-langgraph-python/logs/dsl_agent_{timestamp}.log'
+    log_file = f'/home/lee/game_engine/logs/dsl_agent_{timestamp}.log'
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)

@@ -2425,28 +2425,52 @@ export default function CopilotKitPage() {
                 <div className="space-y-2 overflow-y-auto max-h-[180px]">
                   {(() => {
                     const playerActions = viewState.playerActions || {};
-                    const actionEntries = Object.entries(playerActions)
-                      .map(([playerId, action]) => ({ playerId, ...action }))
-                      .sort((a, b) => b.timestamp - a.timestamp)
-                      .slice(0, 50);
+                    const playerEntries = Object.entries(playerActions);
                     
-                    return actionEntries.length === 0 ? (
+                    return playerEntries.length === 0 ? (
                       <div className="text-xs text-muted-foreground text-center py-4">
                         No player actions recorded
                       </div>
                     ) : (
-                      actionEntries.map((action, index) => (
-                        <div key={`${action.playerId}-${action.timestamp}-${index}`} className="p-2 bg-muted/50 rounded border">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-medium">{action.name}</span>
-                            <span className="text-xs text-muted-foreground">
-                              {new Date(action.timestamp).toLocaleTimeString()}
-                            </span>
+                      playerEntries.map(([playerId, playerData]) => {
+                        if (!playerData || typeof playerData !== 'object' || !playerData.actions) {
+                          return null;
+                        }
+                        
+                        const actions = Object.entries(playerData.actions)
+                          .map(([actionId, actionData]: [string, any]) => ({
+                            actionId,
+                            phase: actionData?.phase || '',
+                            timestamp: actionData?.timestamp || 0,
+                            action: actionData?.action || ''
+                          }))
+                          .sort((a, b) => b.timestamp - a.timestamp);
+                        
+                        return (
+                          <div key={playerId} className="p-3 bg-card border border-border rounded-lg">
+                            <div className="text-sm font-medium text-foreground mb-2">
+                              {playerData.name}
+                            </div>
+                            <div className="space-y-1">
+                              {actions.length === 0 ? (
+                                <div className="text-xs text-muted-foreground">No actions</div>
+                              ) : (
+                                actions.map((actionData) => (
+                                  <div key={actionData.actionId} className="text-xs p-2 bg-muted/30 rounded">
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="font-medium">{actionData.phase}</span>
+                                      <span className="text-muted-foreground">
+                                        {new Date(actionData.timestamp).toLocaleTimeString()}
+                                      </span>
+                                    </div>
+                                    <div>{actionData.action}</div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground mb-1">Phase: {action.phase}</div>
-                          <div className="text-xs">{action.actions}</div>
-                        </div>
-                      ))
+                        );
+                      })
                     );
                   })()}
                 </div>

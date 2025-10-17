@@ -37,7 +37,7 @@ if VERBOSE_LOGGING:
     # File handler - merge daily logs in dev mode (avoid multiple files from hot reload)
     from datetime import datetime
     date_str = datetime.now().strftime('%Y%m%d')
-    log_file = f'/home/lee/canvas-with-langgraph-python/logs/dm_agent_bot_{date_str}.log'
+    log_file = f'/home/lee/game_engine/logs/dm_agent_bot_{date_str}.log'
     
     # Ensure log directory exists
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
@@ -188,6 +188,10 @@ async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Comman
     game_name = state.get("gameName", "")
     logger.info(f"[InitialRouterNode] Game name from state: {game_name}")
     
+    # Log raw_messages at node start
+    raw_messages = state.get("messages", [])
+    logger.info(f"[InitialRouterNode] raw_messages: {raw_messages}")
+    
     # === DETAILED INPUT LOGGING ===
     current_phase_id = state.get('current_phase_id', 0)
     player_states = state.get("player_states", {})
@@ -320,7 +324,6 @@ async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Comman
     final_dsl = dsl_content if dsl_content else state.get("dsl", {})
     updates["dsl"] = final_dsl
     logger.info(f"[InitialRouter] Passing DSL with keys: {list(final_dsl.keys()) if final_dsl else 'empty'}")
-    updates["messages"] = last_msg
     
     # === DETAILED OUTPUT LOGGING ===
     logger.info(f"[InitialRouter][OUTPUT] Command goto: FeedbackDecisionNode")
@@ -789,6 +792,10 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
     
     logger.info("[BotBehaviorNode] Starting bot behavior analysis")
     
+    # Log raw_messages at node start
+    raw_messages = state.get("messages", [])
+    logger.info(f"[BotBehaviorNode] raw_messages: {raw_messages}")
+    
     # Import LLM dependencies
     from langchain.chat_models import init_chat_model
     from langchain_core.messages import SystemMessage
@@ -1081,6 +1088,10 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     
     logger.info("[RefereeNode] Starting referee analysis and state updates")
     
+    # Log raw_messages at node start
+    raw_messages = state.get("messages", [])
+    logger.info(f"[RefereeNode] raw_messages: {raw_messages}")
+    
     # Extract inputs
     raw_messages = state.get("messages", []) or []
     # Handle different message formats
@@ -1338,6 +1349,10 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
     """
     logger.info("[RoleAssignmentNode] Starting intelligent role assignment")
     
+    # Log raw_messages at node start
+    raw_messages = state.get("messages", [])
+    logger.info(f"[RoleAssignmentNode] raw_messages: {raw_messages}")
+    
     # Extract inputs
     dsl_content = state.get("dsl", {})
     player_states = state.get("player_states", {})
@@ -1515,6 +1530,10 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
     logger.info(f"[PhaseNode] Game name from state: {game_name}")
     
     logger.info("[PhaseNode] Starting phase transition analysis")
+    
+    # Log raw_messages at node start
+    raw_messages = state.get("messages", [])
+    logger.info(f"[PhaseNode] raw_messages: {raw_messages}")
     
     # Extract inputs
     dsl_content = state.get("dsl", {})
@@ -1872,15 +1891,15 @@ def clean_llm_json_response(response_content: str) -> str:
     
     return response_content
 
-async def ActionValidatorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["PhaseNode", "ActionExecutor"]]:
-    """
-    ActionValidatorNode - Currently in BYPASS mode (validation disabled).
-    Simply passes through to allow execution to continue without validation.
-    """
-    logger.info("[ActionValidatorNode] ⚡ BYPASS MODE - Skipping validation, allowing execution to continue")
+# async def ActionValidatorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["PhaseNode", "ActionExecutor"]]:
+#     """
+#     ActionValidatorNode - Currently in BYPASS mode (validation disabled).
+#     Simply passes through to allow execution to continue without validation.
+#     """
+#     logger.info("[ActionValidatorNode] ⚡ BYPASS MODE - Skipping validation, allowing execution to continue")
     
-    # Reset retry count and continue to PhaseNode for phase progression
-    return Command(goto="PhaseNode", update={"retry_count": 0})
+#     # Reset retry count and continue to PhaseNode for phase progression
+#     return Command(goto="PhaseNode", update={"retry_count": 0})
 
 def summarize_items_for_prompt(state: AgentState) -> str:
     """Summarize current UI items with ID, type, name, position - formatted for ActionExecutor deletion/creation decisions."""
@@ -2012,6 +2031,10 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     # Print game name from state
     game_name = state.get("gameName", "")
     logger.info(f"[ActionExecutor] Game name from state: {game_name}")
+    
+    # Log raw_messages at node start
+    raw_messages = state.get("messages", [])
+    logger.info(f"[ActionExecutor] raw_messages: {raw_messages}")
     
     logger.info(f"[ActionExecutor][start] ==== start ActionExecutor ====")
     
@@ -2486,7 +2509,7 @@ workflow.add_node("RefereeNode", RefereeNode)
 workflow.add_node("PhaseNode", PhaseNode)
 workflow.add_node("RoleAssignmentNode", RoleAssignmentNode)
 workflow.add_node("ActionExecutor", ActionExecutor)
-workflow.add_node("ActionValidatorNode", ActionValidatorNode)
+# workflow.add_node("ActionValidatorNode", ActionValidatorNode)
 
 # Set entry point
 workflow.set_entry_point("InitialRouterNode")

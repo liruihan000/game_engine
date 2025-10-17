@@ -34,7 +34,7 @@ if VERBOSE_LOGGING:
     # 文件处理器 - 开发态按“天”合并日志，避免热重载生成多文件
     from datetime import datetime
     date_str = datetime.now().strftime('%Y%m%d')
-    log_file = f'/home/lee/canvas-with-langgraph-python/logs/agent_{date_str}.log'
+    log_file = f'/home/lee/game_engine/logs/agent_{date_str}.log'
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
