@@ -1,0 +1,4492 @@
+{
+  "copilotkit": {
+    "actions": [
+      {
+        "type": "function",
+        "name": "displayBroadcastInput",
+        "function": {
+          "name": "displayBroadcastInput",
+          "description": "Open a floating, pill-shaped broadcast input box for sending a system-wide message.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string",
+                "description": "Small caption above the input"
+              },
+              "placeholder": {
+                "type": "string",
+                "description": "Placeholder text in the input"
+              },
+              "prefill": {
+                "type": "string",
+                "description": "Prefill text for the input"
+              }
+            },
+            "required": []
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "setGlobalDescription",
+        "function": {
+          "name": "setGlobalDescription",
+          "description": "Set the global description/subtitle (outside of items).",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string",
+                "description": "The new global description/subtitle."
+              }
+            },
+            "required": [
+              "description"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "setItemName",
+        "function": {
+          "name": "setItemName",
+          "description": "Set an item's name/title.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "The new item name/title."
+              },
+              "itemId": {
+                "type": "string",
+                "description": "Target item id."
+              }
+            },
+            "required": [
+              "name",
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "setItemSubtitleOrDescription",
+        "function": {
+          "name": "setItemSubtitleOrDescription",
+          "description": "Set an item's description/subtitle (short description or subtitle).",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "subtitle": {
+                "type": "string",
+                "description": "The new item description/subtitle."
+              },
+              "itemId": {
+                "type": "string",
+                "description": "Target item id."
+              }
+            },
+            "required": [
+              "subtitle",
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createCharacterCard",
+        "function": {
+          "name": "createCharacterCard",
+          "description": "Create a character card for the game.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "role": {
+                "type": "string",
+                "description": "Character role (e.g., werewolf, seer, villager)"
+              },
+              "position": {
+                "type": "string",
+                "description": "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+              },
+              "size": {
+                "type": "string",
+                "description": "Card size (select: 'small' | 'medium' | 'large'; default: 'medium')"
+              },
+              "description": {
+                "type": "string",
+                "description": "Optional character description"
+              },
+              "audience_type": {
+                "type": "boolean",
+                "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']"
+              }
+            },
+            "required": [
+              "name",
+              "role",
+              "position"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createActionButton",
+        "function": {
+          "name": "createActionButton",
+          "description": "Create an action button for player interactions.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "label": {
+                "type": "string",
+                "description": "Button text"
+              },
+              "action": {
+                "type": "string",
+                "description": "Action identifier when clicked"
+              },
+              "enabled": {
+                "type": "boolean",
+                "description": "Whether button is clickable"
+              },
+              "position": {
+                "type": "string",
+                "description": "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+              },
+              "size": {
+                "type": "string",
+                "description": "Button size (select: 'small' | 'medium' | 'large')"
+              },
+              "variant": {
+                "type": "string",
+                "description": "Button style (select: 'primary' | 'secondary' | 'danger')"
+              },
+              "audience_type": {
+                "type": "boolean",
+                "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']"
+              }
+            },
+            "required": [
+              "name",
+              "label",
+              "action",
+              "enabled",
+              "position"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createPhaseIndicator",
+        "function": {
+          "name": "createPhaseIndicator",
+          "description": "Create a phase indicator to show current game phase.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "currentPhase": {
+                "type": "string",
+                "description": "Current game phase"
+              },
+              "position": {
+                "type": "string",
+                "description": "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+              },
+              "description": {
+                "type": "string",
+                "description": "Optional phase description"
+              },
+              "timeRemaining": {
+                "type": "number",
+                "description": "Seconds remaining in phase"
+              },
+              "audience_type": {
+                "type": "boolean",
+                "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']"
+              }
+            },
+            "required": [
+              "name",
+              "currentPhase",
+              "position"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createTextDisplay",
+        "function": {
+          "name": "createTextDisplay",
+          "description": "Create a text display for game information.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "content": {
+                "type": "string",
+                "description": "Main text content"
+              },
+              "position": {
+                "type": "string",
+                "description": "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+              },
+              "title": {
+                "type": "string",
+                "description": "Optional title text"
+              },
+              "type": {
+                "type": "string",
+                "description": "Display type (select: 'info' | 'warning' | 'error' | 'success')"
+              },
+              "audience_type": {
+                "type": "boolean",
+                "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']"
+              }
+            },
+            "required": [
+              "name",
+              "content",
+              "position"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createVotingPanel",
+        "function": {
+          "name": "createVotingPanel",
+          "description": "Create a voting panel for player voting.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "votingId": {
+                "type": "string",
+                "description": "Unique voting ID"
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "List of voting options"
+              },
+              "position": {
+                "type": "string",
+                "description": "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+              },
+              "title": {
+                "type": "string",
+                "description": "Optional voting title/question"
+              },
+              "audience_type": {
+                "type": "boolean",
+                "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']"
+              }
+            },
+            "required": [
+              "name",
+              "votingId",
+              "options",
+              "position"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "submitVote",
+        "function": {
+          "name": "submitVote",
+          "description": "Submit a vote programmatically for the current player (no click needed)",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "votingId": {
+                "type": "string",
+                "description": "Target voting ID"
+              },
+              "option": {
+                "type": "string",
+                "description": "Option to vote for (target name or id)"
+              }
+            },
+            "required": [
+              "votingId",
+              "option"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createAvatarSet",
+        "function": {
+          "name": "createAvatarSet",
+          "description": "Create avatar set to display all players.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "avatarType": {
+                "type": "string",
+                "description": "Avatar type (select: 'human' | 'wolf' | 'dog' | 'cat')"
+              },
+              "audience_type": {
+                "type": "boolean",
+                "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']"
+              }
+            },
+            "required": [
+              "name",
+              "avatarType"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "markPlayerDead",
+        "function": {
+          "name": "markPlayerDead",
+          "description": "Mark a player as dead, making their avatar appear grayed out.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "playerId": {
+                "type": "string",
+                "description": "Player ID to mark as dead"
+              },
+              "playerName": {
+                "type": "string",
+                "description": "Player name for confirmation"
+              }
+            },
+            "required": [
+              "playerId",
+              "playerName"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createTimer",
+        "function": {
+          "name": "createTimer",
+          "description": "Create a timer component fixed to top-left corner that counts down and automatically sends a message to Agent when time expires.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Timer name"
+              },
+              "duration": {
+                "type": "number",
+                "description": "Timer duration in seconds"
+              },
+              "label": {
+                "type": "string",
+                "description": "Optional label to display above timer"
+              },
+              "audience_type": {
+                "type": "boolean",
+                "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Array of player IDs who can see this component (only used when audience_type=false)."
+              }
+            },
+            "required": [
+              "name",
+              "duration"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createBackgroundControl",
+        "function": {
+          "name": "createBackgroundControl",
+          "description": "Create background color control panel.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "backgroundColor": {
+                "type": "string",
+                "description": "Initial background color (select: 'white' | 'gray-900' | 'blue-50' | 'green-50' | 'purple-50')"
+              },
+              "audience_type": {
+                "type": "boolean"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "changeBackgroundColor",
+        "function": {
+          "name": "changeBackgroundColor",
+          "description": "Change background color (creates control if missing)",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "backgroundColor": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "backgroundColor"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createResultDisplay",
+        "function": {
+          "name": "createResultDisplay",
+          "description": "Create a result display showing content as large artistic text with gradient colors.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "content": {
+                "type": "string",
+                "description": "Result content to display"
+              },
+              "position": {
+                "type": "string",
+                "description": "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+              }
+            },
+            "required": [
+              "name",
+              "content",
+              "position"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createHandsCard",
+        "function": {
+          "name": "createHandsCard",
+          "description": "Create a hand card item for card games (minimal, modern style)",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "cardType": {
+                "type": "string",
+                "description": "Card classification (e.g., attack, defense, spell)"
+              },
+              "cardName": {
+                "type": "string",
+                "description": "Display name of the card"
+              },
+              "descriptions": {
+                "type": "string",
+                "description": "Short description or effect"
+              },
+              "color": {
+                "type": "string",
+                "description": "Accent color (hex or token). Default neutral"
+              },
+              "position": {
+                "type": "string",
+                "description": "Grid position (default: bottom-center)"
+              },
+              "audience_type": {
+                "type": "boolean",
+                "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Player IDs who can see this component when audience_type=false"
+              }
+            },
+            "required": [
+              "name",
+              "cardType",
+              "cardName"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createScoreBoard",
+        "function": {
+          "name": "createScoreBoard",
+          "description": "Create a scoreboard component with optional entries and styling",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "title": {
+                "type": "string",
+                "description": "Scoreboard title"
+              },
+              "entries": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "Array of entries: [{id, name, score}]"
+              },
+              "sort": {
+                "type": "string",
+                "description": "Sort order (asc|desc)"
+              },
+              "accentColor": {
+                "type": "string",
+                "description": "Accent color"
+              },
+              "position": {
+                "type": "string",
+                "description": "Grid position (default: top-right)"
+              },
+              "audience_type": {
+                "type": "boolean",
+                "description": "true=public; false=private"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Visible player IDs if private"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updateScoreBoard",
+        "function": {
+          "name": "updateScoreBoard",
+          "description": "Update scoreboard title/sort/accentColor/position",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string",
+                "description": "Target score_board item id"
+              },
+              "title": {
+                "type": "string"
+              },
+              "sort": {
+                "type": "string"
+              },
+              "accentColor": {
+                "type": "string"
+              },
+              "position": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "setScoreBoardEntries",
+        "function": {
+          "name": "setScoreBoardEntries",
+          "description": "Replace all scoreboard entries",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "entries": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "Array of {id, name, score}"
+              }
+            },
+            "required": [
+              "itemId",
+              "entries"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "upsertScoreEntry",
+        "function": {
+          "name": "upsertScoreEntry",
+          "description": "Add or update a scoreboard entry",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "entryId": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "score": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "itemId",
+              "entryId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "removeScoreEntry",
+        "function": {
+          "name": "removeScoreEntry",
+          "description": "Remove a single scoreboard entry by id",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "entryId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId",
+              "entryId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createStatementBoard",
+        "function": {
+          "name": "createStatementBoard",
+          "description": "Create a statement board (up to 3 statements) with optional highlight",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "statements": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "highlightIndex": {
+                "type": "number"
+              },
+              "locked": {
+                "type": "boolean"
+              },
+              "accentColor": {
+                "type": "string"
+              },
+              "position": {
+                "type": "string"
+              },
+              "audience_type": {
+                "type": "boolean"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updateStatementBoard",
+        "function": {
+          "name": "updateStatementBoard",
+          "description": "Update statement board fields",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "statements": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "highlightIndex": {
+                "type": "number"
+              },
+              "locked": {
+                "type": "boolean"
+              },
+              "accentColor": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createReactionTimer",
+        "function": {
+          "name": "createReactionTimer",
+          "description": "Create a reaction timer bar with duration and label",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "duration": {
+                "type": "number"
+              },
+              "label": {
+                "type": "string"
+              },
+              "accentColor": {
+                "type": "string"
+              },
+              "position": {
+                "type": "string"
+              },
+              "audience_type": {
+                "type": "boolean"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "startReactionTimer",
+        "function": {
+          "name": "startReactionTimer",
+          "description": "Start a reaction timer (sets startedAt and running)",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "duration": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "stopReactionTimer",
+        "function": {
+          "name": "stopReactionTimer",
+          "description": "Stop/pause a reaction timer",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "resetReactionTimer",
+        "function": {
+          "name": "resetReactionTimer",
+          "description": "Reset reaction timer to idle (clears startedAt, running=false)",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createNightOverlay",
+        "function": {
+          "name": "createNightOverlay",
+          "description": "Create a global night overlay (toggle visibility, optional text)",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "visible": {
+                "type": "boolean"
+              },
+              "title": {
+                "type": "string"
+              },
+              "subtitle": {
+                "type": "string"
+              },
+              "opacity": {
+                "type": "number"
+              },
+              "blur": {
+                "type": "boolean"
+              },
+              "audience_type": {
+                "type": "boolean"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "setNightOverlay",
+        "function": {
+          "name": "setNightOverlay",
+          "description": "Toggle night overlay and optionally update text/opacity",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "visible": {
+                "type": "boolean"
+              },
+              "title": {
+                "type": "string"
+              },
+              "subtitle": {
+                "type": "string"
+              },
+              "opacity": {
+                "type": "number"
+              },
+              "blur": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "itemId",
+              "visible"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createTurnIndicator",
+        "function": {
+          "name": "createTurnIndicator",
+          "description": "Create a pill turn indicator for the active player",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "currentPlayerId": {
+                "type": "string"
+              },
+              "playerName": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "accentColor": {
+                "type": "string"
+              },
+              "position": {
+                "type": "string"
+              },
+              "audience_type": {
+                "type": "boolean"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "currentPlayerId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updateTurnIndicator",
+        "function": {
+          "name": "updateTurnIndicator",
+          "description": "Update turn indicator fields",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "currentPlayerId": {
+                "type": "string"
+              },
+              "playerName": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "accentColor": {
+                "type": "string"
+              },
+              "position": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createHealthDisplay",
+        "function": {
+          "name": "createHealthDisplay",
+          "description": "Create a health/bullets display",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "value": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "style": {
+                "type": "string"
+              },
+              "accentColor": {
+                "type": "string"
+              },
+              "position": {
+                "type": "string"
+              },
+              "audience_type": {
+                "type": "boolean"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updateHealthDisplay",
+        "function": {
+          "name": "updateHealthDisplay",
+          "description": "Update health display (value/max/style/accentColor/position)",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "value": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              },
+              "style": {
+                "type": "string"
+              },
+              "accentColor": {
+                "type": "string"
+              },
+              "position": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createInfluenceSet",
+        "function": {
+          "name": "createInfluenceSet",
+          "description": "Create a 2-card influence set for Coup",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "ownerId": {
+                "type": "string"
+              },
+              "cards": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "[{name, revealed}] length up to 2"
+              },
+              "accentColor": {
+                "type": "string"
+              },
+              "position": {
+                "type": "string"
+              },
+              "audience_type": {
+                "type": "boolean"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "name",
+              "ownerId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updateInfluenceSet",
+        "function": {
+          "name": "updateInfluenceSet",
+          "description": "Update influence set fields (ownerId/cards/accentColor/position)",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "ownerId": {
+                "type": "string"
+              },
+              "cards": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "accentColor": {
+                "type": "string"
+              },
+              "position": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "revealInfluenceCard",
+        "function": {
+          "name": "revealInfluenceCard",
+          "description": "Reveal one influence card by index (0 or 1)",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "index": {
+                "type": "number"
+              },
+              "revealed": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "itemId",
+              "index"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updateHandsCard",
+        "function": {
+          "name": "updateHandsCard",
+          "description": "Update a hands card's basic fields (type, name, descriptions, color).",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string",
+                "description": "Target hands_card item id"
+              },
+              "cardType": {
+                "type": "string",
+                "description": "Card classification"
+              },
+              "cardName": {
+                "type": "string",
+                "description": "Display name of the card"
+              },
+              "descriptions": {
+                "type": "string",
+                "description": "Short description or effect"
+              },
+              "color": {
+                "type": "string",
+                "description": "Accent color (hex or token)"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updatePhaseIndicator",
+        "function": {
+          "name": "updatePhaseIndicator",
+          "description": "Update phase indicator fields",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "currentPhase": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "timeRemaining": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updateTextDisplay",
+        "function": {
+          "name": "updateTextDisplay",
+          "description": "Update text display title/content/type",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updateActionButton",
+        "function": {
+          "name": "updateActionButton",
+          "description": "Update action button fields",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "action": {
+                "type": "string"
+              },
+              "enabled": {
+                "type": "boolean"
+              },
+              "variant": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updateCharacterCard",
+        "function": {
+          "name": "updateCharacterCard",
+          "description": "Update character card fields",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "role": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "size": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updateVotingPanel",
+        "function": {
+          "name": "updateVotingPanel",
+          "description": "Update voting panel title/options",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              },
+              "options": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updateResultDisplay",
+        "function": {
+          "name": "updateResultDisplay",
+          "description": "Update result display content",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "updateTimer",
+        "function": {
+          "name": "updateTimer",
+          "description": "Update timer duration/label",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "duration": {
+                "type": "number"
+              },
+              "label": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "setItemPosition",
+        "function": {
+          "name": "setItemPosition",
+          "description": "Update an item's grid position if supported",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string"
+              },
+              "position": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "itemId",
+              "position"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "setHandsCardAudience",
+        "function": {
+          "name": "setHandsCardAudience",
+          "description": "Update audience for a hands card (public vs private players)",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string",
+                "description": "Target hands_card item id"
+              },
+              "audience_type": {
+                "type": "boolean",
+                "description": "true=public, false=private"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Player IDs when private"
+              }
+            },
+            "required": [
+              "itemId",
+              "audience_type"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createHandsCardForPlayer",
+        "function": {
+          "name": "createHandsCardForPlayer",
+          "description": "Create a private hands card visible only to the specified player",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "playerId": {
+                "type": "string",
+                "description": "Target player id (gamePlayerId)"
+              },
+              "cardType": {
+                "type": "string",
+                "description": "Card classification"
+              },
+              "cardName": {
+                "type": "string",
+                "description": "Display name of the card"
+              },
+              "descriptions": {
+                "type": "string",
+                "description": "Short description or effect"
+              },
+              "color": {
+                "type": "string",
+                "description": "Accent color (hex or token)"
+              },
+              "position": {
+                "type": "string",
+                "description": "Grid position (default: bottom-center)"
+              }
+            },
+            "required": [
+              "name",
+              "playerId",
+              "cardType",
+              "cardName"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createPlayerStatesDisplay",
+        "function": {
+          "name": "createPlayerStatesDisplay",
+          "description": "Create a display panel showing current player states with real-time updates",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "title": {
+                "type": "string",
+                "description": "Display title (default: 'Player States')"
+              },
+              "position": {
+                "type": "string",
+                "description": "Grid position (default: 'middle-left')"
+              },
+              "maxHeight": {
+                "type": "string",
+                "description": "Max height for scrolling (default: '400px')"
+              },
+              "audience_type": {
+                "type": "boolean",
+                "description": "true=public; false=private"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Visible player IDs if private"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "createPlayerActionsDisplay",
+        "function": {
+          "name": "createPlayerActionsDisplay",
+          "description": "Create a scrollable display panel showing player actions log with latest actions at the top",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Item name"
+              },
+              "title": {
+                "type": "string",
+                "description": "Display title (default: 'Player Actions')"
+              },
+              "position": {
+                "type": "string",
+                "description": "Grid position (default: 'middle-right')"
+              },
+              "maxHeight": {
+                "type": "string",
+                "description": "Max height for scrolling (default: '400px')"
+              },
+              "maxItems": {
+                "type": "number",
+                "description": "Maximum number of actions to display (default: 50)"
+              },
+              "audience_type": {
+                "type": "boolean",
+                "description": "true=public; false=private"
+              },
+              "audience_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Visible player IDs if private"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "deleteItem",
+        "function": {
+          "name": "deleteItem",
+          "description": "Delete an item by id.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "itemId": {
+                "type": "string",
+                "description": "Target item id."
+              }
+            },
+            "required": [
+              "itemId"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "clearCanvas",
+        "function": {
+          "name": "clearCanvas",
+          "description": "Clear all items from the canvas except avatar sets. This is useful when transitioning between game phases or starting fresh.",
+          "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": []
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "addBotChatMessage",
+        "function": {
+          "name": "addBotChatMessage",
+          "description": "Add a bot message to the game chat area",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "botId": {
+                "type": "string",
+                "description": "ID of the bot sending the message"
+              },
+              "botName": {
+                "type": "string",
+                "description": "Name of the bot sending the message"
+              },
+              "message": {
+                "type": "string",
+                "description": "Bot's chat message"
+              },
+              "messageType": {
+                "type": "string",
+                "description": "Message type: 'message', 'system', or 'action'"
+              }
+            },
+            "required": [
+              "botId",
+              "botName",
+              "message"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "name": "promptUserText",
+        "function": {
+          "name": "promptUserText",
+          "description": "Open a dialog for the user to input a paragraph and confirm; reported as spoken by a specific player.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "speakerId": {
+                "type": "string",
+                "description": "Player ID who is speaking (default: current player)"
+              },
+              "title": {
+                "type": "string",
+                "description": "Dialog title"
+              },
+              "placeholder": {
+                "type": "string",
+                "description": "Textarea placeholder"
+              },
+              "toBotId": {
+                "type": "string",
+                "description": "Optional target bot id for direct message"
+              }
+            },
+            "required": []
+          }
+        }
+      }
+    ],
+    "context": []
+  },
+  "tools": [
+    {
+      "type": "function",
+      "name": "displayBroadcastInput",
+      "function": {
+        "name": "displayBroadcastInput",
+        "description": "Open a floating, pill-shaped broadcast input box for sending a system-wide message.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "description": "Small caption above the input"
+            },
+            "placeholder": {
+              "type": "string",
+              "description": "Placeholder text in the input"
+            },
+            "prefill": {
+              "type": "string",
+              "description": "Prefill text for the input"
+            }
+          },
+          "required": []
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "setGlobalDescription",
+      "function": {
+        "name": "setGlobalDescription",
+        "description": "Set the global description/subtitle (outside of items).",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "description": {
+              "type": "string",
+              "description": "The new global description/subtitle."
+            }
+          },
+          "required": [
+            "description"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "setItemName",
+      "function": {
+        "name": "setItemName",
+        "description": "Set an item's name/title.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "The new item name/title."
+            },
+            "itemId": {
+              "type": "string",
+              "description": "Target item id."
+            }
+          },
+          "required": [
+            "name",
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "setItemSubtitleOrDescription",
+      "function": {
+        "name": "setItemSubtitleOrDescription",
+        "description": "Set an item's description/subtitle (short description or subtitle).",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "subtitle": {
+              "type": "string",
+              "description": "The new item description/subtitle."
+            },
+            "itemId": {
+              "type": "string",
+              "description": "Target item id."
+            }
+          },
+          "required": [
+            "subtitle",
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createCharacterCard",
+      "function": {
+        "name": "createCharacterCard",
+        "description": "Create a character card for the game.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "role": {
+              "type": "string",
+              "description": "Character role (e.g., werewolf, seer, villager)"
+            },
+            "position": {
+              "type": "string",
+              "description": "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+            },
+            "size": {
+              "type": "string",
+              "description": "Card size (select: 'small' | 'medium' | 'large'; default: 'medium')"
+            },
+            "description": {
+              "type": "string",
+              "description": "Optional character description"
+            },
+            "audience_type": {
+              "type": "boolean",
+              "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']"
+            }
+          },
+          "required": [
+            "name",
+            "role",
+            "position"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createActionButton",
+      "function": {
+        "name": "createActionButton",
+        "description": "Create an action button for player interactions.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "label": {
+              "type": "string",
+              "description": "Button text"
+            },
+            "action": {
+              "type": "string",
+              "description": "Action identifier when clicked"
+            },
+            "enabled": {
+              "type": "boolean",
+              "description": "Whether button is clickable"
+            },
+            "position": {
+              "type": "string",
+              "description": "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+            },
+            "size": {
+              "type": "string",
+              "description": "Button size (select: 'small' | 'medium' | 'large')"
+            },
+            "variant": {
+              "type": "string",
+              "description": "Button style (select: 'primary' | 'secondary' | 'danger')"
+            },
+            "audience_type": {
+              "type": "boolean",
+              "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']"
+            }
+          },
+          "required": [
+            "name",
+            "label",
+            "action",
+            "enabled",
+            "position"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createPhaseIndicator",
+      "function": {
+        "name": "createPhaseIndicator",
+        "description": "Create a phase indicator to show current game phase.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "currentPhase": {
+              "type": "string",
+              "description": "Current game phase"
+            },
+            "position": {
+              "type": "string",
+              "description": "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+            },
+            "description": {
+              "type": "string",
+              "description": "Optional phase description"
+            },
+            "timeRemaining": {
+              "type": "number",
+              "description": "Seconds remaining in phase"
+            },
+            "audience_type": {
+              "type": "boolean",
+              "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']"
+            }
+          },
+          "required": [
+            "name",
+            "currentPhase",
+            "position"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createTextDisplay",
+      "function": {
+        "name": "createTextDisplay",
+        "description": "Create a text display for game information.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "content": {
+              "type": "string",
+              "description": "Main text content"
+            },
+            "position": {
+              "type": "string",
+              "description": "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+            },
+            "title": {
+              "type": "string",
+              "description": "Optional title text"
+            },
+            "type": {
+              "type": "string",
+              "description": "Display type (select: 'info' | 'warning' | 'error' | 'success')"
+            },
+            "audience_type": {
+              "type": "boolean",
+              "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']"
+            }
+          },
+          "required": [
+            "name",
+            "content",
+            "position"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createVotingPanel",
+      "function": {
+        "name": "createVotingPanel",
+        "description": "Create a voting panel for player voting.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "votingId": {
+              "type": "string",
+              "description": "Unique voting ID"
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "List of voting options"
+            },
+            "position": {
+              "type": "string",
+              "description": "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+            },
+            "title": {
+              "type": "string",
+              "description": "Optional voting title/question"
+            },
+            "audience_type": {
+              "type": "boolean",
+              "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']"
+            }
+          },
+          "required": [
+            "name",
+            "votingId",
+            "options",
+            "position"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "submitVote",
+      "function": {
+        "name": "submitVote",
+        "description": "Submit a vote programmatically for the current player (no click needed)",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "votingId": {
+              "type": "string",
+              "description": "Target voting ID"
+            },
+            "option": {
+              "type": "string",
+              "description": "Option to vote for (target name or id)"
+            }
+          },
+          "required": [
+            "votingId",
+            "option"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createAvatarSet",
+      "function": {
+        "name": "createAvatarSet",
+        "description": "Create avatar set to display all players.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "avatarType": {
+              "type": "string",
+              "description": "Avatar type (select: 'human' | 'wolf' | 'dog' | 'cat')"
+            },
+            "audience_type": {
+              "type": "boolean",
+              "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']"
+            }
+          },
+          "required": [
+            "name",
+            "avatarType"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "markPlayerDead",
+      "function": {
+        "name": "markPlayerDead",
+        "description": "Mark a player as dead, making their avatar appear grayed out.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "playerId": {
+              "type": "string",
+              "description": "Player ID to mark as dead"
+            },
+            "playerName": {
+              "type": "string",
+              "description": "Player name for confirmation"
+            }
+          },
+          "required": [
+            "playerId",
+            "playerName"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createTimer",
+      "function": {
+        "name": "createTimer",
+        "description": "Create a timer component fixed to top-left corner that counts down and automatically sends a message to Agent when time expires.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Timer name"
+            },
+            "duration": {
+              "type": "number",
+              "description": "Timer duration in seconds"
+            },
+            "label": {
+              "type": "string",
+              "description": "Optional label to display above timer"
+            },
+            "audience_type": {
+              "type": "boolean",
+              "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Array of player IDs who can see this component (only used when audience_type=false)."
+            }
+          },
+          "required": [
+            "name",
+            "duration"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createBackgroundControl",
+      "function": {
+        "name": "createBackgroundControl",
+        "description": "Create background color control panel.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "backgroundColor": {
+              "type": "string",
+              "description": "Initial background color (select: 'white' | 'gray-900' | 'blue-50' | 'green-50' | 'purple-50')"
+            },
+            "audience_type": {
+              "type": "boolean"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "changeBackgroundColor",
+      "function": {
+        "name": "changeBackgroundColor",
+        "description": "Change background color (creates control if missing)",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "backgroundColor": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "name",
+            "backgroundColor"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createResultDisplay",
+      "function": {
+        "name": "createResultDisplay",
+        "description": "Create a result display showing content as large artistic text with gradient colors.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "content": {
+              "type": "string",
+              "description": "Result content to display"
+            },
+            "position": {
+              "type": "string",
+              "description": "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')"
+            }
+          },
+          "required": [
+            "name",
+            "content",
+            "position"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createHandsCard",
+      "function": {
+        "name": "createHandsCard",
+        "description": "Create a hand card item for card games (minimal, modern style)",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "cardType": {
+              "type": "string",
+              "description": "Card classification (e.g., attack, defense, spell)"
+            },
+            "cardName": {
+              "type": "string",
+              "description": "Display name of the card"
+            },
+            "descriptions": {
+              "type": "string",
+              "description": "Short description or effect"
+            },
+            "color": {
+              "type": "string",
+              "description": "Accent color (hex or token). Default neutral"
+            },
+            "position": {
+              "type": "string",
+              "description": "Grid position (default: bottom-center)"
+            },
+            "audience_type": {
+              "type": "boolean",
+              "description": "Whether all players can see this (true) or only specific players (false). Default: true"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Player IDs who can see this component when audience_type=false"
+            }
+          },
+          "required": [
+            "name",
+            "cardType",
+            "cardName"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createScoreBoard",
+      "function": {
+        "name": "createScoreBoard",
+        "description": "Create a scoreboard component with optional entries and styling",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "title": {
+              "type": "string",
+              "description": "Scoreboard title"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Array of entries: [{id, name, score}]"
+            },
+            "sort": {
+              "type": "string",
+              "description": "Sort order (asc|desc)"
+            },
+            "accentColor": {
+              "type": "string",
+              "description": "Accent color"
+            },
+            "position": {
+              "type": "string",
+              "description": "Grid position (default: top-right)"
+            },
+            "audience_type": {
+              "type": "boolean",
+              "description": "true=public; false=private"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Visible player IDs if private"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updateScoreBoard",
+      "function": {
+        "name": "updateScoreBoard",
+        "description": "Update scoreboard title/sort/accentColor/position",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string",
+              "description": "Target score_board item id"
+            },
+            "title": {
+              "type": "string"
+            },
+            "sort": {
+              "type": "string"
+            },
+            "accentColor": {
+              "type": "string"
+            },
+            "position": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "setScoreBoardEntries",
+      "function": {
+        "name": "setScoreBoardEntries",
+        "description": "Replace all scoreboard entries",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "Array of {id, name, score}"
+            }
+          },
+          "required": [
+            "itemId",
+            "entries"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "upsertScoreEntry",
+      "function": {
+        "name": "upsertScoreEntry",
+        "description": "Add or update a scoreboard entry",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "entryId": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "score": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "itemId",
+            "entryId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "removeScoreEntry",
+      "function": {
+        "name": "removeScoreEntry",
+        "description": "Remove a single scoreboard entry by id",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "entryId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId",
+            "entryId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createStatementBoard",
+      "function": {
+        "name": "createStatementBoard",
+        "description": "Create a statement board (up to 3 statements) with optional highlight",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "statements": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "highlightIndex": {
+              "type": "number"
+            },
+            "locked": {
+              "type": "boolean"
+            },
+            "accentColor": {
+              "type": "string"
+            },
+            "position": {
+              "type": "string"
+            },
+            "audience_type": {
+              "type": "boolean"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updateStatementBoard",
+      "function": {
+        "name": "updateStatementBoard",
+        "description": "Update statement board fields",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "statements": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "highlightIndex": {
+              "type": "number"
+            },
+            "locked": {
+              "type": "boolean"
+            },
+            "accentColor": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createReactionTimer",
+      "function": {
+        "name": "createReactionTimer",
+        "description": "Create a reaction timer bar with duration and label",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "duration": {
+              "type": "number"
+            },
+            "label": {
+              "type": "string"
+            },
+            "accentColor": {
+              "type": "string"
+            },
+            "position": {
+              "type": "string"
+            },
+            "audience_type": {
+              "type": "boolean"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "startReactionTimer",
+      "function": {
+        "name": "startReactionTimer",
+        "description": "Start a reaction timer (sets startedAt and running)",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "duration": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "stopReactionTimer",
+      "function": {
+        "name": "stopReactionTimer",
+        "description": "Stop/pause a reaction timer",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "resetReactionTimer",
+      "function": {
+        "name": "resetReactionTimer",
+        "description": "Reset reaction timer to idle (clears startedAt, running=false)",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createNightOverlay",
+      "function": {
+        "name": "createNightOverlay",
+        "description": "Create a global night overlay (toggle visibility, optional text)",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            },
+            "subtitle": {
+              "type": "string"
+            },
+            "opacity": {
+              "type": "number"
+            },
+            "blur": {
+              "type": "boolean"
+            },
+            "audience_type": {
+              "type": "boolean"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "setNightOverlay",
+      "function": {
+        "name": "setNightOverlay",
+        "description": "Toggle night overlay and optionally update text/opacity",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "visible": {
+              "type": "boolean"
+            },
+            "title": {
+              "type": "string"
+            },
+            "subtitle": {
+              "type": "string"
+            },
+            "opacity": {
+              "type": "number"
+            },
+            "blur": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "itemId",
+            "visible"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createTurnIndicator",
+      "function": {
+        "name": "createTurnIndicator",
+        "description": "Create a pill turn indicator for the active player",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "currentPlayerId": {
+              "type": "string"
+            },
+            "playerName": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "accentColor": {
+              "type": "string"
+            },
+            "position": {
+              "type": "string"
+            },
+            "audience_type": {
+              "type": "boolean"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "name",
+            "currentPlayerId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updateTurnIndicator",
+      "function": {
+        "name": "updateTurnIndicator",
+        "description": "Update turn indicator fields",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "currentPlayerId": {
+              "type": "string"
+            },
+            "playerName": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "accentColor": {
+              "type": "string"
+            },
+            "position": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createHealthDisplay",
+      "function": {
+        "name": "createHealthDisplay",
+        "description": "Create a health/bullets display",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "value": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "style": {
+              "type": "string"
+            },
+            "accentColor": {
+              "type": "string"
+            },
+            "position": {
+              "type": "string"
+            },
+            "audience_type": {
+              "type": "boolean"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updateHealthDisplay",
+      "function": {
+        "name": "updateHealthDisplay",
+        "description": "Update health display (value/max/style/accentColor/position)",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "value": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            },
+            "style": {
+              "type": "string"
+            },
+            "accentColor": {
+              "type": "string"
+            },
+            "position": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createInfluenceSet",
+      "function": {
+        "name": "createInfluenceSet",
+        "description": "Create a 2-card influence set for Coup",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "ownerId": {
+              "type": "string"
+            },
+            "cards": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              },
+              "description": "[{name, revealed}] length up to 2"
+            },
+            "accentColor": {
+              "type": "string"
+            },
+            "position": {
+              "type": "string"
+            },
+            "audience_type": {
+              "type": "boolean"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "name",
+            "ownerId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updateInfluenceSet",
+      "function": {
+        "name": "updateInfluenceSet",
+        "description": "Update influence set fields (ownerId/cards/accentColor/position)",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "ownerId": {
+              "type": "string"
+            },
+            "cards": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "accentColor": {
+              "type": "string"
+            },
+            "position": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "revealInfluenceCard",
+      "function": {
+        "name": "revealInfluenceCard",
+        "description": "Reveal one influence card by index (0 or 1)",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "index": {
+              "type": "number"
+            },
+            "revealed": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "itemId",
+            "index"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updateHandsCard",
+      "function": {
+        "name": "updateHandsCard",
+        "description": "Update a hands card's basic fields (type, name, descriptions, color).",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string",
+              "description": "Target hands_card item id"
+            },
+            "cardType": {
+              "type": "string",
+              "description": "Card classification"
+            },
+            "cardName": {
+              "type": "string",
+              "description": "Display name of the card"
+            },
+            "descriptions": {
+              "type": "string",
+              "description": "Short description or effect"
+            },
+            "color": {
+              "type": "string",
+              "description": "Accent color (hex or token)"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updatePhaseIndicator",
+      "function": {
+        "name": "updatePhaseIndicator",
+        "description": "Update phase indicator fields",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "currentPhase": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "timeRemaining": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updateTextDisplay",
+      "function": {
+        "name": "updateTextDisplay",
+        "description": "Update text display title/content/type",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updateActionButton",
+      "function": {
+        "name": "updateActionButton",
+        "description": "Update action button fields",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "label": {
+              "type": "string"
+            },
+            "action": {
+              "type": "string"
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "variant": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updateCharacterCard",
+      "function": {
+        "name": "updateCharacterCard",
+        "description": "Update character card fields",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "role": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "size": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updateVotingPanel",
+      "function": {
+        "name": "updateVotingPanel",
+        "description": "Update voting panel title/options",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "options": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updateResultDisplay",
+      "function": {
+        "name": "updateResultDisplay",
+        "description": "Update result display content",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "updateTimer",
+      "function": {
+        "name": "updateTimer",
+        "description": "Update timer duration/label",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "duration": {
+              "type": "number"
+            },
+            "label": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "setItemPosition",
+      "function": {
+        "name": "setItemPosition",
+        "description": "Update an item's grid position if supported",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string"
+            },
+            "position": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "itemId",
+            "position"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "setHandsCardAudience",
+      "function": {
+        "name": "setHandsCardAudience",
+        "description": "Update audience for a hands card (public vs private players)",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string",
+              "description": "Target hands_card item id"
+            },
+            "audience_type": {
+              "type": "boolean",
+              "description": "true=public, false=private"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Player IDs when private"
+            }
+          },
+          "required": [
+            "itemId",
+            "audience_type"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createHandsCardForPlayer",
+      "function": {
+        "name": "createHandsCardForPlayer",
+        "description": "Create a private hands card visible only to the specified player",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "playerId": {
+              "type": "string",
+              "description": "Target player id (gamePlayerId)"
+            },
+            "cardType": {
+              "type": "string",
+              "description": "Card classification"
+            },
+            "cardName": {
+              "type": "string",
+              "description": "Display name of the card"
+            },
+            "descriptions": {
+              "type": "string",
+              "description": "Short description or effect"
+            },
+            "color": {
+              "type": "string",
+              "description": "Accent color (hex or token)"
+            },
+            "position": {
+              "type": "string",
+              "description": "Grid position (default: bottom-center)"
+            }
+          },
+          "required": [
+            "name",
+            "playerId",
+            "cardType",
+            "cardName"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createPlayerStatesDisplay",
+      "function": {
+        "name": "createPlayerStatesDisplay",
+        "description": "Create a display panel showing current player states with real-time updates",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "title": {
+              "type": "string",
+              "description": "Display title (default: 'Player States')"
+            },
+            "position": {
+              "type": "string",
+              "description": "Grid position (default: 'middle-left')"
+            },
+            "maxHeight": {
+              "type": "string",
+              "description": "Max height for scrolling (default: '400px')"
+            },
+            "audience_type": {
+              "type": "boolean",
+              "description": "true=public; false=private"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Visible player IDs if private"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "createPlayerActionsDisplay",
+      "function": {
+        "name": "createPlayerActionsDisplay",
+        "description": "Create a scrollable display panel showing player actions log with latest actions at the top",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "Item name"
+            },
+            "title": {
+              "type": "string",
+              "description": "Display title (default: 'Player Actions')"
+            },
+            "position": {
+              "type": "string",
+              "description": "Grid position (default: 'middle-right')"
+            },
+            "maxHeight": {
+              "type": "string",
+              "description": "Max height for scrolling (default: '400px')"
+            },
+            "maxItems": {
+              "type": "number",
+              "description": "Maximum number of actions to display (default: 50)"
+            },
+            "audience_type": {
+              "type": "boolean",
+              "description": "true=public; false=private"
+            },
+            "audience_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "description": "Visible player IDs if private"
+            }
+          },
+          "required": [
+            "name"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "deleteItem",
+      "function": {
+        "name": "deleteItem",
+        "description": "Delete an item by id.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "itemId": {
+              "type": "string",
+              "description": "Target item id."
+            }
+          },
+          "required": [
+            "itemId"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "clearCanvas",
+      "function": {
+        "name": "clearCanvas",
+        "description": "Clear all items from the canvas except avatar sets. This is useful when transitioning between game phases or starting fresh.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "required": []
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "addBotChatMessage",
+      "function": {
+        "name": "addBotChatMessage",
+        "description": "Add a bot message to the game chat area",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "botId": {
+              "type": "string",
+              "description": "ID of the bot sending the message"
+            },
+            "botName": {
+              "type": "string",
+              "description": "Name of the bot sending the message"
+            },
+            "message": {
+              "type": "string",
+              "description": "Bot's chat message"
+            },
+            "messageType": {
+              "type": "string",
+              "description": "Message type: 'message', 'system', or 'action'"
+            }
+          },
+          "required": [
+            "botId",
+            "botName",
+            "message"
+          ]
+        }
+      }
+    },
+    {
+      "type": "function",
+      "name": "promptUserText",
+      "function": {
+        "name": "promptUserText",
+        "description": "Open a dialog for the user to input a paragraph and confirm; reported as spoken by a specific player.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "speakerId": {
+              "type": "string",
+              "description": "Player ID who is speaking (default: current player)"
+            },
+            "title": {
+              "type": "string",
+              "description": "Dialog title"
+            },
+            "placeholder": {
+              "type": "string",
+              "description": "Textarea placeholder"
+            },
+            "toBotId": {
+              "type": "string",
+              "description": "Optional target bot id for direct message"
+            }
+          },
+          "required": []
+        }
+      }
+    }
+  ],
+  "items": [
+    {
+      "id": "0001",
+      "type": "phase_indicator",
+      "name": "phase-indicator-intro",
+      "subtitle": "",
+      "data": {
+        "currentPhase": "Game Introduction",
+        "position": "top-center",
+        "description": "Welcome to Werewolf! Introduction and rules overview. This is a social deduction game of hidden roles\u2014read everything carefully.",
+        "audience_type": true,
+        "audience_ids": []
+      }
+    },
+    {
+      "id": "0002",
+      "type": "text_display",
+      "name": "game-rules-summary",
+      "subtitle": "",
+      "data": {
+        "content": "Welcome to Werewolf! \ud83d\udc65\n\n- You each have a secret role and team.\n- Game flow alternates between NIGHT and DAY phases.\n\nNIGHT:\n\u2022 Werewolves secretly pick someone to eliminate.\n\u2022 The Doctor chooses a player to protect.\n\u2022 The Detective can check one player\u2019s alignment.\n\u2022 Most roles do NOT act at night.\n\nDAY:\n\u2022 All living players discuss and vote to eliminate a suspect.\n\nWin Conditions:\n- Villagers win if all werewolves are eliminated.\n- Werewolves win if they equal/outnumber living villagers.\n\nYour role is PRIVATE and will only be shown to YOU! Pay attention to any instructions given after this intro.",
+        "position": "center",
+        "title": "How to Play & What Happens Next",
+        "type": "info",
+        "audience_type": true,
+        "audience_ids": []
+      }
+    }
+  ],
+  "current_phase_id": 0,
+  "player_states": {
+    "1": {
+      "name": "52345345",
+      "role": "Werewolf",
+      "team": "werewolves",
+      "is_alive": true,
+      "role_revealed": false,
+      "can_vote": true,
+      "has_night_action": false,
+      "known_alignments": {},
+      "wolf_chat_enabled": false
+    },
+    "2": {
+      "name": "player2",
+      "role": "Doctor",
+      "team": "",
+      "is_alive": true,
+      "role_revealed": false,
+      "can_vote": true,
+      "has_night_action": false,
+      "known_alignments": {},
+      "wolf_chat_enabled": false
+    },
+    "3": {
+      "name": "player3",
+      "role": "Detective",
+      "team": "",
+      "is_alive": true,
+      "role_revealed": false,
+      "can_vote": true,
+      "has_night_action": false,
+      "known_alignments": {},
+      "wolf_chat_enabled": false
+    },
+    "4": {
+      "name": "player4",
+      "role": "Villager",
+      "team": "",
+      "is_alive": true,
+      "role_revealed": false,
+      "can_vote": true,
+      "has_night_action": false,
+      "known_alignments": {},
+      "wolf_chat_enabled": false
+    }
+  },
+  "gameName": "werewolf-(mafia)",
+  "dsl": {
+    "declaration": {
+      "description": "Social deduction night/day cycle. Night roles: Werewolves choose an elimination target, Doctor protects, Detective investigates. Resolution order: kill attempt \u2192 protection check \u2192 investigation. Morning reveals outcomes. State graph: role_assignment \u2192 first_night \u2192 first_morning \u2192 first_day_discussion \u2192 first_day_voting \u2192 (night \u2192 morning \u2192 day_discussion \u2192 day_voting) cycle until win conditions met \u2192 game_over. Win conditions: werewolves win if they equal or outnumber villagers; village wins if all werewolves are eliminated.",
+      "is_multiplayer": true,
+      "min_players": 4,
+      "roles": [
+        {
+          "name": "Villager",
+          "description": "No night action. Works with town to identify werewolves."
+        },
+        {
+          "name": "Werewolf",
+          "description": "Chooses a target to eliminate each night, coordinating with fellow werewolves."
+        },
+        {
+          "name": "Doctor",
+          "description": "Selects one player to protect each night; protected players survive a single kill attempt."
+        },
+        {
+          "name": "Detective",
+          "description": "Investigates one player each night to learn their team."
+        }
+      ],
+      "player_states": {
+        "name": {
+          "type": "string",
+          "example": "Player A",
+          "description": "Player display name, used in announcements and UI."
+        },
+        "role": {
+          "type": "string",
+          "example": "Werewolf",
+          "description": "Player's current role; private unless revealed."
+        },
+        "team": {
+          "type": "string",
+          "example": "werewolves",
+          "description": "Faction for targeting and win condition checks (e.g., villagers, werewolves)."
+        },
+        "is_alive": {
+          "type": "boolean",
+          "example": true,
+          "description": "Whether the player is alive. Dead players cannot act or vote."
+        },
+        "role_revealed": {
+          "type": "boolean",
+          "example": false,
+          "description": "Whether this player's role is publicly revealed."
+        },
+        "can_vote": {
+          "type": "boolean",
+          "example": true,
+          "description": "Whether the player may vote during day voting phases."
+        },
+        "has_night_action": {
+          "type": "boolean",
+          "example": true,
+          "description": "Whether the player has any night action UI (Werewolf, Doctor, Detective)."
+        },
+        "known_alignments": {
+          "type": "dict",
+          "example": {
+            "2": "villagers"
+          },
+          "description": "Private info known to this player, mapping investigated player IDs to their team (Detective use)."
+        },
+        "wolf_chat_enabled": {
+          "type": "boolean",
+          "example": true,
+          "description": "Controls visibility of private werewolf chat for coordination."
+        }
+      },
+      "player_states_template": {
+        "player_states": {
+          "1": {
+            "name": "",
+            "role": "",
+            "team": "",
+            "is_alive": true,
+            "role_revealed": false,
+            "can_vote": true,
+            "has_night_action": false,
+            "known_alignments": {},
+            "wolf_chat_enabled": false
+          }
+        }
+      },
+      "players_example": {
+        "player_states": {
+          "1": {
+            "name": "Alpha",
+            "role": "Werewolf",
+            "team": "werewolves",
+            "is_alive": true,
+            "role_revealed": false,
+            "can_vote": true,
+            "has_night_action": true,
+            "known_alignments": {},
+            "wolf_chat_enabled": true
+          },
+          "2": {
+            "name": "Beta",
+            "role": "Villager",
+            "team": "villagers",
+            "is_alive": true,
+            "role_revealed": false,
+            "can_vote": true,
+            "has_night_action": false,
+            "known_alignments": {},
+            "wolf_chat_enabled": false
+          },
+          "3": {
+            "name": "Gamma",
+            "role": "Doctor",
+            "team": "villagers",
+            "is_alive": true,
+            "role_revealed": false,
+            "can_vote": true,
+            "has_night_action": true,
+            "known_alignments": {},
+            "wolf_chat_enabled": false
+          },
+          "4": {
+            "name": "Delta",
+            "role": "Detective",
+            "team": "villagers",
+            "is_alive": true,
+            "role_revealed": false,
+            "can_vote": true,
+            "has_night_action": true,
+            "known_alignments": {
+              "2": "villagers"
+            },
+            "wolf_chat_enabled": false
+          }
+        }
+      },
+      "audience_groups": {
+        "werewolves": {
+          "description": "All alive players on the werewolf team",
+          "selection_criteria": "player.team == 'werewolves' and player.is_alive == true"
+        },
+        "villagers": {
+          "description": "All alive players on the villager team",
+          "selection_criteria": "player.team == 'villagers' and player.is_alive == true"
+        },
+        "alive_players": {
+          "description": "Players who are currently alive",
+          "selection_criteria": "player.is_alive == true"
+        },
+        "voting_eligible": {
+          "description": "Players who can vote during day phases",
+          "selection_criteria": "player.can_vote == true and player.is_alive == true"
+        },
+        "night_actors": {
+          "description": "Players with night action panels enabled",
+          "selection_criteria": "player.has_night_action == true and player.is_alive == true"
+        },
+        "doctors": {
+          "description": "Alive players with the Doctor role",
+          "selection_criteria": "player.role == 'Doctor' and player.is_alive == true"
+        },
+        "detectives": {
+          "description": "Alive players with the Detective role",
+          "selection_criteria": "player.role == 'Detective' and player.is_alive == true"
+        },
+        "wolf_chatters": {
+          "description": "Alive werewolves with private chat access",
+          "selection_criteria": "player.wolf_chat_enabled == true and player.is_alive == true"
+        },
+        "revealed_roles": {
+          "description": "Players whose roles are publicly revealed",
+          "selection_criteria": "player.role_revealed == true"
+        }
+      }
+    },
+    "phases": {
+      "0": {
+        "name": "Game Introduction",
+        "description": "Introduce the rules, objectives, night/day flow, and win conditions to all players.",
+        "actions": [
+          {
+            "description": "Clear any previous UI and set the scene for a new game",
+            "tools": [
+              "clearCanvas"
+            ]
+          },
+          {
+            "description": "Create a public phase indicator and summary of rules and privacy",
+            "tools": [
+              "createPhaseIndicator",
+              "createTextDisplay"
+            ]
+          },
+          {
+            "description": "Display player list and configuration overview to all players",
+            "tools": [
+              "createTextDisplay"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "UI_displayed",
+          "description": "Game introduction has been displayed to all players."
+        },
+        "next_phase": {
+          "id": 1,
+          "name": "Role Assignment"
+        }
+      },
+      "1": {
+        "name": "Role Assignment",
+        "description": "Randomly assign hidden roles to players and privately display each player's role card. Initialize team, has_night_action, and wolf chat access for werewolves.",
+        "actions": [
+          {
+            "description": "Clear canvas and display public role assignment notice",
+            "tools": [
+              "clearCanvas",
+              "createPhaseIndicator",
+              "createTextDisplay"
+            ]
+          },
+          {
+            "description": "Individually show private role cards to each player using audience targeting",
+            "tools": [
+              "createCharacterCard"
+            ]
+          },
+          {
+            "description": "Provide private role instructions and tips per player",
+            "tools": [
+              "createTextDisplay"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "UI_displayed",
+          "description": "Role cards have been created with proper audience permissions; each player can only see their own role."
+        },
+        "next_phase": {
+          "id": 2,
+          "name": "Night \u2014 Werewolves Choose Target"
+        }
+      },
+      "2": {
+        "name": "Night \u2014 Werewolves Choose Target",
+        "description": "Alive werewolves coordinate privately and vote to select a single elimination target. Non-werewolves see a night waiting screen.",
+        "actions": [
+          {
+            "description": "Clear previous UI and create Night phase indicator",
+            "tools": [
+              "clearCanvas",
+              "createPhaseIndicator"
+            ]
+          },
+          {
+            "description": "Create public night timer",
+            "tools": [
+              "createTimer"
+            ]
+          },
+          {
+            "description": "Show waiting message to all alive non-werewolf players",
+            "tools": [
+              "createTextDisplay"
+            ]
+          },
+          {
+            "description": "Show coordination instructions to alive werewolves (private group)",
+            "tools": [
+              "createTextDisplay"
+            ]
+          },
+          {
+            "description": "Create private voting panel for alive werewolves to choose an alive target",
+            "tools": [
+              "createVotingPanel"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "player_action",
+          "description": "Votes have been received from all alive werewolves and relevant player state (player_states) has been updated with the chosen target.",
+          "wait_for": "all_players_action",
+          "target_players": {
+            "description": "All alive werewolves",
+            "condition": "player.team == 'werewolves' and player.is_alive == true"
+          }
+        },
+        "next_phase": {
+          "id": 3,
+          "name": "Night \u2014 Doctor Protects"
+        }
+      },
+      "3": {
+        "name": "Night \u2014 Doctor Protects",
+        "description": "Alive Doctor selects one player to protect from the werewolves' attack this night.",
+        "actions": [
+          {
+            "description": "Update phase indicator and show night continues; display waiting message for non-Doctor players",
+            "tools": [
+              "createPhaseIndicator",
+              "createTextDisplay"
+            ]
+          },
+          {
+            "description": "Create public timer for the Doctor's decision",
+            "tools": [
+              "createTimer"
+            ]
+          },
+          {
+            "description": "Create private voting panel for the Doctor to select a protection target",
+            "tools": [
+              "createVotingPanel"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "player_action",
+          "description": "Doctor's protection target has been submitted via voting panel, and relevant player state (player_states) has been updated.",
+          "wait_for": "single_player_choice",
+          "target_players": {
+            "description": "Alive player with role 'Doctor'",
+            "condition": "player.role == 'Doctor' and player.is_alive == true"
+          }
+        },
+        "next_phase": {
+          "id": 4,
+          "name": "Night \u2014 Detective Investigates"
+        }
+      },
+      "4": {
+        "name": "Night \u2014 Detective Investigates",
+        "description": "Alive Detective selects one player to investigate to learn their team.",
+        "actions": [
+          {
+            "description": "Update phase indicator to Detective action and show waiting instructions to others",
+            "tools": [
+              "createPhaseIndicator",
+              "createTextDisplay"
+            ]
+          },
+          {
+            "description": "Create private voting panel for the Detective to select an investigation target",
+            "tools": [
+              "createVotingPanel"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "player_action",
+          "description": "Detective's investigation target has been submitted via voting panel, and relevant player state (player_states) has been updated.",
+          "wait_for": "single_player_choice",
+          "target_players": {
+            "description": "Alive player with role 'Detective'",
+            "condition": "player.role == 'Detective' and player.is_alive == true"
+          }
+        },
+        "next_phase": {
+          "id": 5,
+          "name": "Detective Result (Private Reveal)"
+        }
+      },
+      "5": {
+        "name": "Detective Result (Private Reveal)",
+        "description": "Privately reveal to the Detective the investigated player's team and update their known_alignments.",
+        "actions": [
+          {
+            "description": "Create private text display for Detective with investigation results",
+            "tools": [
+              "createTextDisplay"
+            ]
+          },
+          {
+            "description": "Show a generic night status message to all other players",
+            "tools": [
+              "createTextDisplay"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "UI_displayed",
+          "description": "Detective has been privately shown the investigation result; known_alignments updated accordingly."
+        },
+        "next_phase": {
+          "id": 6,
+          "name": "Dawn Reveal"
+        }
+      },
+      "6": {
+        "name": "Dawn Reveal",
+        "description": "Announce night outcomes in order: kill attempt, Doctor protection, and any deaths. Update is_alive and role_revealed for victims and inform all players.",
+        "actions": [
+          {
+            "description": "Clear night UI and create morning phase indicator",
+            "tools": [
+              "clearCanvas",
+              "createPhaseIndicator"
+            ]
+          },
+          {
+            "description": "Create public summary of night outcomes",
+            "tools": [
+              "createResultDisplay"
+            ]
+          },
+          {
+            "description": "If a player died overnight, mark them dead and publicly reveal their role",
+            "tools": [
+              "markPlayerDead",
+              "createTextDisplay"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "UI_displayed",
+          "description": "Night results have been announced to all players."
+        },
+        "next_phase": {
+          "id": 10,
+          "name": "Check Win Conditions"
+        }
+      },
+      "7": {
+        "name": "Day Discussion",
+        "description": "Open discussion among all alive players to identify and accuse suspects.",
+        "actions": [
+          {
+            "description": "Create day phase indicator and public discussion guidelines",
+            "tools": [
+              "createPhaseIndicator",
+              "createTextDisplay"
+            ]
+          },
+          {
+            "description": "Start a public discussion timer",
+            "tools": [
+              "createTimer"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "timer",
+          "description": "Discussion timer has expired."
+        },
+        "next_phase": {
+          "id": 8,
+          "name": "Day Voting"
+        }
+      },
+      "8": {
+        "name": "Day Voting",
+        "description": "All voting-eligible alive players vote to eliminate one player.",
+        "actions": [
+          {
+            "description": "Update phase indicator for voting and display instructions",
+            "tools": [
+              "createPhaseIndicator",
+              "createTextDisplay"
+            ]
+          },
+          {
+            "description": "Create voting panel for all voting-eligible alive players",
+            "tools": [
+              "createVotingPanel"
+            ]
+          },
+          {
+            "description": "Show waiting message to non-eligible or dead players",
+            "tools": [
+              "createTextDisplay"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "player_action",
+          "description": "Votes have been received from all voting-eligible alive players, and relevant player state (player_states) has been updated.",
+          "wait_for": "all_players_action",
+          "target_players": {
+            "description": "Alive players eligible to vote",
+            "condition": "player.can_vote == true and player.is_alive == true"
+          }
+        },
+        "next_phase": {
+          "id": 9,
+          "name": "Announce Day Voting Results"
+        }
+      },
+      "9": {
+        "name": "Announce Day Voting Results",
+        "description": "Reveal the player selected for elimination, mark them dead, and publicly reveal their role to all players.",
+        "actions": [
+          {
+            "description": "Clear voting UI and create public results announcement",
+            "tools": [
+              "clearCanvas",
+              "createResultDisplay"
+            ]
+          },
+          {
+            "description": "Mark eliminated player as dead and reveal role publicly",
+            "tools": [
+              "markPlayerDead",
+              "createTextDisplay"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "UI_displayed",
+          "description": "Day voting results and elimination have been announced."
+        },
+        "next_phase": {
+          "id": 10,
+          "name": "Check Win Conditions"
+        }
+      },
+      "10": {
+        "name": "Check Win Conditions",
+        "description": "Evaluate victory: village wins if all werewolves are eliminated; werewolves win if they equal or outnumber villagers. Otherwise continue to the appropriate next phase in the cycle.",
+        "actions": [
+          {
+            "description": "Display public status message that win conditions are being evaluated",
+            "tools": [
+              "createTextDisplay"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "UI_displayed",
+          "description": "Win condition evaluation finished; state prepared for routing."
+        },
+        "next_phase": {
+          "If no living Werewolves remain": {
+            "id": 98,
+            "name": "Game Over \u2014 Village Wins"
+          },
+          "If living Werewolves are equal to or outnumber living Villagers": {
+            "id": 99,
+            "name": "Game Over \u2014 Werewolves Win"
+          },
+          "If this check follows Dawn Reveal (morning) and no one has won": {
+            "id": 7,
+            "name": "Day Discussion"
+          },
+          "Otherwise (post-day elimination) continue to next night": {
+            "id": 2,
+            "name": "Night \u2014 Werewolves Choose Target"
+          }
+        }
+      },
+      "98": {
+        "name": "Game Over \u2014 Village Wins",
+        "description": "Announce that the Village has eliminated all werewolves and celebrate the victory.",
+        "actions": [
+          {
+            "description": "Clear UI and display final victory message for the Village",
+            "tools": [
+              "clearCanvas",
+              "createResultDisplay"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "UI_displayed",
+          "description": "Final results have been displayed."
+        },
+        "next_phase": null
+      },
+      "99": {
+        "name": "Game Over \u2014 Werewolves Win",
+        "description": "Announce that the Werewolves equal or outnumber the Villagers and claim victory.",
+        "actions": [
+          {
+            "description": "Clear UI and display final victory message for the Werewolves",
+            "tools": [
+              "clearCanvas",
+              "createResultDisplay"
+            ]
+          }
+        ],
+        "completion_criteria": {
+          "type": "UI_displayed",
+          "description": "Final results have been displayed."
+        },
+        "next_phase": null
+      }
+    }
+  },
+  "need_feed_back_dict": {
+    "player_id_list": [],
+    "need_feedback_message": "All actions completed, proceeding to next phase"
+  },
+  "referee_conclusions": [],
+  "roomSession": {
+    "roomId": "29d0fd0b-41cf-4050-8c52-2b4b90679a75",
+    "gameName": "werewolf-(mafia)",
+    "totalPlayers": 4,
+    "players": [
+      {
+        "id": 1,
+        "name": "52345345",
+        "isHost": true,
+        "gamePlayerId": "1"
+      },
+      {
+        "id": 150,
+        "name": "player2",
+        "isHost": false,
+        "gamePlayerId": "2"
+      },
+      {
+        "id": 151,
+        "name": "player3",
+        "isHost": false,
+        "gamePlayerId": "3"
+      },
+      {
+        "id": 152,
+        "name": "player4",
+        "isHost": false,
+        "gamePlayerId": "4"
+      }
+    ],
+    "timestamp": 1760769175976
+  },
+  "playerActions": {},
+  "phase_history": [
+    {
+      "phase_id": 0,
+      "phase_name": "Game Introduction",
+      "timestamp": "2025-10-18T02:40:31.493462"
+    },
+    {
+      "phase_id": 1,
+      "phase_name": "Phase 1",
+      "timestamp": "2025-10-18T02:40:47.540734"
+    }
+  ],
+  "messages": [
+    {
+      "content": "Start game.",
+      "additional_kwargs": {
+        "type": "human"
+      },
+      "response_metadata": {},
+      "type": "human",
+      "name": null,
+      "id": "ck-c16c007d-6a23-40ca-a04d-4d44ba758f40",
+      "example": false
+    },
+    {
+      "content": "",
+      "additional_kwargs": {
+        "tool_calls": [
+          {
+            "index": 0,
+            "id": "call_OiC7ykuLIZqIDKCDRMNHrC6B",
+            "function": {
+              "arguments": "{}",
+              "name": "clearCanvas"
+            },
+            "type": "function"
+          },
+          {
+            "index": 1,
+            "id": "call_e55MCbc7oJKygZqXhfD6iTYF",
+            "function": {
+              "arguments": "{\"name\": \"phase-indicator-intro\", \"currentPhase\": \"Game Introduction\", \"position\": \"top-center\", \"description\": \"Welcome to Werewolf! Introduction and rules overview. This is a social deduction game of hidden roles\u2014read everything carefully.\", \"audience_type\": true}",
+              "name": "createPhaseIndicator"
+            },
+            "type": "function"
+          },
+          {
+            "index": 2,
+            "id": "call_o1JOZNopwUg6gNxkcMtQJNBO",
+            "function": {
+              "arguments": "{\"name\": \"game-rules-summary\", \"content\": \"Welcome to Werewolf! \ud83d\udc65\\n\\n- You each have a secret role and team.\\n- Game flow alternates between NIGHT and DAY phases.\\n\\nNIGHT:\\n\u2022 Werewolves secretly pick someone to eliminate.\\n\u2022 The Doctor chooses a player to protect.\\n\u2022 The Detective can check one player\u2019s alignment.\\n\u2022 Most roles do NOT act at night.\\n\\nDAY:\\n\u2022 All living players discuss and vote to eliminate a suspect.\\n\\nWin Conditions:\\n- Villagers win if all werewolves are eliminated.\\n- Werewolves win if they equal/outnumber living villagers.\\n\\nYour role is PRIVATE and will only be shown to YOU! Pay attention to any instructions given after this intro.\", \"position\": \"center\", \"title\": \"How to Play & What Happens Next\", \"type\": \"info\", \"audience_type\": true}",
+              "name": "createTextDisplay"
+            },
+            "type": "function"
+          }
+        ]
+      },
+      "response_metadata": {
+        "finish_reason": "tool_calls",
+        "model_name": "gpt-4.1-2025-04-14",
+        "system_fingerprint": "fp_e24a1fec47",
+        "service_tier": "default"
+      },
+      "type": "ai",
+      "name": null,
+      "id": "run--e0ec6f58-8695-4b69-b9aa-2e3b95a6c4c8",
+      "example": false,
+      "tool_calls": [
+        {
+          "name": "clearCanvas",
+          "args": {},
+          "id": "call_OiC7ykuLIZqIDKCDRMNHrC6B",
+          "type": "tool_call"
+        },
+        {
+          "name": "createPhaseIndicator",
+          "args": {
+            "name": "phase-indicator-intro",
+            "currentPhase": "Game Introduction",
+            "position": "top-center",
+            "description": "Welcome to Werewolf! Introduction and rules overview. This is a social deduction game of hidden roles\u2014read everything carefully.",
+            "audience_type": true
+          },
+          "id": "call_e55MCbc7oJKygZqXhfD6iTYF",
+          "type": "tool_call"
+        },
+        {
+          "name": "createTextDisplay",
+          "args": {
+            "name": "game-rules-summary",
+            "content": "Welcome to Werewolf! \ud83d\udc65\n\n- You each have a secret role and team.\n- Game flow alternates between NIGHT and DAY phases.\n\nNIGHT:\n\u2022 Werewolves secretly pick someone to eliminate.\n\u2022 The Doctor chooses a player to protect.\n\u2022 The Detective can check one player\u2019s alignment.\n\u2022 Most roles do NOT act at night.\n\nDAY:\n\u2022 All living players discuss and vote to eliminate a suspect.\n\nWin Conditions:\n- Villagers win if all werewolves are eliminated.\n- Werewolves win if they equal/outnumber living villagers.\n\nYour role is PRIVATE and will only be shown to YOU! Pay attention to any instructions given after this intro.",
+            "position": "center",
+            "title": "How to Play & What Happens Next",
+            "type": "info",
+            "audience_type": true
+          },
+          "id": "call_o1JOZNopwUg6gNxkcMtQJNBO",
+          "type": "tool_call"
+        }
+      ],
+      "invalid_tool_calls": [],
+      "usage_metadata": {
+        "input_tokens": 9526,
+        "output_tokens": 282,
+        "total_tokens": 9808,
+        "input_token_details": {
+          "audio": 0,
+          "cache_read": 0
+        },
+        "output_token_details": {
+          "audio": 0,
+          "reasoning": 0
+        }
+      }
+    },
+    {
+      "content": "Canvas cleared. Removed 0 items, kept 0 avatar sets.",
+      "role": "tool",
+      "type": "tool",
+      "tool_call_id": "call_OiC7ykuLIZqIDKCDRMNHrC6B",
+      "id": "result-call_OiC7ykuLIZqIDKCDRMNHrC6B"
+    },
+    {
+      "content": "0001",
+      "role": "tool",
+      "type": "tool",
+      "tool_call_id": "call_e55MCbc7oJKygZqXhfD6iTYF",
+      "id": "result-call_e55MCbc7oJKygZqXhfD6iTYF"
+    },
+    {
+      "content": "0002",
+      "role": "tool",
+      "type": "tool",
+      "tool_call_id": "call_o1JOZNopwUg6gNxkcMtQJNBO",
+      "id": "result-call_o1JOZNopwUg6gNxkcMtQJNBO"
+    },
+    {
+      "id": "ck-458c9525-d650-49e8-b6d2-b30ad5697da3",
+      "role": "user",
+      "content": "Continue",
+      "type": "human"
+    }
+  ]
+}

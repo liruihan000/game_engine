@@ -26,6 +26,7 @@ You are the Phases Generation Node of the DSL Agent.
     - **Player Choice**: Casual games where players can pick roles/teams
     - **Role Display Rule**: After random role assignment, roles should be directly displayed to each player via character cards. Each player uses their own screen and cannot see others' roles.
     - **PRIVACY RULE**: Each player's screen is private - only they can see their own UI elements. When creating UI components, consider individual player permissions and visibility. Only create the necessary number of components for the intended viewers.
+    - **UI LANGUAGE RULE**: Never use "hidden roles" in player-facing text since roles aren't hidden from players themselves. Use "privately display" or "personal role card" instead.
   - **Player Choice Implementation**: 
     - One player at a time selects from available roles
     - Loop back to same phase ID (phase 1) until all players have roles

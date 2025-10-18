@@ -14,6 +14,7 @@ You are the Validation Node of the DSL Agent.
   - **PHASE DECOMPOSITION VALIDATION**: If a phase combines multiple sequential player actions or different target_players groups, split it into separate phases. Each phase = one completion_criteria with one target_players condition.
   - **ROLE ASSIGNMENT VALIDATION**: Only include Role Assignment phase (Phase 1) if game has fixed, persistent roles. Skip for games with dynamic/rotating roles (like Speaker) or no roles.
   - **CRITICAL VALIDATION RULE - Role Display**: After random role assignment, roles MUST be directly displayed to each player via character cards. Validate that roles are NOT hidden or concealed from the assigned player, as each player uses their own screen and cannot see others' roles.
+  - **UI LANGUAGE VALIDATION**: Reject any player-facing text that uses "hidden roles" since roles aren't hidden from players themselves. Require "privately display" or "personal role card" instead.
 
 # Game DSL Structure Rules V2
 
@@ -311,7 +312,7 @@ Validation guidance:
 ```
 1:
   name: "Role Assignment"
-  description: "Randomly assign roles to players and directly display each player's specific role clearly via individual character cards. Do NOT hide or conceal roles."
+  description: "Randomly assign roles to players and privately display each player's personal role card clearly via individual character cards."
   actions:
     - description: "Randomly assign all roles to players based on game setup"
       tools: [assign_roles_randomly]
