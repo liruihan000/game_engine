@@ -64,7 +64,7 @@ export default function BroadcastInput({
   return (
     <div
       className={cn(
-        "fixed left-1/2 -translate-x-1/2 bottom-6 z-50",
+        "fixed left-1/2 -translate-x-1/2 bottom-2 z-50",
         "pointer-events-auto"
       )}
       aria-live="polite"

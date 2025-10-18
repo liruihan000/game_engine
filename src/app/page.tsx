@@ -18,6 +18,120 @@ import { motion, useScroll, useTransform, useMotionValueEvent } from "motion/rea
 import { EmptyState } from "@/components/empty-state";
 import { cn } from "@/lib/utils";
 import type { AgentState, PlanStep, Item, ItemData, CardType, GamePosition, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, ComponentSize, ChatMessage, RoomPlayer, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, PlayerStatesDisplayData, PlayerActionsDisplayData } from "@/lib/canvas/types";
+
+// === Unified Game Title and Phase Display System ===
+
+// ✅ Optimized game title component - using unified state management
+function GameTitle({ viewState, titleClasses }: { viewState: AgentState; titleClasses: string }) {
+  const [mounted, setMounted] = useState(false);
+  const { gameTitle } = useUnifiedGameState(viewState);  // 🎯 Get all logic in one line
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return <div className={cn(titleClasses, "text-2xl font-semibold")}>Game Engine</div>;
+  }
+
+  return <div className={cn(titleClasses, "text-2xl font-semibold")}>{gameTitle}</div>;  // 🚀 Concise!
+}
+
+// ✅ Optimized game phase component - using unified state management
+function GamePhaseInfo({ viewState, titleClasses }: { viewState: AgentState; titleClasses: string }) {
+  const [mounted, setMounted] = useState(false);
+  const { phaseDisplay } = useUnifiedGameState(viewState);  // 🎯 Get all logic in one line
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return <div className={cn(titleClasses, "mt-2 text-sm leading-6")}>AI-Powered Game Engine</div>;
+  }
+
+  return <div className={cn(titleClasses, "mt-2 text-sm leading-6")}>{phaseDisplay}</div>;  // 🚀 Concise!
+}
+
+// ✅ Unified game state management system - define once, reuse everywhere
+function useUnifiedGameState(viewState: AgentState) {
+  return {
+    // 🎮 Game basic info - unified null handling and formatting
+    gameName: viewState.gameName || null,
+    gameTitle: (() => {
+      const name = viewState.gameName;
+      if (!name) return 'No Game Active';
+      if (typeof name === 'string' && name.includes(':')) {
+        return name.split(':')[0].trim();
+      }
+      return typeof name === 'string' ? name : 'Current Game';
+    })(),
+    
+    // 📍 Phase info - unified formatting display
+    phaseId: viewState.current_phase_id ?? null,  
+    phaseName: viewState.current_phase_name || null,
+    phaseDisplay: (() => {
+      const id = viewState.current_phase_id;
+      const name = viewState.current_phase_name;
+      if (id !== undefined && name) return `Phase ${id}: ${name}`;
+      if (id !== undefined) return `Phase ${id}`;
+      return 'Not Started';
+    })(),
+    
+    // 👥 Player states - unified processing and calculation
+    playerStates: viewState.player_states ?? {},
+    playerCount: Object.keys(viewState.player_states ?? {}).length,
+    alivePlayers: Object.entries(viewState.player_states ?? {})
+      .filter(([, data]: [string, any]) => data?.is_alive !== false)
+      .map(([id]) => id),
+    deadPlayers: viewState.deadPlayers ?? [],
+    
+    // 📝 Actions and votes - unified formatting
+    playerActions: viewState.playerActions ?? {},
+    votes: viewState.vote ?? [],
+    votesDisplay: (viewState.vote ?? []).length > 0
+      ? (viewState.vote ?? []).map((v: any) => `${v.playerid} → "${v.option}"`).join('; ')
+      : 'No votes yet',
+    
+    // 📊 Computed properties - avoid repeated calculation
+    recentActions: Object.entries(viewState.playerActions ?? {})
+      .map(([id, data]: [string, any]) => ({ id, ...data }))
+      .sort((a: any, b: any) => (b.timestamp || 0) - (a.timestamp || 0))
+      .slice(0, 5),
+  };
+}
+
+// ✅ Unified Agent instruction generation - directly process viewState, no Hook
+function generateGameInstructions(viewState: AgentState): string {
+  // Extract state directly, no React Hook calls
+  const gameName = viewState.gameName;
+  const gameTitle = gameName ? (gameName.includes(':') ? gameName.split(':')[0].trim() : gameName) : 'No Game Active';
+  
+  const phaseId = viewState.current_phase_id;
+  const phaseName = viewState.current_phase_name;
+  const phaseDisplay = (phaseId !== undefined && phaseName) ? `Phase ${phaseId}: ${phaseName}` 
+    : (phaseId !== undefined ? `Phase ${phaseId}` : 'Not in any game');
+  
+  const playerStates = viewState.player_states ?? {};
+  const playerCount = Object.keys(playerStates).length;
+  const alivePlayers = Object.entries(playerStates).filter(([, data]: [string, any]) => data?.is_alive !== false);
+  
+  const votes = viewState.vote ?? [];
+  const votesDisplay = votes.length > 0 
+    ? votes.map((v: any) => `${v.playerid} → "${v.option}"`).join('; ')
+    : 'No votes yet';
+  
+  return [
+    "=== UNIFIED GAME STATE ===",
+    `🎮 Game: ${gameTitle}`,
+    `📍 Phase: ${phaseDisplay}`,
+    `👥 Players: ${playerCount} total (${alivePlayers.length} alive)`,
+    `🗳️  Votes: ${votesDisplay}`,
+    "",
+    "=== DETAILED DATA ===",
+    `Player States: ${JSON.stringify(playerStates, null, 2)}`,
+  ].join('\n');
+}
 import { GAME_GRID_STYLE, normalizePosition } from "@/lib/canvas/types";
 import { initialState, isNonEmptyAgentState, defaultDataFor } from "@/lib/canvas/state";
 // import { projectAddField4Item, projectSetField4ItemText, projectSetField4ItemDone, projectRemoveField4Item, chartAddField1Metric, chartSetField1Label, chartSetField1Value, chartRemoveField1Metric } from "@/lib/canvas/updates";
@@ -135,7 +249,7 @@ export default function CopilotKitPage() {
   const handleButtonClick = useCallback(async (item: Item) => {
     const buttonData = item.data as ActionButtonData;
     
-    // 使用統一交互處理
+    // Use unified interaction handling
     await handleUserInteraction(
       `Button "${item.name}" (ID: ${item.id}) has been clicked. Action: ${buttonData.action}`,
       'button_click'
@@ -165,18 +279,28 @@ export default function CopilotKitPage() {
       } as AgentState;
     });
 
-    // 使用統一交互處理
+    // Use unified interaction handling
     await handleUserInteraction(
       `Player ${playerId} voted "${option}" in voting ${votingId}`,
       'vote_cast'
     );
   }, [setState, handleUserInteraction]);
 
-  // Global cache for the last non-empty agent state
+  // Global cache for the last non-empty agent state with version protection
   const cachedStateRef = useRef<AgentState>(state ?? initialState);
   useEffect(() => {
     if (isNonEmptyAgentState(state)) {
-      cachedStateRef.current = state as AgentState;
+      const newState = state as AgentState;
+      const currentPhaseId = newState.current_phase_id;
+      const cachedPhaseId = cachedStateRef.current.current_phase_id;
+      
+      // 🛡️ Phase version protection: only update if phase is same or newer
+      if (currentPhaseId === undefined || cachedPhaseId === undefined || currentPhaseId >= cachedPhaseId) {
+        console.log(`🔄 State updated: Phase ${cachedPhaseId} → ${currentPhaseId}`);
+        cachedStateRef.current = newState;
+      } else {
+        console.warn(`🚫 Blocked phase rollback: Phase ${currentPhaseId} < ${cachedPhaseId}`);
+      }
     }
   }, [state]);
   // we use viewState to avoid transient flicker; TODO: troubleshoot and remove this workaround
@@ -234,8 +358,8 @@ export default function CopilotKitPage() {
 
   // Agent-triggered UI tool to open floating broadcast input
   useCopilotAction({
-    name: "displayBroadcastInput",
-    description: "Open a floating, pill-shaped broadcast input box for sending a system-wide message.",
+    name: "createTextInputPanel",
+    description: "Open a floating, pill-shaped text input panel for collecting user input and broadcasting.",
     available: "remote",
     followUp: false,
     parameters: [
@@ -421,49 +545,91 @@ export default function CopilotKitPage() {
   // Strengthen grounding: always prefer shared state over chat history
   useCopilotAdditionalInstructions({
     instructions: (() => {
+      // ✅ Use unified game state and instruction generation - eliminate all duplicate logic!
       const items = viewState.items ?? initialState.items;
-      const playerStates = viewState.player_states ?? {};
-      const votes = viewState.vote ?? [];
-      const deadPlayers = viewState.deadPlayers ?? [];
-      const gTitle = "Game Engine";
-      const gDesc = "AI-Powered Game Engine";
       const summary = items
         .slice(0, 5)
         .map((p: Item) => `id=${p.id} • name=${p.name} • type=${p.type}`)
         .join("\n");
       
-      const playerStatesStr = Object.keys(playerStates).length > 0 
-        ? JSON.stringify(playerStates, null, 2)
-        : "(none)";
+      // 🎯 One line call to get all formatted state info
+      const unifiedInstructions = generateGameInstructions(viewState);
       
-      const votesStr = votes.length > 0
-        ? votes.map(v => `${v.playerid} voted "${v.option}" in ${v.voteid}`).join("; ")
-        : "(none)";
-      
-      const deadPlayersStr = deadPlayers.length > 0
-        ? deadPlayers.join(", ")
-        : "(none)";
-      
-      const currentGameName = viewState.gameName || "(none)";
-      
-      // Frontend-available tools and short descriptions (game_tool)
+      // ✅ Complete frontend tools directory - all tools available to Agent (59 total)
       const gameTools = {
-        setGlobalTitle: "Set the global page title.",
-        setGlobalDescription: "Set the global page subtitle/description.",
-        setItemName: "Rename an existing item by id.",
-        setItemSubtitleOrDescription: "Set an item's subtitle/short description.",
-        createCharacterCard: "Create a character card (role, position, optional size, description).",
-        createActionButton: "Create an action button (label, action id, enabled, position).",
-        createPhaseIndicator: "Create a phase indicator (currentPhase, position, optional description, timer).",
-        createTextDisplay: "Create a text panel (content, optional title/type, position).",
-        createVotingPanel: "Create a voting panel (votingId, options, position, optional title).",
-        createAvatarSet: "Create player avatars overlay (avatarType).",
-        markPlayerDead: "Mark a player as dead (affects avatar display).",
-        createTimer: "Create a countdown timer that expires and notifies the agent.",
-        changeBackgroundColor: "Create background control and set initial color.",
-        createResultDisplay: "Create a large gradient-styled result display at a position.",
-        deleteItem: "Delete an item by id.",
-        clearCanvas: "Clear all canvas items except avatar sets."
+        // 🎯 Basic operations
+        setGlobalTitle: "Set the global page title",
+        setGlobalDescription: "Set the global page subtitle/description", 
+        setItemName: "Rename an existing item by id",
+        setItemSubtitleOrDescription: "Set an item's subtitle/short description",
+        setItemPosition: "Change an item's position on the grid",
+        deleteItem: "Delete an item by id",
+        clearCanvas: "Clear all canvas items except avatar sets",
+        
+        // 🎮 Core game components (create + update)
+        createCharacterCard: "Create a character card (role, position, size, description)",
+        updateCharacterCard: "Update existing character card properties",
+        createActionButton: "Create an action button (label, action, enabled, position)",
+        updateActionButton: "Update existing action button properties", 
+        createPhaseIndicator: "Create a phase indicator (currentPhase, position, timer)",
+        updatePhaseIndicator: "Update existing phase indicator properties",
+        createTextDisplay: "Create a text panel (content, title, type, position)",
+        updateTextDisplay: "Update existing text display content",
+        createVotingPanel: "Create a voting panel (votingId, options, position)",
+        updateVotingPanel: "Update existing voting panel options",
+        
+        // 👥 Player system
+        createAvatarSet: "Create player avatars overlay (avatarType)",
+        markPlayerDead: "Mark a player as dead (affects avatar display)",
+        createPlayerStatesDisplay: "Display current player states in scrollable panel",
+        createPlayerActionsDisplay: "Display player actions log in scrollable panel",
+        
+        // ⏰ Timer system
+        createTimer: "Create countdown timer that expires and notifies agent",
+        updateTimer: "Update existing timer duration or label",
+        createReactionTimer: "Create quick reaction/challenge timer bar",
+        startReactionTimer: "Start a reaction timer countdown",
+        stopReactionTimer: "Stop a reaction timer", 
+        resetReactionTimer: "Reset reaction timer to initial state",
+        
+        // 🎨 Visual effects
+        changeBackgroundColor: "Create background control and set initial color",
+        createBackgroundControl: "Create background color control component",
+        createResultDisplay: "Create large gradient-styled result display",
+        updateResultDisplay: "Update result display content",
+        createNightOverlay: "Create night overlay with title and blur",
+        setNightOverlay: "Update night overlay visibility and properties",
+        
+        // 🃏 Card games
+        createHandsCard: "Create hand card for card games (cardType, cardName)",
+        createHandsCardForPlayer: "Create hand card for specific player",
+        updateHandsCard: "Update hand card properties",
+        setHandsCardAudience: "Set hand card audience visibility",
+        
+        // 📊 Scoring system
+        createScoreBoard: "Create score board with player entries",
+        updateScoreBoard: "Update score board entries and properties",
+        upsertScoreEntry: "Add or update a score entry",
+        removeScoreEntry: "Remove score entry by player id",
+        
+        // 🏥 Health/status
+        createHealthDisplay: "Create health/bullets display (value, max, style)",
+        updateHealthDisplay: "Update health display values",
+        createInfluenceSet: "Create influence cards set (Coup-style games)",
+        updateInfluenceSet: "Update influence set properties",
+        revealInfluenceCard: "Reveal influence card by index",
+        
+        // 📝 Special input
+        createTextInputPanel: "Create text input panel for user input",
+        createStatementBoard: "Create statement board for Two Truths and a Lie",
+        updateStatementBoard: "Update statement board content",
+        createTurnIndicator: "Create turn indicator showing current active player",
+        updateTurnIndicator: "Update turn indicator properties",
+        
+        // 🤖 Interaction system
+        addBotChatMessage: "Add bot message to chat",
+        promptUserText: "Open dialog for user text input with speaker",
+        submitVote: "Submit vote for voting panels"
       } as const;
       const gameToolsStr = JSON.stringify(gameTools, null, 2);
       
@@ -475,17 +641,12 @@ export default function CopilotKitPage() {
       ].join("\n");
       return [
         "ALWAYS ANSWER FROM SHARED STATE (GROUND TRUTH).",
-        `Global Title: ${gTitle || "(none)"}`,
-        `Global Description: ${gDesc || "(none)"}`,
-        `Current Game: ${currentGameName}`,
+        "",
+        unifiedInstructions,  // 🚀 Unified game state info - done in one line!
+        "",
         "Items (sample):",
         summary || "(none)",
-        "Player States:",
-        playerStatesStr,
-        "Current Votes:",
-        votesStr,
-        "Dead Players:",
-        deadPlayersStr,
+        "",
         "game_tool:",
         gameToolsStr,
         fieldSchema,
@@ -695,7 +856,7 @@ export default function CopilotKitPage() {
   useCopilotAction({
     name: "setGlobalTitle",
     description: "Set the global title/name (outside of items).",
-    available: "frontend", // ✅ 纯前端操作，不触发Agent
+    available: "frontend", // ✅ Pure frontend operation, no Agent trigger
     followUp: false,
     parameters: [
       { name: "title", type: "string", required: true, description: "The new global title/name." },
@@ -2506,12 +2667,8 @@ export default function CopilotKitPage() {
               {/* Global Title & Description (hidden in JSON view) */}
               {!showJsonView && (
                 <motion.div style={{ opacity: headerOpacity }} className="sticky top-0 mb-6">
-                  <div className={cn(titleClasses, "text-2xl font-semibold")}>
-                    Game Engine
-                  </div>
-                  <div className={cn(titleClasses, "mt-2 text-sm leading-6")}>
-                    AI-Powered Game Engine
-                  </div>
+                  <GameTitle viewState={viewState} titleClasses={titleClasses} />
+                  <GamePhaseInfo viewState={viewState} titleClasses={titleClasses} />
                 </motion.div>
               )}
               
@@ -2531,7 +2688,7 @@ export default function CopilotKitPage() {
                           "bg-green-50 hover:bg-green-100 border-green-200 text-green-700",
                         )}
                         onClick={async () => {
-                          // 使用統一交互處理
+                          // Use unified interaction handling
                           await handleUserInteraction("Start game.", "start_game");
                         }}
                       >
@@ -2676,7 +2833,7 @@ export default function CopilotKitPage() {
                 size="lg"
                 className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3"
                 onClick={async () => {
-                  // 使用統一交互處理
+                  // Use unified interaction handling
                   await handleUserInteraction("Continue", "continue_game");
                 }}
               >

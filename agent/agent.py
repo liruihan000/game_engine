@@ -377,7 +377,7 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "upsertScoreEntry",
     "removeScoreEntry",
     # Broadcast input tool
-    "displayBroadcastInput",
+    "createTextInputPanel",
     # Common update tools
     "updatePhaseIndicator",
     "updateTextDisplay",

@@ -514,7 +514,7 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "setHandsCardAudience",
     "createHandsCardForPlayer",
     # Broadcast input tool
-    "displayBroadcastInput",
+    "createTextInputPanel",
     # Scoreboard tools
     "createScoreBoard",
     "updateScoreBoard",

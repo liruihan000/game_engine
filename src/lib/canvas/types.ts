@@ -336,6 +336,8 @@ export interface AgentState {
   currentStepIndex?: number;
   planStatus?: string;
   gameName?: string; // Current game DSL name (e.g., "werewolf", "coup")
+  current_phase_id?: number; // Current phase ID from game DSL
+  current_phase_name?: string; // Current phase name from game DSL
   roomSession?: RoomSession; // Room session data from frontend
   playerActions?: Record<string, {
     name: string;
