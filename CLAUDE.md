@@ -52,11 +52,12 @@ interface GameEngineState {
 
 ## Key Principles
 
-1. **Zero Game-Specific Code**: No `if game === "werewolf"` conditions
-2. **DSL-First**: All game behavior defined in external DSL files  
-3. **Atomic Tools**: Both backend operations and frontend actions are atomic
-4. **Generic Prompts**: All system prompts work across diverse game types
-5. **Simplest Logic**: Always use the most direct approach - prefer `setState` over helper functions when possible
+1. **All comments should be English**
+2. **Zero Game-Specific Code**: No `if game === "werewolf"` conditions
+3. **DSL-First**: All game behavior defined in external DSL files  
+4. **Atomic Tools**: Both backend operations and frontend actions are atomic
+5. **Generic Prompts**: All system prompts work across diverse game types
+6. **Simplest Logic**: Always use the most direct approach - prefer `setState` over helper functions when possible
 
 ## File Structure
 
