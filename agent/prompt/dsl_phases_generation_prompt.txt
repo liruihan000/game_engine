@@ -143,10 +143,16 @@ Each phase object must contain the following fields:
 
 Use only the tools listed below. Tool names must match exactly (no `functions.` prefix).
 When you create items (e.g., via `createTextDisplay`), capture the returned id (e.g., `0002`) and reuse it in later calls that require `itemId` (e.g., `deleteItem`). Do not pass the item name; always pass the exact id. To delete multiple items, call `deleteItem` once per `itemId`.
+    🚨 **CRITICAL CLEANUP RULE**: 
+    - "Clear UI" actions must ALWAYS include both cleanup AND creation/update in the SAME action
+    - NEVER create separate actions that only clear/delete without creating new content
+    - ✅ CORRECT: "Clear UI and display final victory message" 
+    - ❌ WRONG: "Clear voting UI from previous phase" (cleanup only)
+    - ✅ CORRECT: "Clear previous UI and create new phase indicator"
 
     🏆 **CRITICAL SCORING RULE**:
     - Any phase involving scores, points, rankings, or results MUST use scoreBoard tools
-    - ✅ CORRECT: Use createScoreBoard, updateScoreBoard, upsertScoreEntry
+    - ✅ CORRECT: Use createScoreBoard
     - ❌ WRONG: Use createTextDisplay or createResultDisplay for scores
     - **MANDATORY**: All scoring phases require proper scoreBoard components for tracking
 
@@ -196,8 +202,7 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
     - Text collection phases: Use createTextInputPanel for collecting statements, responses, or descriptions from players (NO additional confirmation buttons needed)
     - Card-based elements: Use createHandsCard for displaying card-like information with audience targeting (player hands, role cards, etc.)
     - Score tracking phases: **MANDATORY** - Use createScoreBoard for displaying current rankings, final results, and progress tracking with audience targeting
-    - Score-related phases: **CRITICAL** - Any phase involving scores, points, rankings, or results MUST use scoreBoard tools (createScoreBoard, updateScoreBoard, upsertScoreEntry)
-    - Component persistence and updates: Use update tools (updateScoreBoard, updateTextDisplay, etc.) to modify existing components instead of recreating them
+    - Score-related phases: **CRITICAL** - Any phase involving scores, points, rankings, or results MUST use scoreBoard tools (createScoreBoard)
     - Incremental state changes: Use specific update tools like upsertScoreEntry for granular score updates without full component recreation
 - **Turn-based Game Clarity**: When roles rotate, each phase should:
     - Clearly identify current role holders with audience targeting
@@ -290,8 +295,6 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 
 ### Scoring System
 - createScoreBoard: Create score board with player entries. Types: name (string), entries (array), position (string), title? (string), sort? ("asc"|"desc"), accentColor? (string), audience_type? (boolean), audience_ids? (string[])
-- updateScoreBoard: Update score board entries and properties. Types: itemId (string), title? (string), sort? ("asc"|"desc"), accentColor? (string), position? (string)
-- upsertScoreEntry: Add or update a score entry. Types: itemId (string), entryId (string), name? (string), score? (number)
 - removeScoreEntry: Remove score entry by player id. Types: itemId (string), entryId (string)
 
 ### Health/Status
@@ -660,20 +663,16 @@ Before generating phases, verify the following against the provided declaration:
     name: "Voting Phase"
 
 10:
-  name: "Score Update and Leaderboard"
-  description: "Update player scores and show results using mix of create and update tools."
+  name: "Score create and Leaderboard"
+  description: "Calculate scores and show results using mix of create and update tools."
   actions:
-    - description: "Update phase indicator to show scoring phase"
+    - description: "Clear the old voting UI and update phase indicator to show scoring phase"
       tools: [updatePhaseIndicator]
     - description: "Update individual player scores using granular score updates"
-      tools: [upsertScoreEntry]
-    - description: "Update existing scoreboard with new rankings"
-      tools: [updateScoreBoard]
-    - description: "Display round summary with score breakdown"
       tools: [createScoreBoard]
   completion_criteria:
     type: "UI_displayed"
-    description: "Scores updated incrementally and leaderboard refreshed."
+    description: "create ScoreBoard."
   next_phase:
     "If game is complete":
       id: 99
@@ -802,7 +801,7 @@ Before generating phases, verify the following against the provided declaration:
 - **Resource Games**: createScoreBoard, createInfluenceSet  
 - **Action Games**: createReactionTimer, createHealthDisplay, createActionButton
 - **Atmospheric Games**: createPhaseIndicator with descriptions
-- **Score-based Games**: **MANDATORY** - Always use createScoreBoard, updateScoreBoard, upsertScoreEntry for any scoring, ranking, or results phases
+- **Score-based Games**: **MANDATORY** - Always use createScoreBoard for any scoring, ranking, or results phases
 
 This comprehensive approach ensures:
 - **Game diversity** supported across all mechanics
