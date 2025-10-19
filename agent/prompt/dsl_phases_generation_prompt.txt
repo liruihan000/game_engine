@@ -89,6 +89,8 @@ Each phase object must contain the following fields:
 - **actions** (array): A series of operations the DM needs to execute.
     - Each operation includes `description` (string) and `tools` (array) fields.
     - **Important**: The first action of each phase should typically be used to clean up UI elements from the previous phase (if needed).
+      - **clearCanvas**: Use for major phase transitions, game start/restart, or when most UI needs to be reset (preserves avatar sets)
+      - **deleteItem**: Use for targeted cleanup of specific components while preserving others
     - **Player-Specific Action Design**: Break down broad actions into targeted sub-actions for specific player groups:
         - "Create public announcements" → separate from "Create role-specific UI"
         - "Show voting panel to all players" → vs "Show secret action panel to team members only"
@@ -141,12 +143,6 @@ Each phase object must contain the following fields:
 
 Use only the tools listed below. Tool names must match exactly (no `functions.` prefix).
 When you create items (e.g., via `createTextDisplay`), capture the returned id (e.g., `0002`) and reuse it in later calls that require `itemId` (e.g., `deleteItem`). Do not pass the item name; always pass the exact id. To delete multiple items, call `deleteItem` once per `itemId`.
-
-    🧹 **CLEANUP RULE**:
-    - **FIRST ACTION UI CLEANUP**: If the first action of a phase needs to create new UI components, include deleteItem for specific cleanup when appropriate
-    - **IMPLEMENTATION**: Add deleteItem to the first action's tool list when UI cleanup is needed
-    - ✅ CORRECT: "Delete previous voting panel and create phase indicator" with tools: [deleteItem, createPhaseIndicator]  
-    - ❌ WRONG: Separate action for cleanup only without creation
 
     🏆 **CRITICAL SCORING RULE**:
     - Any phase involving scores, points, rankings, or results MUST use scoreBoard tools
@@ -212,10 +208,22 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 ## **COMPONENT LIFECYCLE MANAGEMENT**:
 
 - **Create vs Update Strategy**: 
-  - Use **create*** tools when you need a new component or after deleting previous items
+  - Use **create*** tools when you need a new component or after clearing/deleting previous items
   - Use **update*** tools when modifying existing components from previous phases
   - **Both are necessary**: create for new elements, update for progressive changes
   - Consider component lifecycle: some components persist across phases, others are phase-specific
+
+- **Cleanup Strategy (clearCanvas vs deleteItem)**:
+  - **Use clearCanvas when:**
+    - Starting a new game phase that requires a fresh UI layout
+    - Transitioning between major game sections (e.g., setup → gameplay → scoring)
+    - Game initialization or restart scenarios
+    - Most existing UI components are no longer relevant
+  - **Use deleteItem when:**
+    - Removing specific outdated components while keeping others
+    - Targeted cleanup of particular UI elements (e.g., just voting panel)
+    - Fine-grained control over what stays and what goes
+  - **Avatar Preservation**: Both clearCanvas and deleteItem preserve avatar sets automatically
 
 - **Component Lifecycle Patterns**:
   - **Cross-phase Components**: Phase indicators, scoreboards, timers - can be created once and updated
@@ -237,6 +245,7 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 - setItemSubtitleOrDescription: Set an item's subtitle/short description. Types: itemId (string), subtitleOrDescription (string)
 - setItemPosition: Change an item's position on the grid. Types: itemId (string), position (string)
 - deleteItem: Delete an item by id. **IMPORTANT**: Cannot be used alone - must always be combined with create/update tools in same action. Types: itemId (string)
+- clearCanvas: Clear all canvas items except avatar sets. **IMPORTANT**: Cannot be used alone - must always be combined with create/update tools in same action. This is useful when transitioning between game phases or starting fresh. Avatar sets are preserved to maintain player visual representation. Types: (no parameters required)
 
 
 ### Core Game Components
@@ -343,10 +352,12 @@ Before generating phases, verify the following against the provided declaration:
   name: "Game Introduction"
   description: "Introduce the game rules, setup, and objectives to all players."
   actions:
-    - description: "Display game rules and objectives"
-      tools: [display_game_intro]
-    - description: "Show player list and game configuration"
-      tools: [display_player_setup]
+    - description: "Clear canvas and create phase indicator for game introduction"
+      tools: [clearCanvas, createPhaseIndicator]
+    - description: "Display game rules and objectives to all players"
+      tools: [createTextDisplay]
+    - description: "Create avatar set and scoreboard for player setup"
+      tools: [createAvatarSet, createScoreBoard]
   completion_criteria:
     type: "UI_displayed"
     description: "Game introduction has been displayed to all players."
@@ -538,8 +549,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Voting Phase"
   description: "All surviving players vote to select a player to eliminate with targeted UI components."
   actions:
-    - description: "Delete previous UI items and create public phase indicator visible to all players"
-      tools: [deleteItem, createPhaseIndicator]
+    - description: "Clear previous UI items and create public phase indicator visible to all players"
+      tools: [clearCanvas, createPhaseIndicator]
     - description: "Create voting panel visible to all surviving players only"
       tools: [createVotingPanel]
     - description: "Create status display for dead players showing they cannot vote"
@@ -560,7 +571,7 @@ Before generating phases, verify the following against the provided declaration:
   description: "Display voting results with different information for different player groups."
   actions:
     - description: "Clear voting UI and create public results display visible to all players"
-      tools: [deleteItem, createResultDisplay]
+      tools: [clearCanvas, createResultDisplay]
     - description: "Create detailed vote breakdown visible to alive players only"
       tools: [createTextDisplay]
     - description: "Mark eliminated player as dead (visible to all)"
@@ -582,8 +593,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Doctor's Night Action"
   description: "Doctor chooses whether to use antidote with three-tier audience targeting for optimal privacy and information flow."
   actions:
-    - description: "TIER 1 - PUBLIC: Delete previous UI items and create public phase indicator showing night action phase (visible to all)"
-      tools: [deleteItem, createPhaseIndicator]
+    - description: "TIER 1 - PUBLIC: Clear previous UI items and create public phase indicator showing night action phase (visible to all)"
+      tools: [clearCanvas, createPhaseIndicator]
     - description: "TIER 1 - PUBLIC: Create timer visible to all showing remaining time"
       tools: [createTimer]
     - description: "TIER 2 - GROUP: Create waiting message for non-doctor players (alive players excluding doctor)"
@@ -612,8 +623,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Statement Collection Phase"
   description: "Speaker provides their three statements using broadcast input with private lie selection."
   actions:
-    - description: "Delete previous UI items and create public phase indicator for statement collection"
-      tools: [deleteItem, createPhaseIndicator]
+    - description: "Clear previous UI items and create public phase indicator for statement collection"
+      tools: [clearCanvas, createPhaseIndicator]
     - description: "Create text input panel for Speaker to submit three statements"
       tools: [createTextInputPanel]
     - description: "Create waiting message for non-Speaker players"

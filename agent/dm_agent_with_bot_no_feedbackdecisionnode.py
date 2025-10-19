@@ -689,6 +689,7 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "createScoreBoard",
     # Component management tools
     "deleteItem",
+    "clearCanvas",
     # Player state management
     "markPlayerDead",
     # Chat tools
@@ -2556,19 +2557,19 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "• NO speculation, NO invented details - stick to observable data\n\n"
             
             "🚨 **ABSOLUTE PROHIBITION**: NEVER return with ONLY cleanup calls - THIS IS TASK FAILURE!\n"
-            "**MANDATORY CREATE REQUIREMENT**: Every deleteItem MUST be followed by create tools in SAME response!\n"
-            "**CLEANUP TOOLS RESTRICTION**: deleteItem cannot appear alone - must always be paired with create tools\n"
+            "**MANDATORY CREATE REQUIREMENT**: Every deleteItem/clearCanvas MUST be followed by create tools in SAME response!\n"
+            "**CLEANUP TOOLS RESTRICTION**: deleteItem/clearCanvas cannot appear alone - must always be paired with create tools\n"
             "🧹 **AUTOMATIC CLEANUP REQUIREMENT**:\n"
             "• **PHASE TRANSITION CHECK**: If actions don't include clear/delete, YOU must check itemsState and clean up irrelevant UI\n"
             "• **OUTDATED UI DETECTION**: Identify items that don't match current phase requirements\n"
             "• **AUTOMATIC DELETE**: Remove voting panels, timers, or displays that are no longer relevant\n"
             "• **EXAMPLE**: If switching from voting to results phase, delete old voting panels before creating result displays\n"
             "🔄 **MANDATORY CLEAR ORDERING**:\n"
-            "• **DELETE FIRST**: deleteItem calls MUST be executed BEFORE all create tools\n"
+            "• **DELETE FIRST**: deleteItem/clearCanvas calls MUST be executed BEFORE all create tools\n"
             "• **SYNCHRONOUS EXECUTION**: Call cleanup tools first, then creation tools in same response\n"
-            "• **CORRECT ORDER**: deleteItem('id1') → deleteItem('id2') → createPhaseIndicator() → createTimer()\n"
-            "• **WRONG ORDER**: createPhaseIndicator() → deleteItem('id') (creates then destroys)\n"
-            "**EXECUTION PATTERN**: [AUTO-CLEANUP] + deleteItem('abc7') + createPhaseIndicator() + createTimer() + createVotingPanel() + createDeathMarker(for_dead_players)\n"
+            "• **CORRECT ORDER**: clearCanvas() or deleteItem('id1') → deleteItem('id2') → createPhaseIndicator() → createTimer()\n"
+            "• **WRONG ORDER**: createPhaseIndicator() → clearCanvas() (creates then destroys)\n"
+            "**EXECUTION PATTERN**: [AUTO-CLEANUP] + clearCanvas() or deleteItem('abc7') + createPhaseIndicator() + createTimer() + createVotingPanel() + createDeathMarker(for_dead_players)\n"
             "⚡ **COMPLETE PHASE EXECUTION**: Execute delete + create actions for current_phase in ONE response!\n"
             "**Role Selection**: Analyze player_states - Werewolves: role='Werewolf', Alive: is_alive=true, Human: always ID '1'\n"
             "**Timers**: ~10 seconds (max 15), Layout: 'center' default\n"
@@ -2699,15 +2700,15 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
         orig_tool_calls = getattr(response, "tool_calls", []) or []
         def _get_tool_name(tc):
             return tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-        deletion_names = {"deleteItem"}
+        deletion_names = {"deleteItem", "clearCanvas"}
         only_deletions = bool(orig_tool_calls) and all((_get_tool_name(tc) in deletion_names) for tc in orig_tool_calls)
         if only_deletions:
             logger.warning("[ActionExecutor][GUARD] Only deletion tool calls detected; issuing follow-up request for creation tools.")
             strict_creation_system = SystemMessage(
                 content=(
-                    "You returned ONLY deletion tools (deleteItem). Now you MUST produce the required creation tools for the current phase in this follow-up.\n"
+                    "You returned ONLY deletion tools (deleteItem/clearCanvas). Now you MUST produce the required creation tools for the current phase in this follow-up.\n"
                     "Rules:\n"
-                    "- Do NOT call deleteItem again.\n"
+                    "- Do NOT call deleteItem or clearCanvas again.\n"
                     "- Call only creation/update tools to render the phase UI (e.g., createPhaseIndicator, createTimer, createVotingPanel, createTextDisplay, createDeathMarker, etc.).\n"
                     f"- Current phase context: ID {current_phase_id}. Follow its 'actions' strictly.\n"
                     "- Include proper audience permissions on each component (audience_type=true for public; or audience_type=false with audience_ids list).\n"
