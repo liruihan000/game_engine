@@ -819,6 +819,17 @@ export default function CopilotKitPage() {
     // Game components don't use tags, so this is a no-op
   }, []);
 
+  // Exit game function - clears session and returns to library
+  const handleExitGame = useCallback(() => {
+    // Clear all session storage
+    sessionStorage.removeItem('gameContext');
+    sessionStorage.removeItem('roomSession');
+    sessionStorage.removeItem('playerId');
+    
+    // Navigate to game library page
+    router.push('/game-library');
+  }, [router]);
+
   // Helper to generate default data by type
 
   const addItem = useCallback((type: CardType, name?: string, customData?: ItemData) => {
@@ -2517,6 +2528,7 @@ export default function CopilotKitPage() {
       style={{ "--copilot-kit-primary-color": "#2563eb" } as CopilotKitCSSProperties}
       className="h-[calc(100vh-3.5rem)] flex flex-col min-h-0 overflow-hidden"
     >
+
       {/* Main Layout */}
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Chat Sidebar */}
@@ -2929,13 +2941,13 @@ export default function CopilotKitPage() {
             </div>
           </div>
           
-          {/* Continue button - shown when game has items */}
-          {(viewState.items ?? []).length > 0 && (
-            <div className="flex justify-center py-4">
+          {(viewState.items ?? []).length > 0 ? (
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 flex gap-2">
+              {/* Continue button */}
               <Button
                 variant="default" 
                 size="lg"
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3"
+                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2"
                 disabled={isExecuting}
                 onClick={async () => {
                   // Use unified interaction handling
@@ -2944,11 +2956,7 @@ export default function CopilotKitPage() {
               >
                 {isExecuting ? "Processing..." : "Continue"}
               </Button>
-            </div>
-          )}
-          
-          {(viewState.items ?? []).length > 0 ? (
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 flex gap-2">
+              
               <NewItemMenu 
                 onSelect={(type) => addItem(type)}
                 className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
@@ -2963,6 +2971,15 @@ export default function CopilotKitPage() {
                   ? "Canvas"
                   : <>JSON</>
                 }
+              </Button>
+              
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                onClick={handleExitGame}
+              >
+                Exit Game
               </Button>
             </div>
           ) : null}
