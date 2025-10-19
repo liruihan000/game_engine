@@ -728,8 +728,6 @@ Before generating phases, verify the following against the provided declaration:
       tools: [createTextInputPanel]
     - description: "TIER 3 - INDIVIDUAL: Create turn indicator showing current speaker's role"
       tools: [createTurnIndicator]
-    - description: "TIER 3 - INDIVIDUAL: Create statement board for speaker to preview their statements"
-      tools: [createStatementBoard]
   completion_criteria:
     type: "player_action"
     description: "Speaker has submitted their three statements via broadcast input, and player_states have been updated."
