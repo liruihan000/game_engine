@@ -78,6 +78,10 @@ Before designing phases, ensure consistency with the provided declaration:
 
 ### 3.1. Phase Components
 
+**🎮 MANDATORY PHASE STRUCTURE RULES:**
+- **PHASE 0 (First Phase)**: MUST ALWAYS be game introduction and rules explanation
+- **PHASE 1 (Second Phase)**: MUST ALWAYS be identity/role assignment OR speaker/turn order setup
+
 Each phase object must contain the following fields:
 
 - **name** (string): Display name of the phase.
