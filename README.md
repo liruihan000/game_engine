@@ -1,4 +1,4 @@
-# 🎮 Full-Stack AI Game Canvas
+# 🎮 Full-Stack AI Game Engine
 
 *Built in under 5 days — with almost no sleep and endless curiosity.*
 
@@ -59,7 +59,7 @@ pnpm dev  # launches frontend (:3000) + backend (:8123)
   
 ### Gameplay Guide
 
-1. Currently, only "Create Room" is available. The "Join Room" feature is a reserved interface for future multiplayer mode.
+1. Currently, only "Create Room" is available. The "Join Room" feature is a reserved interface for future multiplayer mode. Before you click start the game please add bots once.
 
 2. Due to the bot design, after completing a phase, please click “Continue” or wait for the timer to end to proceed to the next round.
 
