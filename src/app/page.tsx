@@ -5,6 +5,7 @@ import { useCoAgent, useCopilotAction, useCoAgentStateRender, useCopilotAddition
 import { CopilotKitCSSProperties, CopilotChat, CopilotPopup } from "@copilotkit/react-ui";
 import { TextMessage, MessageRole } from "@copilotkit/runtime-client-gql";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type React from "react";
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -140,6 +141,8 @@ import { getCurrentPlayerId } from "@/lib/player-utils";
 import NewItemMenu from "@/components/canvas/NewItemMenu";
 
 export default function CopilotKitPage() {
+  const router = useRouter();
+  
   // Use consistent agent name across all components - room isolation via threadId
   const { state, setState } = useCoAgent<AgentState>({
     name: "sample_agent", // 🔑 Fixed agent name, room isolation via threadId in DynamicCopilotProvider
@@ -2744,6 +2747,14 @@ export default function CopilotKitPage() {
                           "bg-green-50 hover:bg-green-100 border-green-200 text-green-700",
                         )}
                         onClick={async () => {
+                          // Check if gameContext exists in sessionStorage
+                          const gameContext = sessionStorage.getItem('gameContext');
+                          if (!gameContext) {
+                            // No game context, redirect to game library
+                            router.push('/game-library');
+                            return;
+                          }
+                          
                           // Use unified interaction handling
                           await handleUserInteraction("Start game.", "start_game");
                         }}

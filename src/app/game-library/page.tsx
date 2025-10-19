@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Gamepad2, Users, User } from "lucide-react";
+import { Gamepad2, Users, User, Plus, Sparkles } from "lucide-react";
 
 interface GameInfo {
   name: string;
@@ -120,6 +120,44 @@ export default function GameLibrary() {
               </CardContent>
             </Card>
           ))}
+          
+          {/* Create New Game Card */}
+          <Card className="group hover:shadow-xl transition-all duration-300 border-2 border-dashed border-purple-300 shadow-lg bg-gradient-to-br from-purple-50 to-pink-50 backdrop-blur hover:border-purple-400">
+            <CardHeader className="pb-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <CardTitle className="text-xl font-bold text-purple-900 group-hover:text-purple-600 transition-colors flex items-center gap-2">
+                    <Sparkles className="h-5 w-5" />
+                    Create New Game
+                  </CardTitle>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Badge 
+                      variant="outline"
+                      className="text-xs border-purple-300 text-purple-700 bg-purple-100"
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> 
+                      Custom
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            
+            <CardContent className="pt-0">
+              <CardDescription className="text-purple-600 mb-6 line-clamp-3 leading-relaxed">
+                Design your own custom game using our AI-powered DSL generator. Create unique gameplay experiences with natural language descriptions.
+              </CardDescription>
+              
+              <Link href="/dsl-generator" className="block">
+                <Button 
+                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white shadow-lg hover:shadow-xl transition-all duration-300"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Game
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
         </div>
 
         {games.length === 0 && !loading && (
