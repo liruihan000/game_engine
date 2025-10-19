@@ -4,8 +4,11 @@
 
 **Documentation:** [Google Doc](https://docs.google.com/document/d/1CugOHIvGYZ7J339M6bQpwU7fyY-Dg1BHJ__HTwXXYDA/edit?usp=drive_link)  
 
-**Demo Video:** [Watch Demo](https://youtu.be/wgIr_062JH8)
-*The video shows two cases: Werewolf (Mafia) and Two Truths and a Lie (this one still has some bugs; I will solve it soon).
+**Future development plan:** [Google Doc](https://docs.google.com/document/d/10kWj0d3kgHijSTeN-svgy8nV4BalymIZrE-zh7uruv0/edit?usp=drive_link)  
+
+**Demo Video:** [Watch Demo](https://youtu.be/DxSRnGJXdRA)
+
+*The video shows two cases: Werewolf (Mafia) and Two Truths and a Lie.
 I haven't made any customized operations on any DSLs. They are all automatically generated based on a description.*
 
 ---
@@ -40,8 +43,32 @@ git clone https://github.com/liruihan000/game_engine.git
 cd game_engine
 pnpm install
 echo 'OPENAI_API_KEY=your-key' > agent/.env
-pnpm dev  # launches frontend (:3000) + backend (:8123)
+pnpm dev  # launches frontend (:3000) + backend (:8123) 
 ```
+
+### Dsl Generator
+
+1. Visit **`:3000/dsl-generator`** in your browser.  
+2. Enter the **game name** and **description**.  
+3. Click **Generate** — the generation process currently takes about **10 minutes**.  
+   > *Note:* Due to time constraints, optimization for generation speed hasn’t been a focus yet,  
+   > but the current speed can be improved by at least **3×** in future iterations.  
+4. The generated **YAML file** will be saved automatically in the **game directory**.  
+5. Open the **Game Library** at **`:3000`**, and you’ll see the newly created game.  
+   - If a game with the same name already exists, it will be **overwritten**.
+  
+### Gameplay Guide
+
+1. Currently, only "Create Room" is available. The "Join Room" feature is a reserved interface for future multiplayer mode.
+
+2. Due to the bot design, after completing a phase, please click “Continue” or wait for the timer to end to proceed to the next round.
+
+### Project Paths (Compact)
+
+- Agent (current): `./agent/dm_agent_with_bot_no_feedbackdecisionnode.py` — Handles main decision flow with bot logic  
+- DSL Agent: `./agent/dsl_agent` — Parses and executes game DSL  
+- Prompts: `/home/lee/game_engine/agent/prompt` — Prompt templates used by the DSL agent  
+- Game DSL (YAML): `./game_engine/games` — YAML files defining game rules and phases
 
 ---
 
