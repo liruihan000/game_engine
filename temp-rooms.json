@@ -1199,6 +1199,26 @@
       "max_players": 8,
       "current_players": 3,
       "created_at": "2025-10-19T23:05:42.113Z"
+    },
+    "55ecaa33-6e2b-4bf6-be35-e5c70c8b0461": {
+      "id": "55ecaa33-6e2b-4bf6-be35-e5c70c8b0461",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "39acb695-01ea-43cb-9a52-f5a1567980d0",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 4,
+      "created_at": "2025-10-19T23:12:59.786Z"
+    },
+    "331b5373-569a-4489-ac96-40807f75b8ef": {
+      "id": "331b5373-569a-4489-ac96-40807f75b8ef",
+      "game_name": "two-truths-and-a-lie",
+      "thread_id": "720b8005-6c1b-4202-ac95-7c8ef2d5118a",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 3,
+      "created_at": "2025-10-19T23:22:01.683Z"
     }
   },
   "players": {
@@ -4654,7 +4674,74 @@
         "status": "joined",
         "joined_at": "2025-10-19T23:05:43.859Z"
       }
+    ],
+    "55ecaa33-6e2b-4bf6-be35-e5c70c8b0461": [
+      {
+        "id": 1,
+        "room_id": "55ecaa33-6e2b-4bf6-be35-e5c70c8b0461",
+        "name": "sdfsd",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-19T23:12:59.786Z"
+      },
+      {
+        "id": 223,
+        "room_id": "55ecaa33-6e2b-4bf6-be35-e5c70c8b0461",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:13:00.728Z"
+      },
+      {
+        "id": 224,
+        "room_id": "55ecaa33-6e2b-4bf6-be35-e5c70c8b0461",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:13:00.737Z"
+      },
+      {
+        "id": 225,
+        "room_id": "55ecaa33-6e2b-4bf6-be35-e5c70c8b0461",
+        "name": "player4",
+        "player_order": 4,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:13:00.737Z"
+      }
+    ],
+    "331b5373-569a-4489-ac96-40807f75b8ef": [
+      {
+        "id": 1,
+        "room_id": "331b5373-569a-4489-ac96-40807f75b8ef",
+        "name": "dfsd",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-19T23:22:01.683Z"
+      },
+      {
+        "id": 226,
+        "room_id": "331b5373-569a-4489-ac96-40807f75b8ef",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:22:02.708Z"
+      },
+      {
+        "id": 227,
+        "room_id": "331b5373-569a-4489-ac96-40807f75b8ef",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:22:02.717Z"
+      }
     ]
   },
-  "nextPlayerId": 223
+  "nextPlayerId": 228
 }

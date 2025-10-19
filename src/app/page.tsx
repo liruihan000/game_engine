@@ -1327,14 +1327,14 @@ export default function CopilotKitPage() {
       const timerId = addItem("timer", name, data);
       
       // Start countdown and send message when expires
-      setTimeout(async () => {
-        await appendMessage(new TextMessage({
-          role: MessageRole.User,
-          content: `[TIMER_EXPIRED] Phase timer "${name}" completed after ${duration} seconds. Phase should advance automatically.`
-        }));
+      // setTimeout(async () => {
+      //   await appendMessage(new TextMessage({
+      //     role: MessageRole.User,
+      //     content: `[TIMER_EXPIRED] Phase timer "${name}" completed after ${duration} seconds. Phase should advance automatically.`
+      //   }));
         
-        // Do NOT update state here - let Agent handle timer cleanup through deleteItem tool calls
-      }, duration * 1000);
+      //   // Do NOT update state here - let Agent handle timer cleanup through deleteItem tool calls
+      // }, duration * 1000);
       
       return timerId;
     },
