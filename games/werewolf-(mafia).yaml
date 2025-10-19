@@ -172,7 +172,7 @@ declaration:
 phases:
   0:
     name: Game Introduction
-    description: Introduce the game rules, objectives, night/day cycle, and win conditions
+    description: Privately introduce the game rules, objectives, night/day cycle, and win conditions
       to all players.
     actions:
     - description: Clear canvas and create public phase indicator for introduction

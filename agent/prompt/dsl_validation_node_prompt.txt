@@ -414,7 +414,6 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 
 ### Visual Effects
 - changeBackgroundColor: Create background control and set initial color. Types: name (string), backgroundColor ("white"|"gray-900"|"blue-50"|"green-50"|"purple-50")
-- createBackgroundControl: Create background color control component. Types: name (string), backgroundColor? ("white"|"gray-900"|"blue-50"|"green-50"|"purple-50"), audience_type? (boolean), audience_ids? (string[])
 - createResultDisplay: Create large gradient-styled result display. Types: name (string), content (string), position (string), audience_type? (boolean), audience_ids? (string[])
 - updateResultDisplay: Update result display content. Types: itemId (string), content? (string)
 - createNightOverlay: Create night overlay with title and blur. Types: name (string), title? (string), blur? (number), visible? (boolean), audience_type? (boolean), audience_ids? (string[])
