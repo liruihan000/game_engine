@@ -1,4 +1,4 @@
-import { AgentState, CardType, ItemData, VotingPanelData, TextDisplayData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, BroadcastInputData, PlayerStatesDisplayData, PlayerActionsDisplayData } from "@/lib/canvas/types";
+import { AgentState, CardType, ItemData, VotingPanelData, TextDisplayData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, BroadcastInputData, PlayerStatesDisplayData, PlayerActionsDisplayData, DeathMarkerData } from "@/lib/canvas/types";
 
 export const initialState: AgentState = {
   items: [],
@@ -212,6 +212,16 @@ export function defaultDataFor(type: CardType): ItemData {
         audience_type: true,
         audience_ids: [],
       } as PlayerActionsDisplayData;
+    case "death_marker":
+      return {
+        playerName: "",
+        playerId: "",
+        cause: "Eliminated",
+        accentColor: "#ef4444", // red-500
+        position: "center",
+        audience_type: true,
+        audience_ids: [],
+      } as DeathMarkerData;
     default:
       return {
         content: "",

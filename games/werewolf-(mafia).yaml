@@ -149,11 +149,9 @@ phases:
     description: Introduce the rules, objectives, night/day flow, and win conditions
       to all players.
     actions:
-    - description: Clear any previous UI and set the scene for a new game
+    - description: Clear any previous UI and create a public phase indicator with game introduction
       tools:
       - clearCanvas
-    - description: Create a public phase indicator and summary of rules and privacy
-      tools:
       - createPhaseIndicator
       - createTextDisplay
     - description: Display player list and configuration overview to all players
@@ -171,7 +169,7 @@ phases:
       player's role card. Initialize team, has_night_action, and wolf chat access
       for werewolves.
     actions:
-    - description: Clear canvas and display public role assignment notice
+    - description: Clear canvas and display public role assignment notice with phase indicator
       tools:
       - clearCanvas
       - createPhaseIndicator

@@ -1,6 +1,6 @@
 "use client";
 
-import type { Item, ItemData, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, AudiencePermissions, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, BroadcastInputData, PlayerStatesDisplayData, PlayerActionsDisplayData } from "@/lib/canvas/types";
+import type { Item, ItemData, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, AudiencePermissions, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, BroadcastInputData, PlayerStatesDisplayData, PlayerActionsDisplayData, DeathMarkerData } from "@/lib/canvas/types";
 import HandsCard from "@/components/canvas/cards/HandsCard";
 import ScoreBoard from "@/components/canvas/cards/ScoreBoard";
 import CoinDisplay from "@/components/canvas/cards/CoinDisplay";
@@ -851,6 +851,28 @@ export function CardRenderer(props: {
               );
             })
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (item.type === "death_marker") {
+    const d = item.data as DeathMarkerData;
+    
+    return (
+      <div className="bg-card border border-destructive rounded-lg p-3 shadow-sm min-w-[160px]" style={{ borderColor: d.accentColor || "#ef4444" }}>
+        <div className="flex items-center justify-center space-x-2">
+          <div className="text-2xl">💀</div>
+          <div className="text-center">
+            <div className="text-sm font-bold text-destructive-foreground" style={{ color: d.accentColor || "#ef4444" }}>
+              {d.playerName}
+            </div>
+            {d.cause && (
+              <div className="text-xs text-muted-foreground mt-1">
+                {d.cause}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );

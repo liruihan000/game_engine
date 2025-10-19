@@ -571,6 +571,49 @@ def _execute_update_player_actions(current_player_actions: dict, player_id: str,
     
     return current_player_actions
 
+def _limit_actions_per_player(player_actions: dict, limit: int = 5) -> dict:
+    """
+    Limit each player's actions to the most recent N actions based on timestamp.
+    
+    Args:
+        player_actions: Dict with structure {player_id: {name: str, actions: {action_id: action_data}}}
+        limit: Maximum number of actions per player (default 5)
+    
+    Returns:
+        Dict with same structure but limited actions per player
+    """
+    if not player_actions:
+        return {}
+    
+    limited_actions = {}
+    for player_id, player_data in player_actions.items():
+        if not isinstance(player_data, dict) or "actions" not in player_data:
+            limited_actions[player_id] = player_data
+            continue
+            
+        # Get all actions and sort by timestamp (newest first)
+        actions = player_data.get("actions", {})
+        if not actions:
+            limited_actions[player_id] = player_data
+            continue
+            
+        # Sort actions by timestamp descending (newest first)
+        sorted_actions = sorted(
+            actions.items(), 
+            key=lambda x: x[1].get("timestamp", 0) if isinstance(x[1], dict) else 0,
+            reverse=True
+        )
+        
+        # Take only the last N actions
+        recent_actions = dict(sorted_actions[:limit])
+        
+        limited_actions[player_id] = {
+            **player_data,
+            "actions": recent_actions
+        }
+    
+    return limited_actions
+
 # Centralized backend tools (shared across nodes)
 backend_tools = [
     update_player_state,
@@ -590,6 +633,7 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "changeBackgroundColor",
     "createResultDisplay",
     "createTimer",
+    "createDeathMarker",
     "createBackgroundControl",
     "promptUserText",
     # Card game UI
@@ -764,6 +808,7 @@ async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Comman
     # === DETAILED INPUT LOGGING ===
     current_phase_id = state.get('current_phase_id', 0)
     player_states = state.get("player_states", {})
+    # Keep original for updates, limit for internal use
     playerActions = state.get("playerActions", {})
     logger.info(f"[InitialRouter][INPUT] current_phase_id: {current_phase_id}")
     logger.info(f"[InitialRouter][INPUT] player_states: {player_states}")
@@ -927,7 +972,7 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     if 'in game chat:' not in content and 'to bot' not in content:
         return Command(goto=END, update={})
     
-    model = init_chat_model("openai:gpt-4o")
+    model = init_chat_model("openai:gpt-4.1-mini")
     
     # Get available tools to call addBotChatMessage
     raw_tools = state.get("tools", []) or []
@@ -975,8 +1020,8 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     📊 **GAME CONTEXT**:
     - Current Phase: {current_phase_id}
     - Player States: {player_states}
-    - Player Actions: {playerActions}
-    - Game Notes: {game_notes if game_notes else 'None'}
+    - Player Actions: {_limit_actions_per_player(playerActions, 3) if playerActions else {}}
+    - Game Notes: {game_notes[-5:] if game_notes else 'None'}
 
     🚫 **MANDATORY LIFE STATUS CHECK**:
     - Dead players: {[f"Player {pid} ({data.get('name', f'Bot {pid}')})" for pid, data in player_states.items() if not data.get('is_alive', True) and pid != "1"]}
@@ -1108,24 +1153,28 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
         logger.info(f"[BotBehaviorNode] No Game Notes Available")
 
     # Initialize LLM
-    model = init_chat_model("openai:gpt-4o")
+    model = init_chat_model("openai:gpt-4.1-mini")
     model_with_tools = model.bind_tools([update_player_actions])
+    items_summary = summarize_items_for_prompt(state)
     
     # System message with precise analysis based on FeedbackDecisionNode logic
     system_message = SystemMessage(
         content=(
-            "🤖 **BOT BEHAVIOR GENERATION - CURRENT PHASE FOCUS**\n"
-            f"📊 **CURRENT GAME STATE**:\n"
-            f"- **Current Phase ({current_phase_id})**: {current_phase}\n"
+            "🤖 **BOT BEHAVIOR GENERATION - CURRENT PHASE FOCUS**\n\n"
+            f"📊 **CURRENT GAME STATE**:\n\n"
+            f"- **Current Phase ({current_phase_id})**: {current_phase}\n\n"
             f"- **Player States**: {player_states}\n"
-            f"- **Player Actions**: {playerActions}\n"
-            f"- **Game Notes**: {game_notes if game_notes else 'None'}\n\n"
+            f"- **Player Actions**: {_limit_actions_per_player(playerActions, 3) if playerActions else {}}\n\n"
+            f"- **Game Notes**: {game_notes[-5:] if game_notes else 'None'}\n\n"
+            f"- **Items State**: {items_summary}\n\n"
             
             "🎯 **CORE RESPONSIBILITY**: Generate smart bot actions by analyzing current phase requirements ONLY\n\n"
             
+            "🚫 **ABSOLUTE RULE**: Player ID 1 (human) NEVER generates actions - ONLY bot players [2,3,4...] can have actions\n\n"
+            
             "⚠️ **CURRENT PHASE FOCUS**: Bots should ONLY act based on current phase information\n"
             "• Act naturally based on available information in current phase\n"
-            "• Wait for explicit phase transitions before considering new actions\n\n"
+            "• Only act based on current phase - do not anticipate future phases\n\n"
             
             "📋 **CURRENT PHASE WORKFLOW**:\n"
             "**STEP 1 - Current Phase Requirements Analysis**:\n"
@@ -1134,44 +1183,72 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
             "  - 'timer': No actions needed ❌\n"
             "  - 'UI_displayed': No actions needed ❌\n\n"
             
-            "**STEP 2 - Target Player Identification** (CRITICAL - Validate Roles & Life Status):\n"
-            " **MANDATORY LIFE STATUS CHECK**: ALWAYS verify is_alive=true FIRST before any action generation\n"
-            f"• Dead players: {[pid for pid, data in player_states.items() if not data.get('is_alive', True)]}\n"
-            f"• Living players: {[pid for pid, data in player_states.items() if data.get('is_alive', True)]}\n"
-            "• **CRITICAL**: Dead players (is_alive=false) CANNOT take any actions - skip them entirely!\n\n"
-            "• Use current_phase.completion_criteria.target_players.condition to find WHO should act:\n"
-            "  - Role-based: \"player.role == 'Werewolf'\": Find werewolf players\n"
-            "  - Status-based: \"player.is_alive == true\": Find living players\n"
-            "  - Combined: \"player.role == 'Doctor' and player.is_alive == true\"\n"
-            "• Include ALL matching players (exclude Player 1 - human)\n"
-            "• Focus on bot players: [2, 3, 4, etc.]\n"
-            "• **DOUBLE CHECK**: Every selected player MUST have is_alive=true\n\n"
+            "**STEP 2 - Target Player Identification** (WHO should act):\n"
+            "• Examine current phase target_players.condition to understand WHO should act\n"
+            "• Check player_states to identify living players and their roles\n"
+            "• Review current game state to understand player status and assignments\n\n"
             
-            "**ROLE VALIDATION CHECKPOINT**:\n"
-            f"Current player roles from player_states: {[(pid, pdata.get('role', 'UNKNOWN')) for pid, pdata in player_states.items()]}\n"
-            "• VERIFY each bot's role matches the phase requirements\n"
+            "🔍 **TARGET PLAYER MATCHING PROCESS**:\n"
+            "• Apply target_players.condition to find matching bot players (exclude player_id=1)\n"
+            "• **MANDATORY EXCLUSIONS** - All non-target players CANNOT have actions:\n"
+            "  - Dead players (is_alive=false) → NO ACTIONS\n"
+            "  - Human player (player_id=1) → NO ACTIONS\n"
+            "  - Players not matching condition → NO ACTIONS\n"
+            "  - Wrong role for phase → NO ACTIONS\n"
+            "• **CRITICAL EXAMPLES**:\n"
+            "  - Phase requires werewolf voting → ONLY werewolves act, non-werewolves generate NO actions\n"
+            "  - Phase requires doctor protection → ONLY doctor acts, non-doctors generate NO actions\n"
+            "  - Phase requires Red team action → ONLY Red team acts, other teams generate NO actions\n"
+            "  - Phase requires all living players → ALL alive players act, dead players generate NO actions\n\n"
+            
+            "✅ **ROLE VALIDATION CHECKPOINT**:\n"
+            "• VERIFY each bot's role matches the phase requirements EXACTLY\n"
             "• NEVER generate werewolf actions for non-werewolf players\n"
             "• NEVER generate doctor actions for non-doctor players\n"
             "• NEVER generate detective actions for non-detective players\n"
-            "• If role doesn't match phase requirements, skip that player!\n\n"
+            "• If role doesn't match phase requirements, skip that player!\n"
+            "• **DOUBLE CHECK**: Every selected player MUST have is_alive=true\n\n"
             
-            "**STEP 3 - Missing Action Analysis & Game Notes Review**:\n"
-            "📝 **MANDATORY GAME NOTES CHECK**: Review recent game_notes for critical reminders:\n"
-            "• **🔴 CRITICAL notes**: Player deaths/eliminations - these players CANNOT act\n"
-            "• **🤖 BOT REMINDER notes**: Specific action reminders for bot players\n"
-            "• **⚠️ VOTING STATUS notes**: Which players haven't voted or need reminders\n"
-            "• **🚫 UI FILTER notes**: Explicit instructions on which players to exclude\n\n"
+            "📋 **FINAL FILTERING** - Who still needs to act:\n"
             "• Review playerActions to see WHO has already acted in this phase\n"
-            "• Identify specific bots who STILL need to act\n"
-            "• Cross-reference with game_notes to avoid generating actions for dead/eliminated players\n"
-            "• If completion_criteria is met, no actions needed\n\n"
+            "• **ONE ACTION PER PLAYER RULE**: Each player can only execute ONE action per phase\n"
+            "• If player already has ANY action in current phase → SKIP that player entirely\n"
+            "• Check game_notes for any additional exclusions or reminders\n"
+            "• Identify specific bots who STILL need to act (haven't acted yet)\n"
+            "• **MULTIPLE PLAYERS ALLOWED**: Different qualifying players can act simultaneously\n"
+            "• If completion_criteria is met, no actions needed\n"
+            "• **CRITICAL CHECK**: If NO bots need actions after all filtering, return empty result - no response needed\n\n"
             
-            "**STEP 4 - Current Phase Action Generation**:\n"
+            "🎯 **ACTION TARGET VALIDATION**:\n"
+            "• When voting/targeting other players, targets MUST be alive (is_alive=true)\n"
+            "• Dead players CANNOT be voted for or targeted\n"
+            "• Check player_states before selecting any target player\n"
+            "• NOTE: All player IDs in examples below (Player 2, Player 3, etc.) are example IDs only\n\n"
+            
+            "🚨 **ABSOLUTE HUMAN EXCLUSION**:\n"
+            "• Player_id=1 (human) NEVER generates actions, even if they match all other conditions\n"
+            "• Even if player_id=1 has correct role, is alive, and matches target_players.condition → NO ACTIONS\n"
+            "• ONLY bot players [2,3,4...] can generate actions - player_id=1 is always excluded\n\n"
+            
+            "**STEP 3 - Action Generation** (Generate SPECIFIC actions for ONLY matching players):\n"
+            "🚫 **ABSOLUTE RULE**: ONLY generate actions for players identified in STEP 2 - DO NOT generate any actions (including 'waiting', 'observing', 'ready') for non-matching players\n"
+            "⚠️ **ONE ACTION LIMIT**: Each player can only execute ONE action per phase - players who already acted are excluded\n\n"
+            "🎯 **DIRECT ACTION REQUIREMENT**: Generate immediate, specific actions via TOOL CALLS - NO complex strategies or descriptions!\n"
+            "• Actions MUST be generated through calling appropriate frontend tools (voting panels, input fields, etc.)\n"
+            "• Tool calls are the ONLY way to produce bot actions - pure text descriptions won't create actions\n\n"
+            "• Example: 'Night — Werewolves Choose Target' phase:\n"
+            "  ❌ WRONG: 'strategically coordinated with the werewolf team without direct role assumptions...'\n"
+            "  ❌ WRONG: 'Player 2 (werewolf) should act'\n"
+            "  ✅ CORRECT: 'voted to eliminate Player 3' (Player IDs are examples only)\n"
+            "• Example: 'Doctor Protects' phase:\n"
+            "  ❌ WRONG: 'Player 3 (doctor) needs to protect someone'\n"
+            "  ✅ CORRECT: 'chose to protect Player 3' (Player IDs are examples only)\n"
+            
             "🚨 **CRITICAL OUTPUT FORMAT**: Generate SPECIFIC CONTENT with EXACT DETAILS!\n"
             "• Two Truths and a Lie → Output actual statements: 'I've been to Japan', 'I can juggle', 'I own five cats'\n"
             "• Werewolf voting → Output specific decision: 'voted to eliminate Player 3'\n"
             "• Results phase → PRECISE acknowledgment: 'I see statement 2 (I like dogs) was the lie, I guessed correctly'\n"
-            "• NOT descriptions like: 'Player 2 is ready to share statements' ❌\n"
+            "• NOT vague descriptions like: 'Player 2 is preparing statements' ❌\n"
             "• NOT vague reactions like: 'Player acknowledged the results' ❌\n"
             "• ALWAYS include statement numbers AND content when discussing results\n\n"
             
@@ -1184,27 +1261,15 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
             "• NOT 'is considering their vote' ❌\n"
             "• Include specific target/choice - never leave votes vague!\n\n"
             
-            "• Generate PRECISE actions based ONLY on current phase requirements:\n"
-            "  - Werewolf: \"coordinated with other werewolves and voted to eliminate [target]. Your action must include the exactly target player ID name and the action type.\"\n"
-            "  - Doctor: \"chose to protect [target](player DI and name)from werewolf attacks\"\n"
-            "  - Villager: \"voted to eliminate [suspect](player DI and name) in the day vote phase based on discussion\"\n"
-            "• Make actions appropriate for current phase only - do not anticipate future phases\n"
-            "• Actions must be SPECIFIC (not generic like \"participated\")\n\n"
             
-            " **CRITICAL RULES**:\n"
-            "• SPECIFIC ROLES ONLY: Only generate actions for bots who match completion_criteria\n"
-            "• EXACT MATCHING: Use target_players.condition to identify precise bot set\n"
-            "• MISSING ACTIONS ONLY: Skip bots who already acted in this phase\n"
-            "• SPECIFIC DESCRIPTIONS: Actions must mention specific targets/decisions\n"
-            "• FUTURE-AWARE: Consider next phase when generating current actions\n\n"
-            
-            "💡 **DETAILED ACTION EXAMPLES BY GAME TYPE** (CRITICAL - Follow these patterns exactly):\n\n"
+            "💡 **DETAILED ACTION EXAMPLES BY GAME TYPE** (CRITICAL - Follow these patterns exactly):\n"
+            "NOTE: All Player IDs below (Player 2, Player 3, etc.) are examples only - use actual player IDs from current game\n\n"
             
             "**🐺 WEREWOLF GAME ACTIONS**:\n"
-            "• Werewolf role: \"coordinated with fellow werewolves and voted to eliminate Player 3 (Doctor suspected)\"\n"
-            "• Doctor role: \"chose to protect Player 1 (human) from potential werewolf attack tonight\"\n"
-            "• Detective role: \"investigated Player 2 and discovered their alignment as 'werewolves' - crucial information!\"\n"
-            "• Villager role: \"voted to eliminate Player 2 based on suspicious voting patterns\"\n\n"
+            "• Werewolf voting: \"voted to eliminate Player 3\" (via voting tools)\n"
+            "• Doctor protection: \"chose to protect Player 3\" (via protection tools)\n"
+            "• Detective investigation: \"investigated Player 2\" (via investigation tools)\n"
+            "• Villager voting: \"voted to eliminate Player 2\" (via voting tools)\n\n"
             
             "**🎭 TWO TRUTHS AND A LIE GAME ACTIONS**:\n"
             "• Speaker role: \"shared three statements: 'I've been to Japan', 'I can juggle', 'I own five cats' - carefully crafted with one lie\"\n"
@@ -1234,7 +1299,8 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
             "  - Two Truths: Only current speaker can share statements\n"
             "  - Villager/Basic: Can only vote and discuss - NO special abilities\n"
             "• **Cross-Game Principle**: NEVER generate actions for wrong roles or phases\n"
-            "• **Validation**: Always check player role against phase target_players condition\n\n"
+            "• **Validation**: Always check player role against phase target_players condition\n"
+            "• **FORBIDDEN ACTIONS**: Do NOT generate 'waiting', 'observing', 'ready', 'standing by' actions for non-matching players - generate NO actions at all\n\n"
             
             "⚡ **MULTI-GAME PREDICTIVE EXAMPLES**:\n"
             "**Werewolf Game**:\n"
@@ -1387,7 +1453,7 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
         logger.info(f"[RefereeNode] No Game Notes Available")
     
     # Initialize LLM
-    model = init_chat_model("openai:gpt-4o")
+    model = init_chat_model("openai:gpt-4.1-mini")
     # Bind state management tools
     model_with_tools = model.bind_tools([update_player_state, add_game_note], parallel_tool_calls=True)
     
@@ -1402,8 +1468,8 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             f"- Next Phase: {next_phase}\n"
             f"- Phase History: {state.get('phase_history', [])[-5:] if state.get('phase_history') else 'None'}\n"
             f"- Player States: {player_states}\n"
-            f"- Player Actions: {playerActions}\n"
-            f"- Game Notes: {game_notes if game_notes else 'None'}\n"
+            f"- Player Actions: {_limit_actions_per_player(playerActions, 3) if playerActions else {}}\n"
+            f"- Game Notes: {game_notes[-5:] if game_notes else 'None'}\n"
             f"- Declaration Rules: {declaration}\n\n"
             
             "🎯 **TRIPLE MISSION**:\n"
@@ -1461,6 +1527,23 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             "   • Current totals: 'Total scores - Player 1: 3 points, Player 2: 1 point, Player 3: 2 points'\n"
             "MANDATORY: Update both player_states scores AND record complete results in game_notes\n\n"
             
+            "💀 **DEATH STATUS & RESULTS ANNOUNCEMENT CHECK**:\n"
+            f"• **CURRENT STATUS**: Living: {[pid for pid, data in player_states.items() if data.get('is_alive', True)]}, Dead: {[pid for pid, data in player_states.items() if not data.get('is_alive', True)]}\n"
+            "🚨 **CRITICAL**: If current phase is a results/announcement phase, check player survival:\n"
+            "• **VALIDATE**: All state updates must respect death/elimination status\n"
+            "• **CRITICAL RULE**: Dead players (is_alive=false) CANNOT perform ANY actions or participate\n"
+            "• Examine player_states for is_alive=false players\n"
+            "• If any player died (is_alive changed from true to false):\n"
+            "  - **RECORD**: Add 🔴 CRITICAL game note when setting is_alive=false for any player\n"
+            "  - Record death in game_notes: 'Player X (RoleName) has been eliminated/died this phase'\n"
+            "  - Include elimination reason if available in playerActions or game context\n"
+            "  - Calculate impact on game state (team balance, role distribution)\n"
+            "• If multiple deaths occurred, record each separately with specific details\n"
+            "• **CONCLUSION REQUIREMENT**: Write comprehensive game state conclusion to game_notes\n"
+            "  - Living players summary: 'Remaining alive: Player 2 (Doctor), Player 4 (Villager)'\n"
+            "  - Team/role analysis: 'Team balance: 2 Villagers vs 1 Werewolf remaining'\n"
+            "  - Game progression: 'Phase X completed with Y eliminations'\n\n"
+            
             "🔮 **PHASE-AWARE DECISION MAKING**:\n"
             f"**Current Phase Analysis** ({current_phase.get('name', 'Unknown')}):\n"
             f"• Completion criteria: {current_phase.get('completion_criteria', {}).get('type', 'Unknown')}\n"
@@ -1469,13 +1552,6 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             f"• What's coming: {next_phase.get('description', 'Unknown') if next_phase else 'Final phase'}\n"
             f"• Preparation needed: Use this context to create better game notes and state updates\n\n"
             
-            " **STATE UPDATE PROCESSING**:\n"
-            " **MANDATORY LIFE STATUS ENFORCEMENT** (HIGHEST PRIORITY):\n"
-            f"• Current living players: {[pid for pid, data in player_states.items() if data.get('is_alive', True)]}\n"
-            f"• Current dead players: {[pid for pid, data in player_states.items() if not data.get('is_alive', True)]}\n"
-            "• **CRITICAL**: Dead players (is_alive=false) CANNOT perform ANY actions\n"
-            "• **VALIDATE**: All state updates must respect death/elimination status\n"
-            "• **RECORD**: Add game note when setting is_alive=false for any player\n\n"
             "• Correct who is the current speaker, who is the last speaker.\n"
             "• Correct do you need to select ann one for next round to do something?.\n"
             
@@ -1735,7 +1811,7 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
     # Use LLM for intelligent role assignment
     logger.info(f"[RoleAssignmentNode] Using LLM to assign roles to {len(unassigned_players)} players")
     
-    model = init_chat_model("openai:gpt-4o-mini")
+    model = init_chat_model("openai:gpt-4.1-mini-mini")
     model_with_tools = model.bind_tools([update_player_name], parallel_tool_calls=True)
     
     # Create intelligent role assignment prompt
@@ -1879,13 +1955,12 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
     current_phase_id = state.get("current_phase_id", 0)
     player_states = state.get("player_states", {})
     playerActions = state.get("playerActions", {})
-    
     # === DETAILED INPUT LOGGING ===
     logger.info(f"[PhaseNode][INPUT] current_phase_id: {current_phase_id}")
     logger.info(f"[PhaseNode][INPUT] player_states: {player_states}")
     logger.info(f"[PhaseNode][INPUT] playerActions: {playerActions}")
     logger.info(f"[PhaseNode][INPUT] state keys: {list(state.keys())}")
-    playerActions = state.get("playerActions", {})
+   
     
     # Get current phase details (needed for phase 0 check)
     phases = dsl_content.get('phases', {}) if dsl_content else {}
@@ -1941,7 +2016,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
         logger.info(f"[PhaseNode] No Game Notes Available")
 
     # Initialize LLM with set_next_phase tool
-    model = init_chat_model("openai:gpt-4o")
+    model = init_chat_model("openai:gpt-4.1-mini")
     model_with_tools = model.bind_tools([set_next_phase])
     logger.info(f"[PhaseNode] Phase {current_phase_id}: Phase transition analysis with set_next_phase tool")
     
@@ -1960,12 +2035,12 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             f"Current Phase Details: {current_phase}\n"
             f"Game Declaration: {declaration}\n"
             f"Player States: {player_states}\n"
-            f"Game Notes: {game_notes if game_notes else 'None'}\n"
+            f"Game Notes: {game_notes[-5:] if game_notes else 'None'}\n"
             f"🚫 Living players: {[pid for pid, data in player_states.items() if data.get('is_alive', True)]}\n"
             f"🚫 Dead players: {[pid for pid, data in player_states.items() if not data.get('is_alive', True)]}\n"
             f"Phase History (last 5): {state.get('phase_history', [])[-5:]}\n" 
             f"Recent Messages: {[str(msg)[:200] for msg in trimmed_messages]}\n\n"
-            f"Player Actions: {playerActions}\n\n"
+            f"Player Actions: {_limit_actions_per_player(playerActions, 3) if playerActions else {}}\n\n"
             
             "MAIN TASK: Analyze the Current Phase Details's next_phase conditions and determine which branch to follow based on game state and Player Actions and message history.\n"
             "Your mechanism is to drive game progression forward by carefully evaluating next_phase rules.\n\n"
@@ -1986,6 +2061,14 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             "• IMMEDIATELY advance to next_phase - no additional waiting required\n"
             "• Do NOT check for other conditions when timer is the completion criteria\n"
             "• Timer phases are automatically ready for transition\n\n"
+            
+            "📊 **DATA SOURCE ANALYSIS - Use ACTUAL DATA Only**:\n"
+            "1. **player_states**: Get role='Werewolf' count, is_alive=true status\n"
+            "2. **playerActions**: Count actions where phase=current_phase_name\n"
+            "3. **game_notes**: Check for completion indicators and status updates\n"
+            "4. **completion_criteria**: Match required conditions with actual counts\n"
+            "Example: If 1 alive werewolf + 1 werewolf vote in playerActions = complete\n"
+            "NEVER guess 'waiting for all werewolves' - count the actual werewolves!\n\n"
             
             "NEXT_PHASE CONDITION ANALYSIS:\n"
             "1. Examine the current_phase's next_phase field for conditional branches\n"
@@ -2374,9 +2457,9 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             f"itemsState (current frontend layout): {items_summary}\n"
             f"{current_phase_str}\n"
             f"player_states: {player_states}\n"
-            f"playerActions: {playerActions}\n"
+            f"playerActions: {_limit_actions_per_player(playerActions, 3) if playerActions else {}}\n"
             f"phase history: {state.get('phase_history', [])}\n" 
-            f"game_notes: {game_notes if game_notes else 'None'}\n"
+            f"game_notes: {game_notes[-5:] if game_notes else 'None'}\n"
             # f"dsl_info: {dsl_info}\n"
             f"Game Description: {declaration.get('description', 'No description available')}\n"
             "GAME DSL REFERENCE (for understanding game flow):\n"
@@ -2395,6 +2478,16 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "9. **DELETE BEFORE CREATE**: You MUST delete outdated components before creating new ones\n"
             "10. **ROUND OBJECTIVES**: Clearly understand what this round is trying to achieve\n"
             "11. **PROGRESSION CONDITIONS**: Know what conditions move the game to the next round\n"
+            "💀 **DEATH MARKER MANDATORY REQUIREMENTS**:\n"
+            "• **DEATH STATUS CHECK**: EVERY round, check player_states for is_alive=false\n"
+            "• **MISSING MARKER CHECK**: If dead player exists but NO death_marker with audience_ids=[dead_player_id] in items, CREATE one immediately\n"
+            "• **AUTOMATIC DEATH MARKERS**: Create death markers for ALL dead players automatically\n"
+            "• **DEAD PLAYER ONLY VISIBILITY**: Death markers MUST use audience_type=false, audience_ids=[dead_player_id]\n"
+            "• **PERMANENT MARKERS**: Death markers CANNOT be deleted - they persist until game end\n"
+            "• **ONE PER DEAD PLAYER**: Ensure only one death marker exists per dead player\n"
+            "• **EXAMPLE**: if player_states['2']['is_alive']=false, create: createDeathMarker(playerName='Player 2', playerId='2', audience_type=false, audience_ids=['2'], position='top-right')\n"
+            "• **POSITIONING**: Place death markers in unique positions to avoid overlap\n"
+            "• **DETECTION LOGIC**: Scan itemsState for existing death_marker items with matching audience_ids before creating new ones\n"
             "🚨 **SCORE CALCULATION RULE**: NEVER invent scores - use ONLY:\n"
             "• player_states: Get lie_index (correct answer) and vote_choice (player votes)\n"
             "• Example: if lie_index=1, then statements[1] is the lie\n"
@@ -2412,6 +2505,13 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "📋 CORE WORKFLOW (ALL ACTIONS IN SINGLE RESPONSE):\n"
             "**itemsState Analysis**: Format '[ID] type:name@position' shows current UI layout. Follow current_phase requirements.\n"
             "**Delete + Create**: Read itemsState to find existing IDs, delete outdated items, then create new components for current_phase.\n"
+            "🚫 **POSITION OVERLAP PREVENTION**:\n"
+            "• **NO DUPLICATE POSITIONS**: Check existing items before creating - NEVER place multiple items at same position\n"
+            "• **POSITION ANALYSIS**: Read itemsState format '[ID] type:name@position' to identify occupied positions\n"
+            "• **UNIQUE PLACEMENT**: Each new component MUST use a different position than existing items\n"
+            "• **GRID POSITIONS**: top-left, top-center, top-right, middle-left, center, middle-right, bottom-left, bottom-center, bottom-right\n"
+            "• **CONFLICT RESOLUTION**: If position occupied, choose next available position in grid\n"
+            "• **EXAMPLE**: If center occupied, use middle-left or middle-right instead\n"
             "**MANDATORY Audience Permissions**: Every component MUST specify who can see it:\n"
             "  • Public: audience_type=true (everyone sees it)\n"
             "  • Private: audience_type=false + audience_ids=['1','3'] (only specified players see it)\n"
@@ -2434,9 +2534,10 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "• Example: 'Village won - all werewolves eliminated' (from player_states.is_alive)\n"
             "• NO speculation, NO invented details - stick to observable data\n\n"
             
-            "🚨 **ABSOLUTE PROHIBITION**: NEVER return with ONLY deleteItem calls - THIS IS TASK FAILURE!\n"
-            "**MANDATORY CREATE REQUIREMENT**: Every deleteItem MUST be followed by create tools in SAME response!\n"
-            "**EXECUTION PATTERN**: deleteItem(wo'abc7') + createPhaseIndicator() + createTimer() + createVotingPanel()\n"
+            "🚨 **ABSOLUTE PROHIBITION**: NEVER return with ONLY cleanup calls - THIS IS TASK FAILURE!\n"
+            "**MANDATORY CREATE REQUIREMENT**: Every deleteItem/clearCanvas MUST be followed by create tools in SAME response!\n"
+            "**CLEANUP TOOLS RESTRICTION**: deleteItem and clearCanvas cannot appear alone - they must always be paired with create tools\n"
+            "**EXECUTION PATTERN**: deleteItem('abc7') + clearCanvas() + createPhaseIndicator() + createTimer() + createVotingPanel() + createDeathMarker(for_dead_players)\n"
             "⚡ **COMPLETE PHASE EXECUTION**: Execute delete + create actions for current_phase in ONE response!\n"
             "**Role Selection**: Analyze player_states - Werewolves: role='Werewolf', Alive: is_alive=true, Human: always ID '1'\n"
             "**Timers**: ~10 seconds (max 15), Layout: 'center' default\n"
@@ -2447,6 +2548,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
 
             "📝 **GAME NOTES CRITICAL USAGE RULES**:\n"
             "• **🔴 CRITICAL notes**: Indicate player deaths - MUST exclude these players from all UI\n"
+            "• **💀 DEATH MARKERS**: Use createDeathMarker tool to visually mark dead players on screen\n"
             "• **🚫 UI FILTER notes**: Explicitly tell you which players to exclude from voting/targeting\n"
             "• **⚠️ VOTING STATUS notes**: Show who hasn't voted - create reminders for these players\n"
             "• **🎯 DECISION notes**: Show automatic decisions made - incorporate into UI context\n"
@@ -2564,7 +2666,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
                     "You returned ONLY deletion tools (deleteItem/clearCanvas). Now you MUST produce the required creation tools for the current phase in this follow-up.\n"
                     "Rules:\n"
                     "- Do NOT call deleteItem or clearCanvas again.\n"
-                    "- Call only creation/update tools to render the phase UI (e.g., createPhaseIndicator, createTimer, createVotingPanel, createTextDisplay, etc.).\n"
+                    "- Call only creation/update tools to render the phase UI (e.g., createPhaseIndicator, createTimer, createVotingPanel, createTextDisplay, createDeathMarker, etc.).\n"
                     f"- Current phase context: ID {current_phase_id}. Follow its 'actions' strictly.\n"
                     "- Include proper audience permissions on each component (audience_type=true for public; or audience_type=false with audience_ids list).\n"
                 )

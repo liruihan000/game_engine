@@ -105,11 +105,18 @@ Each phase object must contain the following fields:
             - `"multiple_players_action"`: Wait for multiple target players' (but not all) actions.
         - **`target_players`** (object): Describes which players need to provide feedback.
             - `description` (string): Description of the target players.
-            - `condition` (string): Describes the condition target players need to meet. For example: "All surviving players", "Players with role 'Killer'".
+            - `condition` (string): **CRITICAL LOGIC FOR ACTION TARGETING** - Specifies exactly which players should perform actions in this phase. Use current_phase.completion_criteria.target_players.condition to determine WHO should act:
+              - **Role-based targeting**: `"player.role == 'Werewolf'"` → Only werewolf players take actions
+              - **Status-based targeting**: `"player.is_alive == true"` → Only living players take actions  
+              - **Combined targeting**: `"player.role == 'Doctor' and player.is_alive == true"` → Only living doctor takes action
+              - **Team-based targeting**: `"player.team == 'Red'"` → All players in Team Red take actions
+              - **Active player targeting**: `"player.is_current_turn == true"` → Only current turn holder takes action
+              - **Multi-role targeting**: `"player.role in ['Werewolf', 'Assassin']"` → Multiple specific roles take actions
             - **⚠️ VALIDATION**: Ensure condition references only declared player_states fields:
               - ✅ Valid: "player.role == 'TeamLeader'" (if 'role' exists in template)
               - ✅ Valid: "player.is_alive == true" (if 'is_alive' exists in template)  
               - ❌ Invalid: "player.magic_power > 5" (if 'magic_power' not in template)
+            - **🎯 ACTION GENERATION RULE**: Players matching this condition should generate SPECIFIC CONCRETE ACTIONS for the phase (e.g., "voted to eliminate Player 3"), while non-matching players take NO ACTIONS (they wait/observe)
         - **Completion Logic**: The completion condition for this type of phase is **"whether feedback has been collected from all `target_players`"**, and **"ensure relevant player state (player_states) has been updated"**.
 - **next_phase** (object | null): Points to the next phase. For the final phase, this value is `null`.
     - **Non-branching Case (Simple Object):** Directly provides the ID and name of the next phase.
@@ -202,8 +209,15 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 - setItemName: Rename an existing item by id. Types: itemId (string), name (string)
 - setItemSubtitleOrDescription: Set an item's subtitle/short description. Types: itemId (string), subtitleOrDescription (string)
 - setItemPosition: Change an item's position on the grid. Types: itemId (string), position (string)
-- deleteItem: Delete an item by id. Types: itemId (string)
-- clearCanvas: Clear all canvas items except avatar sets. Types: (none)
+- deleteItem: Delete an item by id. **IMPORTANT**: Cannot be used alone - must always be combined with create/update tools in same action. Types: itemId (string)
+- clearCanvas: Clear all canvas items except avatar sets. **IMPORTANT**: Cannot be used alone - must always be combined with create/update tools in same action. Types: (none)
+
+🚨 **CRITICAL CLEANUP RULE**: 
+- "Clear UI" actions must ALWAYS include both cleanup AND creation/update in the SAME action
+- NEVER create separate actions that only clear/delete without creating new content
+- ✅ CORRECT: "Clear UI and display final victory message" 
+- ❌ WRONG: "Clear voting UI from previous phase" (cleanup only)
+- ✅ CORRECT: "Clear previous UI and create new phase indicator"
 
 ### Core Game Components
 - createCharacterCard: Create a character card (role, position, size, description). Types: name (string), role (string), position (string), size? ("small"|"medium"|"large"), description? (string), audience_type? (boolean), audience_ids? (string[])
@@ -264,6 +278,7 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 - updateStatementBoard: Update statement board content. Types: itemId (string), statements? (string[]), highlightIndex? (number), locked? (boolean), accentColor? (string)
 - createTurnIndicator: Create turn indicator showing current active player. Types: name (string), currentPlayerId (string), playerName? (string), label? (string), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
 - updateTurnIndicator: Update turn indicator properties. Types: itemId (string), currentPlayerId? (string), playerName? (string), label? (string), accentColor? (string), position? (string)
+- createDeathMarker: Create death marker to visually indicate eliminated players. Types: name (string), playerName (string), playerId (string), cause? (string), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
 
 ### Interaction System
 - addBotChatMessage: Add bot message to chat. Types: speaker? (string), content (string)
@@ -370,7 +385,131 @@ Before generating phases, verify the following against the provided declaration:
       name: "Role Assignment"
 ```
 
-### 3.3. Additional Game Flow Examples
+### 3.3. Target Players Condition Examples
+
+### Example A: Role-Based Action Targeting (multiple_players_action)
+```
+15:
+  name: "Night — Werewolves Choose Target"
+  description: "Alive werewolves coordinate privately and vote to select a single elimination target."
+  actions:
+    - description: "Create public phase indicator for werewolf night phase"
+      tools: [createPhaseIndicator]
+    - description: "Create private voting panel for alive werewolves to choose an alive target"
+      tools: [createVotingPanel]
+    - description: "Show waiting message to all alive non-werewolf players"
+      tools: [createTextDisplay]
+  completion_criteria:
+    type: "player_action"
+    description: "Votes have been received from all alive werewolves and relevant player state (player_states) has been updated with the chosen target."
+    wait_for: "multiple_players_action"
+    target_players:
+      description: "All alive werewolves"
+      condition: "player.role == 'Werewolf' and player.is_alive == true"
+  next_phase:
+    id: 16
+    name: "Night — Doctor Protects"
+```
+
+### Example B: Single Player Action Targeting (single_player_choice)
+```
+16:
+  name: "Night — Doctor Protects"
+  description: "The doctor chooses a player to protect from werewolf attacks tonight."
+  actions:
+    - description: "Update phase indicator to show doctor protection phase"
+      tools: [updatePhaseIndicator]
+    - description: "Create voting panel for doctor to choose protection target"
+      tools: [createVotingPanel]
+    - description: "Show waiting screen for all other players"
+      tools: [createTextDisplay]
+  completion_criteria:
+    type: "player_action"
+    description: "Doctor has chosen a protection target and relevant player state (player_states) has been updated."
+    wait_for: "single_player_choice"
+    target_players:
+      description: "The doctor player"
+      condition: "player.role == 'Doctor' and player.is_alive == true"
+  next_phase:
+    id: 17
+    name: "Dawn Breaks"
+```
+
+### Example C: Team-Based Action Targeting (multiple_players_action)
+```
+8:
+  name: "Team Strategy Phase"
+  description: "Red team members discuss strategy while Blue team waits."
+  actions:
+    - description: "Create public phase indicator for team strategy phase"
+      tools: [createPhaseIndicator]
+    - description: "Create strategy panel for Red team members only"
+      tools: [createVotingPanel]
+    - description: "Show waiting message for Blue team players"
+      tools: [createTextDisplay]
+  completion_criteria:
+    type: "player_action"
+    description: "All Red team members have submitted their strategy choices and relevant player state (player_states) has been updated."
+    wait_for: "multiple_players_action"
+    target_players:
+      description: "All Red team members"
+      condition: "player.team == 'Red'"
+  next_phase:
+    id: 9
+    name: "Blue Team Strategy"
+```
+
+### Example D: Multiple Players Action Targeting (multiple_players_action)
+```
+10:
+  name: "Day Voting Phase"
+  description: "All surviving players vote to eliminate someone."
+  actions:
+    - description: "Update phase indicator to show day voting phase"
+      tools: [updatePhaseIndicator]
+    - description: "Create voting panel for all surviving players"
+      tools: [createVotingPanel]
+    - description: "Show waiting message for dead players"
+      tools: [createTextDisplay]
+  completion_criteria:
+    type: "player_action"
+    description: "All surviving players have cast their votes and relevant player state (player_states) has been updated."
+    wait_for: "multiple_players_action"
+    target_players:
+      description: "All surviving players"
+      condition: "player.is_alive == true"
+  next_phase:
+    id: 11
+    name: "Voting Results"
+```
+
+### Example E: Turn-Based Action Targeting (single_player_choice)
+```
+12:
+  name: "Player Turn Action"
+  description: "Current player performs their action while others wait for their turn."
+  actions:
+    - description: "Create public phase indicator showing current player's turn"
+      tools: [createPhaseIndicator]
+    - description: "Create action buttons for current player only"
+      tools: [createActionButton]
+    - description: "Create turn indicator and waiting message for other players"
+      tools: [createTurnIndicator]
+    - description: "Show waiting message for non-active players"
+      tools: [createTextDisplay]
+  completion_criteria:
+    type: "player_action"
+    description: "Current player has completed their action and relevant player state (player_states) has been updated."
+    wait_for: "single_player_choice"
+    target_players:
+      description: "Current active player"
+      condition: "player.is_current_turn == true and player.is_alive == true"
+  next_phase:
+    id: 13
+    name: "Next Player Turn"
+```
+
+### 3.4. Additional Game Flow Examples
 
 ### Example 1: Collective Voting Process with Audience Permissions
 
@@ -388,7 +527,7 @@ Before generating phases, verify the following against the provided declaration:
   completion_criteria:
     type: "player_action"
     description: "Votes have been received from all surviving players, and relevant player state (player_states) has been updated."
-    wait_for: "all_players_action"
+    wait_for: "multiple_players_action"
     target_players:
       description: "All surviving players"
       condition: "player.is_alive == true"
@@ -400,14 +539,14 @@ Before generating phases, verify the following against the provided declaration:
   name: "Announce Voting Results"
   description: "Display voting results with different information for different player groups."
   actions:
-    - description: "Clear voting UI from previous phase"
-      tools: [deleteItem]
-    - description: "Create public results display visible to all players"
-      tools: [createResultDisplay]
+    - description: "Clear voting UI and create public results display visible to all players"
+      tools: [deleteItem, createResultDisplay]
     - description: "Create detailed vote breakdown visible to alive players only"
       tools: [createTextDisplay]
     - description: "Mark eliminated player as dead (visible to all)"
       tools: [markPlayerDead]
+    - description: "Create death marker for eliminated player (visible only to eliminated player)"
+      tools: [createDeathMarker]
   completion_criteria:
     type: "UI_displayed"
     description: "Voting results have been announced with proper audience targeting."
@@ -455,8 +594,8 @@ Before generating phases, verify the following against the provided declaration:
   actions:
     - description: "Create public phase indicator for statement collection"
       tools: [createPhaseIndicator]
-    - description: "Display broadcast input for Speaker to submit three statements"
-      tools: [displayBroadcastInput]
+    - description: "Create text input panel for Speaker to submit three statements"
+      tools: [createTextInputPanel]
     - description: "Create waiting message for non-Speaker players"
       tools: [createTextDisplay]
     - description: "Display Speaker's role card showing their current status"
@@ -569,8 +708,8 @@ Before generating phases, verify the following against the provided declaration:
       tools: [createTimer]
     - description: "TIER 2 - GROUP: Create waiting instructions for non-speaker players (all players except current speaker)"
       tools: [createTextDisplay]
-    - description: "TIER 3 - INDIVIDUAL: Display broadcast input for Speaker to submit three statements"
-      tools: [displayBroadcastInput]
+    - description: "TIER 3 - INDIVIDUAL: Create text input panel for Speaker to submit three statements"
+      tools: [createTextInputPanel]
     - description: "TIER 3 - INDIVIDUAL: Create turn indicator showing current speaker's role"
       tools: [createTurnIndicator]
     - description: "TIER 3 - INDIVIDUAL: Create statement board for speaker to preview their statements"
@@ -587,38 +726,7 @@ Before generating phases, verify the following against the provided declaration:
     name: "Guessing Phase"
 ```
 
-### 💰 Example 6: Card Game - Coup (Resource Management)
 
-```
-12:
-  name: "Player Action Phase"
-  description: "Players take turns performing actions with coins and influence cards, demonstrating card game mechanics and resource tracking."
-  actions:
-    - description: "TIER 1 - PUBLIC: Create phase indicator showing action phase"
-      tools: [createPhaseIndicator]
-    - description: "TIER 1 - PUBLIC: Create public scoreboard showing all players' coin counts"
-      tools: [createScoreBoard]
-    - description: "TIER 2 - GROUP: Create action panel for alive players only"
-      tools: [createVotingPanel]
-    - description: "TIER 3 - INDIVIDUAL: Create influence cards for each player (private to owner)"
-      tools: [createInfluenceSet]
-    - description: "TIER 3 - INDIVIDUAL: Create coin display for each player showing their resources"
-      tools: [createCoinDisplay]
-    - description: "TIER 3 - INDIVIDUAL: Create action button for current player to confirm their choice"
-      tools: [createActionButton]
-  completion_criteria:
-    type: "player_action" 
-    description: "Current player has selected their action via voting panel, and player_states have been updated."
-    wait_for: "single_player_choice"
-    target_players:
-      description: "Current active player"
-      condition: "player.is_current_turn == true and player.is_alive == true"
-  next_phase:
-    id: 13
-    name: "Resolution Phase"
-```
-
-### 🏃 Example 7: Reaction Game - Quick Draw Challenge
 
 ```
 25:
@@ -637,8 +745,8 @@ Before generating phases, verify the following against the provided declaration:
       tools: [createActionButton]
   completion_criteria:
     type: "player_action"
-    description: "All players have either clicked their draw button or timer expired, and player_states updated with results."
-    wait_for: "all_players_action"
+    description: "All living players have either clicked their draw button or timer expired, and player_states updated with results."
+    wait_for: "multiple_players_action"
     target_players:
       description: "All living players"
       condition: "player.is_alive == true"
@@ -662,7 +770,7 @@ Before generating phases, verify the following against the provided declaration:
 
 **🔧 Tool Usage Patterns by Game Type:**
 - **Conversational Games**: displayBroadcastInput, createStatementBoard, createTurnIndicator
-- **Resource Games**: createCoinDisplay, createScoreBoard, createInfluenceSet  
+- **Resource Games**: createScoreBoard, createInfluenceSet  
 - **Action Games**: createReactionTimer, createHealthDisplay, createActionButton
 - **Atmospheric Games**: createPhaseIndicator with descriptions
 

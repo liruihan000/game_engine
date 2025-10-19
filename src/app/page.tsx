@@ -1300,19 +1300,59 @@ export default function CopilotKitPage() {
       setTimeout(async () => {
         await appendMessage(new TextMessage({
           role: MessageRole.User,
-          content: `Timer "${name}" has expired after ${duration} seconds.`
+          content: `[TIMER_EXPIRED] Phase timer "${name}" completed after ${duration} seconds. Phase should advance automatically.`
         }));
         
-        // Remove timer after expiring
-        setState((prev) => {
-          const base = prev ?? initialState;
-          const items = base.items ?? [];
-          const filteredItems = items.filter(item => item.id !== timerId);
-          return { ...base, items: filteredItems } as AgentState;
-        });
+        // Do NOT update state here - let Agent handle timer cleanup through deleteItem tool calls
       }, duration * 1000);
       
       return timerId;
+    },
+  });
+
+  // Frontend action: create a death marker for eliminated players
+  useCopilotAction({
+    name: "createDeathMarker",
+    description: "Create a death marker to visually indicate a player has been eliminated or died.",
+    available: "remote",
+    followUp: false,
+    parameters: [
+      { name: "name", type: "string", required: true, description: "Death marker name" },
+      { name: "playerName", type: "string", required: true, description: "Name of the dead or eliminated player" },
+      { name: "playerId", type: "string", required: true, description: "ID of the eliminated player" },
+      { name: "position", type: "string", required: false, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
+      { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']" },
+    ],
+    handler: ({ name, playerName, playerId, position, audience_type, audience_ids }: {
+      name: string;
+      playerName: string;
+      playerId: string;
+      position?: string;
+      audience_type?: boolean;
+      audience_ids?: string[];
+    }) => {
+      const normalized = (name ?? "").trim();
+      
+      // Name-based idempotency
+      if (normalized) {
+        const existing = (viewState.items ?? initialState.items).find((it) => 
+          it.type === "death_marker" && (it.name ?? "").trim() === normalized
+        );
+        if (existing) {
+          return existing.id;
+        }
+      }
+      
+      const data: DeathMarkerData = {
+        playerName: playerName || `Player ${playerId}`,
+        playerId: playerId,
+        position: (position as GamePosition) || "center",
+        audience_type: audience_type ?? true,
+        audience_ids: audience_ids || []
+      };
+      
+      return addItem("death_marker", name, data);
     },
   });
 
@@ -1324,8 +1364,8 @@ export default function CopilotKitPage() {
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "backgroundColor", type: "string", required: false, description: "Initial background color (select: 'white' | 'gray-900' | 'blue-50' | 'green-50' | 'purple-50')" },
-      { name: "audience_type", type: "boolean", required: false },
-      { name: "audience_ids", type: "string[]", required: false },
+      { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']" },
     ],
     handler: ({ name, backgroundColor, audience_type, audience_ids }: {
       name: string;
@@ -1429,7 +1469,7 @@ export default function CopilotKitPage() {
       { name: "cardName", type: "string", required: true, description: "Display name of the card" },
       { name: "descriptions", type: "string", required: false, description: "Short description or effect" },
       { name: "color", type: "string", required: false, description: "Accent color (hex or token). Default neutral" },
-      { name: "position", type: "string", required: false, description: "Grid position (default: bottom-center)" },
+      { name: "position", type: "string", required: false, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'; default: 'bottom-center')" },
       { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
       { name: "audience_ids", type: "string[]", required: false, description: "Player IDs who can see this component when audience_type=false" },
     ],
@@ -1474,9 +1514,9 @@ export default function CopilotKitPage() {
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "title", type: "string", required: false, description: "Scoreboard title" },
       { name: "entries", type: "object[]", required: false, description: "Array of entries: [{id, name, score}]" },
-      { name: "sort", type: "string", required: false, description: "Sort order (asc|desc)" },
+      { name: "sort", type: "string", required: false, description: "Sort order (select: 'asc' | 'desc')" },
       { name: "accentColor", type: "string", required: false, description: "Accent color" },
-      { name: "position", type: "string", required: false, description: "Grid position (default: top-right)" },
+      { name: "position", type: "string", required: false, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'; default: 'top-right')" },
       { name: "audience_type", type: "boolean", required: false, description: "true=public; false=private" },
       { name: "audience_ids", type: "string[]", required: false, description: "Visible player IDs if private" },
     ],
@@ -1508,10 +1548,10 @@ export default function CopilotKitPage() {
     followUp: false,
     parameters: [
       { name: "itemId", type: "string", required: true, description: "Target score_board item id" },
-      { name: "title", type: "string", required: false },
-      { name: "sort", type: "string", required: false },
-      { name: "accentColor", type: "string", required: false },
-      { name: "position", type: "string", required: false },
+      { name: "title", type: "string", required: false, description: "Scoreboard title" },
+      { name: "sort", type: "string", required: false, description: "Sort order (select: 'asc' | 'desc')" },
+      { name: "accentColor", type: "string", required: false, description: "Accent color" },
+      { name: "position", type: "string", required: false, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
     ],
     handler: ({ itemId, title, sort, accentColor, position /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 }: any) => {
@@ -1603,14 +1643,14 @@ export default function CopilotKitPage() {
     available: "remote",
     followUp: false,
     parameters: [
-      { name: "name", type: "string", required: true },
-      { name: "statements", type: "string[]", required: false },
-      { name: "highlightIndex", type: "number", required: false },
-      { name: "locked", type: "boolean", required: false },
-      { name: "accentColor", type: "string", required: false },
-      { name: "position", type: "string", required: false },
-      { name: "audience_type", type: "boolean", required: false },
-      { name: "audience_ids", type: "string[]", required: false },
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "statements", type: "string[]", required: false, description: "Array of up to 3 statements" },
+      { name: "highlightIndex", type: "number", required: false, description: "0-based index to highlight (0-2)" },
+      { name: "locked", type: "boolean", required: false, description: "Whether statements are locked/finalized" },
+      { name: "accentColor", type: "string", required: false, description: "Accent color for highlights" },
+      { name: "position", type: "string", required: false, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
+      { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
+      { name: "audience_ids", type: "string[]", required: false, description: "Array of player IDs who can see this component (only used when audience_type=false). Example: ['1', '2']" },
     ],
     handler: ({ name, statements, highlightIndex, locked, accentColor, position, audience_type, audience_ids /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 }: any) => {
@@ -1638,11 +1678,11 @@ export default function CopilotKitPage() {
     available: "remote",
     followUp: false,
     parameters: [
-      { name: "itemId", type: "string", required: true },
-      { name: "statements", type: "string[]", required: false },
-      { name: "highlightIndex", type: "number", required: false },
-      { name: "locked", type: "boolean", required: false },
-      { name: "accentColor", type: "string", required: false },
+      { name: "itemId", type: "string", required: true, description: "Target statement_board item id" },
+      { name: "statements", type: "string[]", required: false, description: "Array of up to 3 statements" },
+      { name: "highlightIndex", type: "number", required: false, description: "0-based index to highlight (0-2)" },
+      { name: "locked", type: "boolean", required: false, description: "Whether statements are locked/finalized" },
+      { name: "accentColor", type: "string", required: false, description: "Accent color for highlights" },
     ],
     handler: ({ itemId, statements, highlightIndex, locked, accentColor /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 }: any) => {
@@ -1665,11 +1705,11 @@ export default function CopilotKitPage() {
     available: "remote",
     followUp: false,
     parameters: [
-      { name: "name", type: "string", required: true },
-      { name: "duration", type: "number", required: false },
-      { name: "label", type: "string", required: false },
-      { name: "accentColor", type: "string", required: false },
-      { name: "position", type: "string", required: false },
+      { name: "name", type: "string", required: true, description: "Item name" },
+      { name: "duration", type: "number", required: false, description: "Timer duration in seconds" },
+      { name: "label", type: "string", required: false, description: "Optional timer label" },
+      { name: "accentColor", type: "string", required: false, description: "Timer bar color" },
+      { name: "position", type: "string", required: false, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
     ],
     handler: ({ name, duration, label, accentColor, position /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 }: any) => {
@@ -1879,7 +1919,7 @@ export default function CopilotKitPage() {
       { name: "name", type: "string", required: true },
       { name: "value", type: "number", required: false },
       { name: "max", type: "number", required: false },
-      { name: "style", type: "string", required: false },
+      { name: "style", type: "string", required: false, description: "Visual style (select: 'hearts' | 'bullets')" },
       { name: "accentColor", type: "string", required: false },
       { name: "position", type: "string", required: false },
       { name: "audience_type", type: "boolean", required: false },
@@ -1914,7 +1954,7 @@ export default function CopilotKitPage() {
       { name: "itemId", type: "string", required: true },
       { name: "value", type: "number", required: false },
       { name: "max", type: "number", required: false },
-      { name: "style", type: "string", required: false },
+      { name: "style", type: "string", required: false, description: "Visual style (select: 'hearts' | 'bullets')" },
       { name: "accentColor", type: "string", required: false },
       { name: "position", type: "string", required: false },
     ],
@@ -2268,7 +2308,7 @@ export default function CopilotKitPage() {
       { name: "cardName", type: "string", required: true, description: "Display name of the card" },
       { name: "descriptions", type: "string", required: false, description: "Short description or effect" },
       { name: "color", type: "string", required: false, description: "Accent color (hex or token)" },
-      { name: "position", type: "string", required: false, description: "Grid position (default: bottom-center)" },
+      { name: "position", type: "string", required: false, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'; default: 'bottom-center')" },
     ],
     handler: ({ name, playerId, cardType, cardName, descriptions, color, position }: {
       name: string;
@@ -2302,7 +2342,7 @@ export default function CopilotKitPage() {
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "title", type: "string", required: false, description: "Display title (default: 'Player States')" },
-      { name: "position", type: "string", required: false, description: "Grid position (default: 'middle-left')" },
+      { name: "position", type: "string", required: false, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'; default: 'middle-left')" },
       { name: "maxHeight", type: "string", required: false, description: "Max height for scrolling (default: '400px')" },
       { name: "audience_type", type: "boolean", required: false, description: "true=public; false=private" },
       { name: "audience_ids", type: "string[]", required: false, description: "Visible player IDs if private" },
@@ -2334,7 +2374,7 @@ export default function CopilotKitPage() {
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "title", type: "string", required: false, description: "Display title (default: 'Player Actions')" },
-      { name: "position", type: "string", required: false, description: "Grid position (default: 'middle-right')" },
+      { name: "position", type: "string", required: false, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'; default: 'middle-right')" },
       { name: "maxHeight", type: "string", required: false, description: "Max height for scrolling (default: '400px')" },
       { name: "maxItems", type: "number", required: false, description: "Maximum number of actions to display (default: 50)" },
       { name: "audience_type", type: "boolean", required: false, description: "true=public; false=private" },
@@ -2415,7 +2455,7 @@ export default function CopilotKitPage() {
       { name: "botId", type: "string", required: true, description: "ID of the bot sending the message" },
       { name: "botName", type: "string", required: true, description: "Name of the bot sending the message" },
       { name: "message", type: "string", required: true, description: "Bot's chat message" },
-      { name: "messageType", type: "string", required: false, description: "Message type: 'message', 'system', or 'action'" },
+      { name: "messageType", type: "string", required: false, description: "Message type (select: 'message' | 'system' | 'action')" },
     ],
     handler: ({ botId, botName, message, messageType }: { 
       botId: string; 

@@ -27,6 +27,7 @@ export type CardType =
   | "background_control" // 背景颜色控制
   | "result_display"    // 结果展示纯艺术字
   | "timer"             // 定时器
+  | "death_marker"      // 死亡标记（显示被淘汰的玩家）
   | "hands_card"        // 手牌卡片（Hand Card for card games）
   | "score_board"       // 计分板（Score Board）
   | "coin_display"      // 硬币/金币显示（单个或多个）
@@ -267,6 +268,15 @@ export interface PlayerActionsDisplayData extends AudiencePermissions {
   maxItems?: number;         // maximum number of actions to display (default: 50)
 }
 
+// Death marker data for eliminated players
+export interface DeathMarkerData extends AudiencePermissions {
+  playerName: string;        // name of the eliminated player
+  playerId: string;          // ID of the eliminated player
+  cause?: string;            // optional cause of death/elimination
+  accentColor?: string;      // accent color (default: red)
+  position: GamePosition;    // placement on grid
+}
+
 // Room session types
 export interface RoomPlayer {
   id: number;
@@ -283,7 +293,7 @@ export interface RoomSession {
   timestamp: number;
 }
 
-export type ItemData = CharacterCardData | ActionButtonData | PhaseIndicatorData | TextDisplayData | VotingPanelData | AvatarSetData | BackgroundControlData | ResultDisplayData | TimerData | HandsCardData | ScoreBoardData | CoinDisplayData | StatementBoardData | ReactionTimerData | NightOverlayData | TurnIndicatorData | HealthDisplayData | InfluenceSetData | BroadcastInputData | PlayerStatesDisplayData | PlayerActionsDisplayData;
+export type ItemData = CharacterCardData | ActionButtonData | PhaseIndicatorData | TextDisplayData | VotingPanelData | AvatarSetData | BackgroundControlData | ResultDisplayData | TimerData | HandsCardData | ScoreBoardData | CoinDisplayData | StatementBoardData | ReactionTimerData | NightOverlayData | TurnIndicatorData | HealthDisplayData | InfluenceSetData | BroadcastInputData | PlayerStatesDisplayData | PlayerActionsDisplayData | DeathMarkerData;
 
 export interface Item {
   id: string;
