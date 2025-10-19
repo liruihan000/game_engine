@@ -821,10 +821,19 @@ export default function CopilotKitPage() {
 
   // Exit game function - clears session and returns to library
   const handleExitGame = useCallback(() => {
-    // Clear all session storage
+    // Clear ALL session storage items (including any we might have missed)
     sessionStorage.removeItem('gameContext');
-    sessionStorage.removeItem('roomSession');
+    sessionStorage.removeItem('roomSession'); 
     sessionStorage.removeItem('playerId');
+    sessionStorage.removeItem('playerSession');  // Also clear playerSession
+    
+    // Clear any other game-related storage that might exist
+    const keys = Object.keys(sessionStorage);
+    keys.forEach(key => {
+      if (key.includes('game') || key.includes('room') || key.includes('player') || key.includes('thread')) {
+        sessionStorage.removeItem(key);
+      }
+    });
     
     // Reset React state to initial state
     setState(() => initialState);
@@ -842,9 +851,12 @@ export default function CopilotKitPage() {
     setBroadcastOpen(false);
     setPendingBroadcast(null);
     
-    // Navigate to game library page
-    router.push('/game-library');
-  }, [router, setState, setChatMessages, cachedStateRef]);
+    // Force a page reload to ensure everything is completely reset
+    // This will reset CopilotKit and any other cached states
+    setTimeout(() => {
+      window.location.href = '/game-library';
+    }, 100);
+  }, [setState, setChatMessages, cachedStateRef]);
 
   // Helper to generate default data by type
 
