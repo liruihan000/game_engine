@@ -173,7 +173,8 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
     - Progressive disclosure (revealing information at right moments)
     - Text collection phases: Use createTextInputPanel for collecting statements, responses, or descriptions from players (NO additional confirmation buttons needed)
     - Card-based elements: Use createHandsCard for displaying card-like information with audience targeting (player hands, role cards, etc.)
-    - Score tracking phases: Use createScoreBoard for displaying current rankings, final results, and progress tracking with audience targeting
+    - Score tracking phases: **MANDATORY** - Use createScoreBoard for displaying current rankings, final results, and progress tracking with audience targeting
+    - Score-related phases: **CRITICAL** - Any phase involving scores, points, rankings, or results MUST use scoreBoard tools (createScoreBoard, updateScoreBoard, upsertScoreEntry)
     - Component persistence and updates: Use update tools (updateScoreBoard, updateTextDisplay, etc.) to modify existing components instead of recreating them
     - Incremental state changes: Use specific update tools like upsertScoreEntry for granular score updates without full component recreation
 - **Turn-based Game Clarity**: When roles rotate, each phase should:
@@ -218,6 +219,18 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 - ✅ CORRECT: "Clear UI and display final victory message" 
 - ❌ WRONG: "Clear voting UI from previous phase" (cleanup only)
 - ✅ CORRECT: "Clear previous UI and create new phase indicator"
+
+🏆 **CRITICAL SCORING RULE**:
+- Any phase involving scores, points, rankings, or results MUST use scoreBoard tools
+- ✅ CORRECT: Use createScoreBoard, updateScoreBoard, upsertScoreEntry
+- ❌ WRONG: Use createTextDisplay or createResultDisplay for scores
+- **MANDATORY**: All scoring phases require proper scoreBoard components for tracking
+
+🛠️ **TOOL SELECTION REMINDER**:
+- **BEFORE writing any action with tools**: Review the complete tool list below to select appropriate tools
+- **CHECK AVAILABLE TOOLS**: Ensure you use tools that actually exist in the tool list
+- **MATCH PURPOSE TO TOOL**: Select tools that match the action's intended purpose
+- **EXAMPLE**: For voting → check tool list → find createVotingPanel, not createVotePanel
 
 ### Core Game Components
 - createCharacterCard: Create a character card (role, position, size, description). Types: name (string), role (string), position (string), size? ("small"|"medium"|"large"), description? (string), audience_type? (boolean), audience_ids? (string[])
@@ -638,8 +651,8 @@ Before generating phases, verify the following against the provided declaration:
       tools: [upsertScoreEntry]
     - description: "Update existing scoreboard with new rankings"
       tools: [updateScoreBoard]
-    - description: "Create new text display for round summary results"
-      tools: [createTextDisplay]
+    - description: "Display round summary with score breakdown"
+      tools: [createScoreBoard]
   completion_criteria:
     type: "UI_displayed"
     description: "Scores updated incrementally and leaderboard refreshed."
@@ -773,6 +786,7 @@ Before generating phases, verify the following against the provided declaration:
 - **Resource Games**: createScoreBoard, createInfluenceSet  
 - **Action Games**: createReactionTimer, createHealthDisplay, createActionButton
 - **Atmospheric Games**: createPhaseIndicator with descriptions
+- **Score-based Games**: **MANDATORY** - Always use createScoreBoard, updateScoreBoard, upsertScoreEntry for any scoring, ranking, or results phases
 
 This comprehensive approach ensures:
 - **Game diversity** supported across all mechanics

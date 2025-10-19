@@ -225,6 +225,10 @@ def add_game_note(note_type: str, content: str):
             - "PHASE_STATUS" for phase progression info (⏳)
             - "NEXT_PHASE" for next phase preparation (🔮)
             - "GAME_STATUS" for game state changes (🏆)
+            - "PHASE_SUMMARY" for narrative summaries (📖)
+            - "REVEAL_SUMMARY" for dawn/reveal outcomes (🌅)
+            - "SCORE_UPDATE" for score/progress updates (📊)
+            - "STATE_CONCLUSION" for game state conclusions (🔍)
             - "EVENT" for general events (📝)
         content: The actual note content
         
@@ -1498,7 +1502,15 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             "• FORBIDDEN: Inventing vote results not present in playerActions\n"
             "• MANDATORY: Cross-reference action timestamp and phase name before processing\n"
             "• UPDATE game_notes with ACTUAL OUTCOMES from playerActions data only\n"
-            "• UPDATE player_states based on REAL actions, not hypothetical examples\n\n"
+            "• UPDATE player_states based on REAL actions, not hypothetical examples\n"
+            "🔍 **COMPREHENSIVE STATE UPDATE CHECK**:\n"
+            "• **SCAN ALL PLAYER_STATES**: Check every field in every player's state for needed updates\n"
+            "• **SCORE CALCULATIONS**: For reveal/results phases, calculate and update scores based on actual data\n"
+            "  - Example: Two Truths - compare vote_choice vs lie_index, update score accordingly\n"
+            "  - Example: Werewolf - update elimination counts, survival streaks, etc.\n"
+            "• **GAME PROGRESSION**: Update round counters, phase completions, win conditions\n"
+            "• **ACHIEVEMENT TRACKING**: Update any achievement or milestone fields\n"
+            "• **MANDATORY**: Every reveal/results phase MUST include score/progress updates\n\n"
             
             "📝 **GAME NOTES WRITING STANDARDS**:\n"
             "✅ CORRECT: 'Player 1 voted statement 2 (correct +1 point), Player 3 voted statement 1 (wrong +0 points)'\n"
@@ -1544,9 +1556,11 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             "• **FORMAT EXAMPLES**:\n"
             "  - Night phases: 'Last night, the Werewolves chose to eliminate Player 1 (Detective). However, Player 1 was protected by the Doctor and survived. There were no deaths last night.'\n"
             "  - Day phases: 'During day voting, Player 2 (Werewolf) was eliminated by majority vote. The village successfully identified a werewolf.'\n"
+            "  - Reveal phases: 'Dawn revealed the night outcomes: Player 3 (Villager) was eliminated by werewolves. The Doctor's protection saved Player 1. Current survivors: Players 1, 2, 4.'\n"
             "  - Alternative outcomes: 'Last night, the Werewolves eliminated Player 3 (Villager). The Doctor protected Player 1, but Player 3 was not protected and died.'\n"
-            "• **INCLUDE**: Actions taken, protection attempts, actual outcomes, survival/death results\n"
+            "• **INCLUDE**: Actions taken, protection attempts, actual outcomes, survival/death results, revelations\n"
             "• **WRITE**: Clear, narrative-style summaries that explain cause and effect\n"
+            "• **REVEAL PHASES SPECIAL**: Include what was revealed, who survived/died, current game state\n"
             "• **CONCLUSION REQUIREMENT**: Write comprehensive game state conclusion to game_notes\n"
             "  - Living players summary: 'Remaining alive: Player 2 (Doctor), Player 4 (Villager)'\n"
             "  - Team/role analysis: 'Team balance: 2 Villagers vs 1 Werewolf remaining'\n"
@@ -2545,7 +2559,12 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "🚨 **ABSOLUTE PROHIBITION**: NEVER return with ONLY cleanup calls - THIS IS TASK FAILURE!\n"
             "**MANDATORY CREATE REQUIREMENT**: Every deleteItem/clearCanvas MUST be followed by create tools in SAME response!\n"
             "**CLEANUP TOOLS RESTRICTION**: deleteItem and clearCanvas cannot appear alone - they must always be paired with create tools\n"
-            "**EXECUTION PATTERN**: deleteItem('abc7') + clearCanvas() + createPhaseIndicator() + createTimer() + createVotingPanel() + createDeathMarker(for_dead_players)\n"
+            "🧹 **AUTOMATIC CLEANUP REQUIREMENT**:\n"
+            "• **PHASE TRANSITION CHECK**: If actions don't include clear/delete, YOU must check itemsState and clean up irrelevant UI\n"
+            "• **OUTDATED UI DETECTION**: Identify items that don't match current phase requirements\n"
+            "• **AUTOMATIC DELETE**: Remove voting panels, timers, or displays that are no longer relevant\n"
+            "• **EXAMPLE**: If switching from voting to results phase, delete old voting panels before creating result displays\n"
+            "**EXECUTION PATTERN**: [AUTO-CLEANUP] + deleteItem('abc7') + clearCanvas() + createPhaseIndicator() + createTimer() + createVotingPanel() + createDeathMarker(for_dead_players)\n"
             "⚡ **COMPLETE PHASE EXECUTION**: Execute delete + create actions for current_phase in ONE response!\n"
             "**Role Selection**: Analyze player_states - Werewolves: role='Werewolf', Alive: is_alive=true, Human: always ID '1'\n"
             "**Timers**: ~10 seconds (max 15), Layout: 'center' default\n"
@@ -2562,9 +2581,15 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "• **🎯 DECISION notes**: Show automatic decisions made - incorporate into UI context\n"
             "• **🤖 BOT REMINDER notes**: Indicate which bots need UI for actions\n"
             "• **📖 PHASE SUMMARY notes**: Narrative summaries from RefereeNode - use for announcements\n"
+            "• **🌅 REVEAL SUMMARIES**: Special summaries for Dawn/Reveal phases - use for outcome announcements\n"
             "• **🧠 LOGIC VALIDATION**: Check game_notes for consistency before using in UI\n"
             "  - Example ERROR: 'Werewolves chose Player 1, but Player 4 was protected' (Player 1 ≠ Player 4)\n"
             "  - Use player_states as truth source if game_notes contain logical errors\n"
+            "• **📊 EVIDENCE-BASED CONCLUSIONS**: All announcements must be based on player_states data\n"
+            "  - Example: lie_index=2 from player_states means statement 2 is the lie, not statement 1 or 3\n"
+            "  - Example: vote_choice vs lie_index determines correct/wrong answers\n"
+            "  - NEVER write conclusions without supporting data from player_states or game_notes\n"
+            "  - If no evidence exists, display 'Results being calculated...' instead of guessing\n"
             "• **💀 DEAD PLAYER ACTION**: Always add action to check player_states for is_alive=false and createDeathMarker for each\n"
             "• ALWAYS read game_notes FIRST before creating any voting panels or target selection UI\n\n"
             
