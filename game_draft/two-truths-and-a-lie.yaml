@@ -1,389 +1,421 @@
 declaration:
-  description: 'A conversational party game where each turn one player becomes the
-    speaker and shares three statements about themselves (two true, one false). Other
-    players discuss naturally and vote on which statement is the lie. Points: +1 for
-    each correct guess; speakers gain +1 per player fooled. Game ends after all players
-    have been speaker for the agreed number of rounds.'
+  description: A conversational party game where each turn one player shares three
+    statements about themselves (two true, one false). Others discuss naturally and
+    vote on which is the lie. Points are awarded for correct guesses and for successfully
+    deceiving other players. The game rotates speakers so each player takes a turn
+    per round; play for the agreed number of rounds (default 1).
   is_multiplayer: true
   min_players: 3
   player_states:
     name:
       type: string
       example: Player A
-      description: Display name shown in conversations, prompts, and results.
+      description: Player's display name for announcements, turn prompts, and scoring.
+    turn_order:
+      type: num
+      example: 1
+      description: Seat/index used for rotating the speaker in order.
     score:
       type: num
-      example: 0
-      description: Cumulative points from correct guesses and successful deception.
+      example: 3
+      description: Total points from correct lie identifications and deception (players
+        fooled when speaker).
     is_speaker:
       type: boolean
       example: false
-      description: True if this player is the current speaker; used to control who
-        submits statements and who is restricted from voting.
-    has_been_speaker_this_round:
-      type: boolean
-      example: false
-      description: Whether this player has already served as speaker in the current
-        round cycle.
-    times_as_speaker:
+      description: Whether the player is the current speaker. Controls visibility
+        of speaker-only UI and actions.
+    speaker_rounds_completed:
       type: num
-      example: 0
-      description: How many turns this player has taken as speaker across all rounds.
+      example: 1
+      description: How many times this player has been the speaker. Used to determine
+        round completion and game end.
     statements:
-      type: array
+      type: list
       example:
       - I once met a celebrity.
       - I can speak four languages.
       - I've never broken a bone.
-      description: Exactly three statements provided by the speaker. Public to all
-        once submitted.
-    has_submitted_statements:
-      type: boolean
-      example: false
-      description: Whether the speaker has submitted three statements for the current
-        turn.
+      description: The speaker's three statements. Public to all once published for
+        the round.
     lie_index:
       type: num
       example: 2
-      description: Which statement is the lie (1-3). Private to the current speaker
-        until reveal.
+      description: Which statement is the lie (1-3). Private to the speaker until
+        the reveal.
+    statements_published:
+      type: boolean
+      example: true
+      description: Whether the round's three statements are visible to non-speakers
+        for discussion and voting.
     lie_revealed:
       type: boolean
       example: false
-      description: Whether the lie has been publicly revealed for the current speaker's
-        turn.
+      description: Whether the lie has been publicly revealed for the current speaker.
     can_vote:
       type: boolean
       example: true
-      description: Whether this player is eligible to vote this turn (typically all
-        non-speakers after statements are submitted).
-    has_voted:
+      description: Whether this player may cast a vote this round (typically all non-speakers).
+        Controls voting UI visibility.
+    vote_choice:
+      type: num
+      example: 2
+      description: The statement number (1-3) this player believes is the lie. Extracted
+        from natural conversation.
+    vote_revealed:
       type: boolean
       example: false
-      description: Whether the player has cast their vote this turn.
-    vote_guess_index:
-      type: num
-      example: 3
-      description: The player's current vote for which statement is the lie (1-3).
-        0 indicates no vote yet.
+      description: Whether this player's vote is publicly visible (supports secret
+        or open voting styles).
   player_states_template:
     player_states:
       1:
         name: ''
+        turn_order: 1
         score: 0
         is_speaker: false
-        has_been_speaker_this_round: false
-        times_as_speaker: 0
+        speaker_rounds_completed: 0
         statements: []
-        has_submitted_statements: false
         lie_index: 0
+        statements_published: false
         lie_revealed: false
-        can_vote: false
-        has_voted: false
-        vote_guess_index: 0
+        can_vote: true
+        vote_choice: 0
+        vote_revealed: false
   players_example:
     player_states:
       1:
-        name: Avery
+        name: Alex
+        turn_order: 1
         score: 0
         is_speaker: true
-        has_been_speaker_this_round: false
-        times_as_speaker: 0
+        speaker_rounds_completed: 0
         statements:
         - I once met a celebrity.
         - I can speak four languages.
         - I've never broken a bone.
-        has_submitted_statements: true
         lie_index: 2
+        statements_published: true
         lie_revealed: false
         can_vote: false
-        has_voted: false
-        vote_guess_index: 0
+        vote_choice: 0
+        vote_revealed: false
       2:
         name: Bailey
+        turn_order: 2
         score: 0
         is_speaker: false
-        has_been_speaker_this_round: false
-        times_as_speaker: 0
+        speaker_rounds_completed: 0
         statements: []
-        has_submitted_statements: false
         lie_index: 0
+        statements_published: false
         lie_revealed: false
         can_vote: true
-        has_voted: true
-        vote_guess_index: 3
+        vote_choice: 2
+        vote_revealed: false
       3:
         name: Casey
+        turn_order: 3
         score: 0
         is_speaker: false
-        has_been_speaker_this_round: false
-        times_as_speaker: 0
+        speaker_rounds_completed: 0
         statements: []
-        has_submitted_statements: false
         lie_index: 0
+        statements_published: false
         lie_revealed: false
         can_vote: true
-        has_voted: true
-        vote_guess_index: 1
-  audience_groups:
-    current_speaker:
-      description: The player who is currently the speaker
-      selection_criteria: player.is_speaker == true
-    non_speakers:
-      description: All players who are not the current speaker
-      selection_criteria: player.is_speaker == false
-    eligible_voters:
-      description: Players allowed to vote and who have not yet voted
-      selection_criteria: player.can_vote == true and player.has_voted == false
-    voted_players:
-      description: Players who have already submitted their vote
-      selection_criteria: player.has_voted == true
-    not_yet_spoken_this_round:
-      description: Players who have not served as speaker in the current round cycle
-      selection_criteria: player.has_been_speaker_this_round == false
-    statement_submitters:
-      description: Players who have submitted their statements this turn (typically
-        only the speaker)
-      selection_criteria: player.has_submitted_statements == true
+        vote_choice: 3
+        vote_revealed: false
 phases:
   0:
     name: Game Introduction
-    description: Introduce rules, objectives, and flow. Set up public UI and scoreboard.
+    description: Introduce rules, flow, scoring, and interface to all players; set
+      expectations for rotating speakers and voting.
     actions:
-    - description: Clear any previous UI and create public phase indicator for the
-        introduction
+    - description: Clear previous UI to start fresh (public)
       tools:
       - clearCanvas
+    - description: Create public phase indicator for the introduction
+      tools:
       - createPhaseIndicator
-    - description: Set global title/description for the game and show rules to all
-        players
+    - description: Display game rules, turn rotation, and scoring overview to all
+        players (public)
       tools:
-      - setGlobalTitle
-      - setGlobalDescription
       - createTextDisplay
-    - description: Create public scoreboard initialized with all players at 0 points
+    - description: Display public initial score overview (names and scores)
       tools:
-      - createScoreBoard
-    - description: Create avatar set to display all players visually
-      tools:
-      - createAvatarSet
+      - createTextDisplay
     completion_criteria:
       type: UI_displayed
-      description: Game introduction, rules, and initial scoreboard are visible to
-        all players.
+      description: Game introduction and initial score overview have been displayed
+        to all players.
     next_phase:
       id: 1
-      name: Turn Setup — Select Speaker
+      name: Set Current Speaker
   1:
-    name: Turn Setup — Select Speaker
-    description: Select the next speaker from players who have not yet spoken this
-      round, reset per-turn states, and display the active speaker.
+    name: Set Current Speaker
+    description: Identify and set the current speaker based on turn_order and completed
+      speaker rounds; prepare players for statement entry.
     actions:
-    - description: Clear previous phase-specific UI and create public phase indicator
-        for turn setup
+    - description: Clear canvas for round setup (public)
       tools:
       - clearCanvas
+    - description: Create public phase indicator for round setup and speaker selection
+      tools:
       - createPhaseIndicator
-    - description: Publicly show turn setup info and next speaker announcement
+    - description: Show public announcement naming the current speaker and instruct
+        others to wait
       tools:
       - createTextDisplay
-    - description: Create/Update public turn indicator to highlight the current speaker
-      tools:
-      - createTurnIndicator
-    - description: 'Private instructions card for the speaker (audience: current_speaker)'
+    - description: Create public turn indicator highlighting the current speaker
       tools:
       - createTextDisplay
     completion_criteria:
       type: UI_displayed
-      description: Next speaker selected, per-turn states reset (has_submitted_statements=false,
-        lie_index=0, lie_revealed=false, can_vote=false, has_voted=false, vote_guess_index=0),
-        and UI displayed.
+      description: Current speaker is set and publicly indicated.
     next_phase:
       id: 2
-      name: Statement Collection — Speaker Submits
+      name: Statement Collection
   2:
-    name: Statement Collection — Speaker Submits
-    description: Current speaker submits exactly three statements for this turn.
+    name: Statement Collection
+    description: Speaker privately composes three statements for the round while others
+      wait.
     actions:
-    - description: Clear any prior input UI and create public phase indicator for
-        statement collection
+    - description: Create public phase indicator for statement collection
       tools:
-      - clearCanvas
       - createPhaseIndicator
-    - description: 'Create private text input panel for the current speaker to enter
-        three statements (audience: current_speaker)'
-      tools:
-      - createTextInputPanel
-    - description: 'Show waiting instructions to all non-speakers (audience: non_speakers)'
+    - description: Show group waiting message to non-speakers while speaker writes
+        statements
       tools:
       - createTextDisplay
-    - description: Update public turn indicator to show the current speaker
+    - description: Show private instructions to speaker and create a private voting
+        panel to confirm "Statements Ready" when prepared
       tools:
-      - createTurnIndicator
+      - createTextInputPanel
     completion_criteria:
       type: player_action
-      description: Speaker has submitted their statements via input panel; relevant
-        player state (statements array set, has_submitted_statements=true) has been
-        updated.
+      description: Speaker has submit their three statements.
       wait_for: single_player_choice
       target_players:
-        description: The current speaker
+        description: Current speaker player
         condition: player.is_speaker == true
     next_phase:
       id: 3
-      name: Private Lie Selection — Speaker Marks the Lie
+      name: Select the Lie
   3:
-    name: Private Lie Selection — Speaker Marks the Lie
-    description: Speaker privately selects which of the three statements is the lie.
+    name: Select the Lie
+    description: Speaker privately selects which of the three statements is the lie
+      (1–3).
     actions:
-    - description: Update phase indicator and display statement board to all players
+    - description: Create public phase indicator for private lie selection
       tools:
-      - updatePhaseIndicator
-      - createStatementBoard
-    - description: 'Create private voting panel for the speaker to choose lie index
-        (1–3) (audience: current_speaker)'
+      - createPhaseIndicator
+    - description: Show private instructions to the speaker about selecting the lie
+        (1–3)
+      tools:
+      - createTextDisplay
+    - description: Create private voting panel for the speaker to choose the lie index
+        (options 1, 2, 3)
       tools:
       - createVotingPanel
-    - description: 'Show waiting message to non-speakers while the speaker selects
-        the lie (audience: non_speakers)'
+    - description: Show public waiting message to non-speakers
       tools:
       - createTextDisplay
     completion_criteria:
       type: player_action
-      description: Speaker has selected the lie index via the private panel; relevant
-        player state (lie_index set) has been updated.
+      description: Speaker has selected the lie index via voting panel, and relevant
+        player state (player_states) has been updated.
       wait_for: single_player_choice
       target_players:
-        description: The current speaker
+        description: Current speaker player
         condition: player.is_speaker == true
     next_phase:
       id: 4
-      name: Discussion — Review Statements
+      name: Publish Statements
   4:
-    name: Discussion — Review Statements
-    description: All players review the statements and discuss before voting begins.
+    name: Publish Statements
+    description: Publish the three statements to all players for viewing; mark statements
+      as visible and enable voting for non-speakers.
     actions:
-    - description: Update phase indicator and start a public discussion timer
+    - description: Clear canvas and present statements to the group
       tools:
-      - updatePhaseIndicator
+      - clearCanvas
+    - description: Create public phase indicator for published statements
+      tools:
+      - createPhaseIndicator
+    - description: Create public text display showing the three statements for this
+        round
+      tools:
+      - createTextDisplay
+    - description: Create public turn indicator highlighting the current speaker
+      tools:
+      - createTextDisplay
+    completion_criteria:
+      type: UI_displayed
+      description: Statements are publicly displayed and non-speakers are prepared
+        for discussion.
+    next_phase:
+      id: 5
+      name: Discussion Phase
+  5:
+    name: Discussion Phase
+    description: Players discuss which statement is the lie within a set time window.
+    actions:
+    - description: Create public phase indicator and discussion context
+      tools:
+      - createPhaseIndicator
+    - description: Create public discussion timer
+      tools:
       - createTimer
-    - description: Create reaction timer to encourage quick responses and discussion
+    - description: Display public discussion guidance/prompts
       tools:
-      - createReactionTimer
-      - startReactionTimer
-    - description: Show public discussion guidance and reminder that voting will begin
-        after the timer
+      - createTextDisplay
+    - description: Show private reminder to the speaker not to reveal the lie early
       tools:
       - createTextDisplay
     completion_criteria:
       type: timer
       description: Discussion timer has expired.
     next_phase:
-      id: 5
-      name: Voting — Guess the Lie
-  5:
-    name: Voting — Guess the Lie
-    description: All eligible non-speakers vote on which statement is the lie.
+      id: 6
+      name: Voting Phase
+  6:
+    name: Voting Phase
+    description: Non-speakers vote on which statement is the lie.
     actions:
-    - description: Update phase indicator for the voting phase and create voting timer
+    - description: Create public phase indicator for voting
       tools:
-      - updatePhaseIndicator
-      - createTimer
-    - description: 'Create voting panel for eligible voters to select statement 1–3
-        (audience: eligible_voters)'
+      - createPhaseIndicator
+    - description: Create targeted voting panel for eligible voters (non-speakers
+        with voting rights)
       tools:
       - createVotingPanel
-    - description: 'Private waiting/observation message for the speaker (audience:
-        current_speaker)'
+    - description: Show private notice to the speaker that they do not vote
+      tools:
+      - createTextDisplay
+    - description: Create public reminder that votes will be revealed after all are
+        submitted
       tools:
       - createTextDisplay
     completion_criteria:
       type: player_action
-      description: All eligible voters have cast their votes; relevant player state
-        (has_voted=true, vote_guess_index set) has been updated.
-      wait_for: multiple_players_action
+      description: Votes have been received from all eligible voters, and relevant
+        player state (player_states) has been updated.
+      wait_for: all_players_action
       target_players:
-        description: All eligible voters who have not yet voted
-        condition: player.can_vote == true and player.has_voted == false
-    next_phase:
-      id: 6
-      name: Reveal and Scoring
-  6:
-    name: Reveal and Scoring
-    description: Reveal the lie publicly, award points to correct guessers, and award
-      deception points to the speaker.
-    actions:
-    - description: Clear voting UI and create public phase indicator for reveal and
-        scoring
-      tools:
-      - clearCanvas
-      - createPhaseIndicator
-    - description: Update statement board to highlight the lie and lock it
-      tools:
-      - updateStatementBoard
-    - description: Create public result display announcing which statement was the
-        lie with visual effects
-      tools:
-      - createResultDisplay
-      - changeBackgroundColor
-    - description: 'Update player scores: +1 per correct guess; speaker +1 per player
-        fooled, then refresh the scoreboard'
-      tools:
-      - upsertScoreEntry
-      - updateScoreBoard
-    completion_criteria:
-      type: UI_displayed
-      description: Lie revealed and scoreboard updated to reflect this turn's points.
+        description: All eligible non-speaker voters
+        condition: player.can_vote == true and player.is_speaker == false
     next_phase:
       id: 7
-      name: Turn Progression and Round Check
+      name: Reveal Lie and Tally Votes
   7:
-    name: Turn Progression and Round Check
-    description: Mark the current speaker as completed for this round, advance turn
-      to the next speaker, and check if the game should end.
+    name: Reveal Lie and Tally Votes
+    description: Reveal the true lie, display vote distribution, and summarize outcomes.
     actions:
-    - description: Update phase indicator and show public status of round progression
-      tools:
-      - updatePhaseIndicator
-      - createTextDisplay
-    - description: Update public turn indicator to the next speaker with transition effects
-      tools:
-      - updateTurnIndicator
-    - description: Add round progression summary to chat for clarity
-      tools:
-      - addBotChatMessage
-    completion_criteria:
-      type: UI_displayed
-      description: 'Turn advanced: current speaker flags updated (has_been_speaker_this_round=true,
-        times_as_speaker incremented), next speaker selected, and round completion
-        evaluated.'
-    next_phase:
-      If every player has times_as_speaker equal to the agreed total rounds:
-        id: 99
-        name: Final Results — Leaderboard
-      Otherwise, continue with the next speaker's turn:
-        id: 1
-        name: Turn Setup — Select Speaker
-  99:
-    name: Final Results — Leaderboard
-    description: Display final standings and conclude the game.
-    actions:
-    - description: Clear transient UI and create public phase indicator for final
-        results
+    - description: Clear canvas for reveal
       tools:
       - clearCanvas
-      - createPhaseIndicator
-    - description: Ensure final scoreboard is updated and sorted for final presentation
+    - description: Create public phase indicator for reveal
       tools:
-      - updateScoreBoard
-    - description: Create public game over result display with celebration effects
+      - createPhaseIndicator
+    - description: Create public text display highlighting which statement is the
+        lie and summarizing vote distribution
+      tools:
+      - createTextDisplay
+    - description: Create public results display summarizing who guessed correctly
+        and deception success
       tools:
       - createResultDisplay
-      - changeBackgroundColor
-    - description: Add final congratulations message to chat
+    completion_criteria:
+      type: UI_displayed
+      description: Lie has been revealed and results have been summarized publicly.
+    next_phase:
+      id: 8
+      name: Score Update and Leaderboard
+  8:
+    name: Score Update and Leaderboard
+    description: Update scores for correct guesses and deception; refresh leaderboard.
+    actions:
+    - description: Create public phase indicator for scoring
       tools:
-      - addBotChatMessage
+      - createPhaseIndicator
+    - description: Display public updated scores and points awarded this round
+      tools:
+      - createTextDisplay
+    - description: Show public leaderboard summary (current leader(s) and ties)
+      tools:
+      - createTextDisplay
+    completion_criteria:
+      type: UI_displayed
+      description: Scores have been updated and the leaderboard is refreshed.
+    next_phase:
+      id: 9
+      name: Check Round Completion
+  9:
+    name: Check Round Completion
+    description: Evaluate whether all players have completed their required speaker
+      turns for the agreed number of rounds.
+    actions:
+    - description: Display public status of speaker rounds completed per player
+      tools:
+      - createTextDisplay
+    - description: Show public instruction about next steps (either continue or end
+        game)
+      tools:
+      - createTextDisplay
+    completion_criteria:
+      type: UI_displayed
+      description: Round completion status has been evaluated and displayed.
+    next_phase:
+      If every player has speaker_rounds_completed equal to the agreed rounds:
+        id: 99
+        name: Final Results
+      If more speakers remain for this or future rounds:
+        id: 10
+        name: Next Speaker Setup
+  10:
+    name: Next Speaker Setup
+    description: Rotate to the next speaker based on turn_order; reset voting permissions
+      and prepare for the next turn.
+    actions:
+    - description: Clear canvas and announce the next speaker
+      tools:
+      - clearCanvas
+    - description: Create public phase indicator for next speaker setup
+      tools:
+      - createPhaseIndicator
+    - description: Create public announcement indicating who will speak next and who
+        can vote
+      tools:
+      - createTextDisplay
+    - description: Create public turn indicator highlighting the new current speaker
+      tools:
+      - createTextDisplay
+    completion_criteria:
+      type: UI_displayed
+      description: Next speaker has been set and players are prepared for the new
+        turn.
+    next_phase:
+      id: 2
+      name: Statement Collection
+  99:
+    name: Final Results
+    description: Present final standings and congratulate the winner(s); end the game.
+    actions:
+    - description: Clear canvas for endgame presentation
+      tools:
+      - clearCanvas
+    - description: Create public phase indicator for final results
+      tools:
+      - createPhaseIndicator
+    - description: Display final standings and cumulative scores (public)
+      tools:
+      - createTextDisplay
+    - description: Show celebratory final result display
+      tools:
+      - createResultDisplay
     completion_criteria:
       type: UI_displayed
       description: Final results displayed to all players.
     next_phase: null
+、
