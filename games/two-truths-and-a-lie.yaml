@@ -329,29 +329,28 @@ phases:
       name: Check Round Completion
   6:
     name: Check Round Completion
-    description: Determine whether to continue to the next speaker in this round or
-      move to a new round/end of game.
+    description: Check if all players have completed their speaker turns in this round and set the next speaker. Set the next speaker. If round is complete, decide whether to continue or end game.
     actions:
-    - description: Delete previous UI and create a public phase indicator titled 'Round
-        Progress Check'
+    - description: Delete previous UI and create a public phase indicator titled 'Round Progress Check'
       tools:
       - deleteItem
       - createPhaseIndicator
-    - description: Show a public status display indicating which players have already
-        spoken this round
+    - description: Show a public status display indicating which players have already spoken this round
       tools:
       - createTextDisplay
+    - description: Determine and set the next speaker based on turn order and completed rounds
+      tools:
+      - updatePlayerStates
     completion_criteria:
       type: UI_displayed
-      description: Round progress has been displayed and state evaluated for next
-        routing.
+      description: Round progress has been displayed, next speaker has been determined and updated in player_states.
     next_phase:
-      If at least one player has not spoken this round (player.has_spoken_this_round == false exists):
-        id: 1
-        name: Speaker Statement Collection
-      If all players have spoken this round:
+      If all players have completed their speaker turns in this round:
         id: 7
         name: Continue or End Decision
+      Otherwise (more players need to speak):
+        id: 2
+        name: Speaker Statement Collection
   7:
     name: Continue or End Decision
     description: All players decide whether to play another round or end the game.
