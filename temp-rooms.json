@@ -1169,6 +1169,36 @@
       "max_players": 8,
       "current_players": 4,
       "created_at": "2025-10-19T22:58:02.492Z"
+    },
+    "c982e0ca-df86-4a73-a125-ce00451072c0": {
+      "id": "c982e0ca-df86-4a73-a125-ce00451072c0",
+      "game_name": "two-truths-and-a-lie",
+      "thread_id": "849cb80d-2a1b-4c2a-8817-b9e4e83ba884",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 3,
+      "created_at": "2025-10-19T23:02:38.957Z"
+    },
+    "d617a135-eb07-4c95-a3e7-4af83680c17e": {
+      "id": "d617a135-eb07-4c95-a3e7-4af83680c17e",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "974e6746-0fb8-499e-8d9e-a7ecfacdf5ea",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 4,
+      "created_at": "2025-10-19T23:04:11.000Z"
+    },
+    "3c3e7651-8c08-4cdc-b851-d9697f81973d": {
+      "id": "3c3e7651-8c08-4cdc-b851-d9697f81973d",
+      "game_name": "two-truths-and-a-lie",
+      "thread_id": "714c8987-8e8b-4eb2-b894-a7f608e62d93",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 3,
+      "created_at": "2025-10-19T23:05:42.113Z"
     }
   },
   "players": {
@@ -4528,7 +4558,103 @@
         "status": "joined",
         "joined_at": "2025-10-19T22:58:03.607Z"
       }
+    ],
+    "c982e0ca-df86-4a73-a125-ce00451072c0": [
+      {
+        "id": 1,
+        "room_id": "c982e0ca-df86-4a73-a125-ce00451072c0",
+        "name": "Ryan",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-19T23:02:38.957Z"
+      },
+      {
+        "id": 216,
+        "room_id": "c982e0ca-df86-4a73-a125-ce00451072c0",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:02:39.978Z"
+      },
+      {
+        "id": 217,
+        "room_id": "c982e0ca-df86-4a73-a125-ce00451072c0",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:02:39.987Z"
+      }
+    ],
+    "d617a135-eb07-4c95-a3e7-4af83680c17e": [
+      {
+        "id": 1,
+        "room_id": "d617a135-eb07-4c95-a3e7-4af83680c17e",
+        "name": "1234",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-19T23:04:11.000Z"
+      },
+      {
+        "id": 218,
+        "room_id": "d617a135-eb07-4c95-a3e7-4af83680c17e",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:04:12.514Z"
+      },
+      {
+        "id": 219,
+        "room_id": "d617a135-eb07-4c95-a3e7-4af83680c17e",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:04:12.522Z"
+      },
+      {
+        "id": 220,
+        "room_id": "d617a135-eb07-4c95-a3e7-4af83680c17e",
+        "name": "player4",
+        "player_order": 4,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:04:12.523Z"
+      }
+    ],
+    "3c3e7651-8c08-4cdc-b851-d9697f81973d": [
+      {
+        "id": 1,
+        "room_id": "3c3e7651-8c08-4cdc-b851-d9697f81973d",
+        "name": "4353",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-19T23:05:42.113Z"
+      },
+      {
+        "id": 221,
+        "room_id": "3c3e7651-8c08-4cdc-b851-d9697f81973d",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:05:43.851Z"
+      },
+      {
+        "id": 222,
+        "room_id": "3c3e7651-8c08-4cdc-b851-d9697f81973d",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:05:43.859Z"
+      }
     ]
   },
-  "nextPlayerId": 216
+  "nextPlayerId": 223
 }

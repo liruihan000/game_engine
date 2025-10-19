@@ -826,9 +826,25 @@ export default function CopilotKitPage() {
     sessionStorage.removeItem('roomSession');
     sessionStorage.removeItem('playerId');
     
+    // Reset React state to initial state
+    setState(() => initialState);
+    
+    // Clear cached state ref
+    cachedStateRef.current = initialState;
+    
+    // Clear chat messages
+    setChatMessages([]);
+    
+    // Clear any other local state
+    setShowJsonView(false);
+    setPendingTextPrompt(null);
+    setPendingTextValue("");
+    setBroadcastOpen(false);
+    setPendingBroadcast(null);
+    
     // Navigate to game library page
     router.push('/game-library');
-  }, [router]);
+  }, [router, setState, setChatMessages, cachedStateRef]);
 
   // Helper to generate default data by type
 
