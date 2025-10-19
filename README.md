@@ -63,6 +63,13 @@ pnpm dev  # launches frontend (:3000) + backend (:8123)
 
 2. Due to the bot design, after completing a phase, please click “Continue” or wait for the timer to end to proceed to the next round.
 
+### Project Paths (Compact)
+
+- Agent (current): `./agent/dm_agent_with_bot_no_feedbackdecisionnode.py` — Handles main decision flow with bot logic  
+- DSL Agent: `./agent/dsl_agent` — Parses and executes game DSL  
+- Prompts: `/home/lee/game_engine/agent/prompt` — Prompt templates used by the DSL agent  
+- Game DSL (YAML): `./game_engine/games` — YAML files defining game rules and phases
+
 ---
 
 ## ⚙️ Architecture Overview
