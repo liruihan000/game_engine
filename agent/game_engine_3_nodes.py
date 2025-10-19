@@ -20,7 +20,12 @@ from copilotkit import CopilotKitState
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage, BaseMessage
 from langchain.tools import tool
+from langchain_anthropic import ChatAnthropic
 import json
+import uuid
+import time
+
+load_dotenv()
 # Monitoring configuration
 VERBOSE_LOGGING = True  # Set to False to disable detailed logging
 
@@ -65,15 +70,109 @@ class AgentState(CopilotKitState):
     items: List[Dict[str, Any]] = []  # Game elements (character cards, UI components, game objects)
     # Game DM state (for interactive game engine)
     current_phase_id: int = 0
+    current_phase_name: str = ""  # Current phase name from DSL (e.g., "Role Assignment")
     player_states: Dict[str, Any] = {}
     gameName: str = ""  # Current game DSL name (e.g., "werewolf", "coup")
     dsl: dict = {}
     need_feed_back_dict: dict = {}
-    referee_conclusions: List[str] = []
     roomSession: Dict[str, Any] = {}  # Room session data from frontend
     # Chat-specific fields for chatbot synchronization
     playerActions: Dict[str, Any] = {}  # Player actions
     phase_history: List[Dict[str, Any]] = []  # Phase transition history
+    referee_conclusions: List[str] = []  # Referee decisions, state changes, and game event conclusions
+
+
+def get_phase_info_from_dsl(phase_id: int, dsl_content: dict) -> tuple[dict, str]:
+    """Extract phase object and name from DSL content"""
+    if not dsl_content:
+        return {}, f"Phase {phase_id}"
+    
+    phases = dsl_content.get('phases', {})
+    if not phases:
+        return {}, f"Phase {phase_id}"
+    
+    # Try both int and string keys
+    phase = phases.get(phase_id, {}) or phases.get(str(phase_id), {})
+    phase_name = phase.get('name', f'Phase {phase_id}') if phase else f'Phase {phase_id}'
+    return phase, phase_name
+
+
+def format_declaration_for_referee(declaration: dict) -> str:
+    """
+    Format declaration information for RefereeNode with clear status definitions and examples.
+    
+    Args:
+        declaration: Game declaration from DSL
+        
+    Returns:
+        Formatted string with status definitions, examples, and rules
+    """
+    if not declaration:
+        return "No declaration available"
+    
+    formatted_parts = []
+    
+    # Game Description
+    if 'description' in declaration:
+        formatted_parts.append(f"**GAME DESCRIPTION**:\n{declaration['description']}\n")
+    
+    # Player States Schema with Examples
+    if 'player_states' in declaration:
+        formatted_parts.append("**PLAYER STATE SCHEMA** (Field Definitions):")
+        player_states = declaration['player_states']
+        
+        for field_name, field_info in player_states.items():
+            if isinstance(field_info, dict):
+                field_type = field_info.get('type', 'unknown')
+                example = field_info.get('example', 'N/A')
+                description = field_info.get('description', 'No description')
+                
+                formatted_parts.append(
+                    f"• **{field_name}** ({field_type}):\n"
+                    f"  - Example: {example}\n"
+                    f"  - Purpose: {description}"
+                )
+        formatted_parts.append("")  # Add blank line
+    
+    # Template/Example States
+    if 'player_states_template' in declaration:
+        template = declaration['player_states_template']
+        if 'player_states' in template:
+            formatted_parts.append("**STATE TEMPLATE EXAMPLE**:")
+            for player_id, state in template['player_states'].items():
+                formatted_parts.append(f"Player {player_id} default state: {state}")
+            formatted_parts.append("")
+    
+    # Players Example (if different from template)
+    if 'players_example' in declaration:
+        example = declaration['players_example']
+        if 'player_states' in example:
+            formatted_parts.append("**GAME STATE EXAMPLE** (Active Game):")
+            for player_id, state in example['player_states'].items():
+                formatted_parts.append(f"Player {player_id} example: {state}")
+            formatted_parts.append("")
+    
+    # Game Rules (if available)
+    if 'rules' in declaration:
+        formatted_parts.append(f"**GAME RULES**:\n{declaration['rules']}\n")
+    
+    # Win Conditions (if available) 
+    if 'win_conditions' in declaration:
+        formatted_parts.append(f"**WIN CONDITIONS**:\n{declaration['win_conditions']}\n")
+    
+    # Roles (if available)
+    if 'roles' in declaration:
+        formatted_parts.append("**AVAILABLE ROLES**:")
+        roles = declaration['roles']
+        if isinstance(roles, dict):
+            for role_name, role_info in roles.items():
+                formatted_parts.append(f"• {role_name}: {role_info}")
+        elif isinstance(roles, list):
+            for role in roles:
+                formatted_parts.append(f"• {role}")
+        formatted_parts.append("")
+    
+    return "\n".join(formatted_parts) if formatted_parts else "No declaration details available"
 
 
 def clean_llm_json_response(response_content: str) -> str:
@@ -101,19 +200,19 @@ def clean_llm_json_response(response_content: str) -> str:
     
     return response_content
 
-# async def ActionValidatorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["PhaseNode", "ActionExecutor"]]:
-#     """
-#     ActionValidatorNode - Currently in BYPASS mode (validation disabled).
-#     Simply passes through to allow execution to continue without validation.
-#     """
-#     # Log raw_messages at node start
-#     raw_messages = state.get("messages", [])
-#     logger.info(f"[ActionValidatorNode] raw_messages: {raw_messages}")
-    
-#     logger.info("[ActionValidatorNode] ⚡ BYPASS MODE - Skipping validation, allowing execution to continue")
-    
-#     # Reset retry count and continue to PhaseNode for phase progression
-#     return Command(goto="PhaseNode", update={"retry_count": 0})
+    # async def ActionValidatorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["PhaseNode", "ActionExecutor"]]:
+    #     """
+    #     ActionValidatorNode - Currently in BYPASS mode (validation disabled).
+    #     Simply passes through to allow execution to continue without validation.
+    #     """
+    #     # Log raw_messages at node start
+    #     raw_messages = state.get("messages", [])
+    #     logger.info(f"[ActionValidatorNode] raw_messages: {raw_messages}")
+        
+    #     logger.info("[ActionValidatorNode] ⚡ BYPASS MODE - Skipping validation, allowing execution to continue")
+        
+    #     # Reset retry count and continue to PhaseNode for phase progression
+    #     return Command(goto="PhaseNode", update={"retry_count": 0})
 
 def summarize_items_for_prompt(state: AgentState) -> str:
     """Summarize current UI items with ID, type, name, position - formatted for ActionExecutor deletion/creation decisions."""
@@ -178,6 +277,83 @@ def update_player_state(player_id: str, state_name: str, state_value: Any):
     """
     return f"Will update player {player_id} state: {state_name} = {state_value}"
 
+@tool
+def add_referee_conclusion(note_type: str, content: str):
+    """
+    Add a categorized conclusion to the referee conclusions system for cross-node communication.
+    
+    Args:
+        note_type: Type of note for categorization:
+            - "CRITICAL" for player deaths/eliminations (🔴)
+            - "VOTING_STATUS" for voting reminders (⚠️)  
+            - "DECISION" for important decisions (🎯)
+            - "BOT_REMINDER" for bot action reminders (🤖)
+            - "UI_FILTER" for UI filtering instructions (🚫)
+            - "PHASE_STATUS" for phase progression info (⏳)
+            - "NEXT_PHASE" for next phase preparation (🔮)
+            - "GAME_STATUS" for game state changes (🏆)
+            - "EVENT" for general events (📝)
+        content: The actual note content
+        
+    Returns:
+        Confirmation message about the note addition
+    """
+    emoji_map = {
+        "CRITICAL": "🔴",
+        "VOTING_STATUS": "⚠️", 
+        "DECISION": "🎯",
+        "BOT_REMINDER": "🤖",
+        "UI_FILTER": "🚫",
+        "PHASE_STATUS": "⏳",
+        "NEXT_PHASE": "🔮", 
+        "GAME_STATUS": "🏆",
+        "EVENT": "📝"
+    }
+    emoji = emoji_map.get(note_type, "📝")
+    formatted_note = f"{emoji} {note_type}: {content}"
+    return f"Will add referee conclusion: {formatted_note}"
+
+
+def _execute_add_referee_conclusion(current_referee_conclusions: list, note_type: str, content: str) -> list:
+    """
+    Execute the actual logic to add a referee conclusion. Returns updated referee_conclusions list.
+    
+    Args:
+        current_referee_conclusions: Current referee conclusions list
+        note_type: Type of note for categorization
+        content: The actual note content
+        
+    Returns:
+        Updated referee_conclusions list
+    """
+    emoji_map = {
+        "CRITICAL": "🔴",
+        "VOTING_STATUS": "⚠️", 
+        "DECISION": "🎯",
+        "BOT_REMINDER": "🤖",
+        "UI_FILTER": "🚫",
+        "PHASE_STATUS": "⏳",
+        "NEXT_PHASE": "🔮", 
+        "GAME_STATUS": "🏆",
+        "EVENT": "📝"
+    }
+    emoji = emoji_map.get(note_type, "📝")
+    
+    # Check if content already has formatting to avoid duplication
+    expected_prefix = f"{emoji} {note_type}:"
+    if content.startswith(expected_prefix):
+        # Content already formatted, use as-is
+        formatted_note = content
+    else:
+        # Add formatting
+        formatted_note = f"{emoji} {note_type}: {content}"
+    
+    # Add to existing notes, no limit - keep complete game history
+    updated_notes = current_referee_conclusions + [formatted_note]
+    
+    logger.info(f"[_execute_add_referee_conclusion] Added conclusion: {formatted_note}")
+    logger.info(f"[_execute_add_referee_conclusion] Total notes count: {len(updated_notes)}")
+    return updated_notes
 
 def _execute_update_player_state(current_player_states: dict, player_id: str, state_name: str, state_value: Any) -> dict:
     """
@@ -275,6 +451,54 @@ def _execute_set_feedback_decision(player_id_list: list, need_feedback_message: 
         "player_id_list": player_id_list,
         "need_feedback_message": need_feedback_message
     }
+
+def process_human_action_if_needed(state: AgentState, dsl_content: dict) -> dict:
+    """
+    Process human action from last message if it's meaningful (not chat, not generic control).
+    
+    Args:
+        state: Current agent state
+        dsl_content: DSL configuration for getting phase info
+        
+    Returns:
+        Updated playerActions dict
+    """
+    messages = state.get("messages", [])
+    current_player_actions = dict(state.get("playerActions", {}))
+    current_player_states = dict(state.get("player_states", {}))
+    
+    try:
+        if messages and isinstance(messages[-1], HumanMessage):
+            last_msg = messages[-1]
+            content = str(last_msg.content).lower().strip()
+            
+            # Skip chat messages and generic control messages
+            if ('in game chat:' not in content and 
+                'to bot' not in content and 
+                content not in ['continue', 'start game', 'start game.']):
+                
+                # Get current phase for action logging
+                phases = dsl_content.get('phases', {}) if dsl_content else {}
+                current_phase_id = state.get("current_phase_id", 0)
+                current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
+                phase_name = current_phase.get('name', f'Phase {current_phase_id}')
+                
+                # Log human action using update_player_actions logic
+                logger.info(f"[ProcessHumanAction] Processing action for Player 1: {last_msg.content}")
+                current_player_actions = _execute_update_player_actions(
+                    current_player_actions, 
+                    "1",  # Player 1 (human)
+                    str(last_msg.content)[:200],  # Truncate long messages
+                    phase_name,
+                    state,
+                    current_player_states
+                )
+                logger.info(f"[ProcessHumanAction] Updated playerActions for Player 1")
+                
+    except Exception as e:
+        logger.error(f"[ProcessHumanAction] Error processing human action: {e}")
+    
+    return current_player_actions
 
 @tool
 def update_player_actions(player_id: str, actions: str, phase: str) -> str:
@@ -419,7 +643,8 @@ backend_tools = [
     update_player_state,
     update_player_actions,
     set_next_phase,
-    set_feedback_decision,
+    add_referee_conclusion,
+    update_player_name
 ]
 
 # Frontend tool allowlist for game engine (DM tools)
@@ -441,7 +666,7 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "updateHandsCard",
     "setHandsCardAudience",
     "createHandsCardForPlayer",
-    # Broadcast input tool
+    # Text input panel tool - for user input collection and broadcast
     "createTextInputPanel",
     # Scoreboard tools
     "createScoreBoard",
@@ -592,12 +817,13 @@ async def initialize_player_states_from_dsl(dsl_content: dict, room_players: lis
         logger.error(f"Error initializing player_states from DSL: {e}")
         return {}
 
-async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Command[Literal["ChatBotNode", "FeedbackDecisionNode"]]:
+async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Command[Literal["ChatBotNode", "BotBehaviorNode"]]:
     """
-    Initial routing node that loads DSL and routes based on current phase.
+    Initial routing node that loads DSL, processes human actions, and routes to appropriate nodes.
     
     Routes to: 
-    - FeedbackDecisionNode if current_phase_id > 0
+    - ChatBotNode for chat messages
+    - PhaseNode for completion conditions detection (after processing human actions)
     """
     # Print game name from state
     game_name = state.get("gameName", "")
@@ -715,13 +941,16 @@ async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Comman
     except Exception as e:
         logger.error(f"[InitialRouter] Error checking chat message: {e}")
 
+    # Process human actions before routing to BotBehaviorNode
+    updated_player_actions = process_human_action_if_needed(state, dsl_content)
+    updates["playerActions"] = updated_player_actions
+
     # Ensure DSL is properly passed - use dsl_content if loaded, otherwise fallback to state
     final_dsl = dsl_content if dsl_content else state.get("dsl", {})
     updates["dsl"] = final_dsl
-
     
     
-    return Command(goto="FeedbackDecisionNode", update=updates)
+    return Command(goto="BotBehaviorNode", update=updates)
 
 async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Literal["__end__"]]:
     """LLM-driven chat bot node"""
@@ -757,7 +986,12 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     if 'in game chat:' not in content and 'to bot' not in content:
         return Command(goto=END, update={})
     
-    model = init_chat_model("openai:gpt-4o")
+    model = ChatAnthropic(
+        model="claude-haiku-4-5-20251001",
+        api_key=os.getenv("ANTHROPIC_API_KEY"),
+        temperature=0.7,
+        max_tokens=4096
+    )
     
     # Get available tools to call addBotChatMessage
     raw_tools = state.get("tools", []) or []
@@ -790,30 +1024,74 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     # Bind tools to model
     model_with_tools = model.bind_tools(chat_tools)
     
-    # Let LLM analyze message and call tool
+    # Log referee_conclusions for debugging
+    referee_conclusions = state.get('referee_conclusions', [])
+    logger.info(f"[ChatBotNode] Referee Conclusions Count: {len(referee_conclusions)}")
+    if referee_conclusions:
+        logger.info(f"[ChatBotNode] All Referee Conclusions: {referee_conclusions}")
+    else:
+        logger.info(f"[ChatBotNode] No Referee Conclusions Available")
+
+    # Enhanced LLM system for intelligent bot chat responses
     system_prompt = f"""
-                You are a game bot AI. Analyze the latest chat message and respond if appropriate.
+    🤖 **INTELLIGENT BOT CHAT SYSTEM**
 
-                Game State:
-                - Current Phase: {current_phase_id}
-                - Player States: {player_states}
-                - Player Actions: {playerActions}
-                - Room Session: {roomSession}
-                - Available bots: {[f"{pid}: {data.get('name', f'Bot {pid}')}" for pid, data in player_states.items() if pid != "1"]}
+    📊 **GAME CONTEXT**:
+    - Current Phase: {current_phase_id}
+    - Player States: {player_states}
+    - Player Actions: {playerActions}
+    - Referee Conclusions: {referee_conclusions if referee_conclusions else 'None'}
 
-                Chat Message: {last_msg.content}
+    🚫 **MANDATORY LIFE STATUS CHECK**:
+    - Dead players: {[f"Player {pid} ({data.get('name', f'Bot {pid}')})" for pid, data in player_states.items() if not data.get('is_alive', True) and pid != "1"]}
+    - Living bots: {[f"Player {pid} ({data.get('name', f'Bot {pid}')}): {data.get('role', 'Unknown role')}" for pid, data in player_states.items() if data.get('is_alive', True) and pid != "1"]}
+    - **CRITICAL**: Dead players CANNOT speak or respond to chat - exclude them entirely!
 
-                Instructions:
-                1. If user targeted specific bot ('to Bot [name]:'), use that bot
-                2. Otherwise, choose appropriate bot (non-player 1) 
-                3. Generate natural response based on bot's role and game context
-                4. MUST call addBotChatMessage tool with:
-                - botId: the bot's player ID (e.g., "2", "3") 
-                - botName: the bot's name
-                - message: your generated response
-                - messageType: "message"
-                """
-    
+    💬 **USER MESSAGE**: {last_msg.content}
+
+    🎯 **BOT SELECTION STRATEGY**:
+    **STEP 0 - MANDATORY LIFE STATUS VALIDATION**:
+    • **BEFORE selecting ANY bot**: Verify the target bot has is_alive=true
+    • **NEVER select dead players**: Dead players cannot speak in chat
+    • **Skip to next option**: If targeted bot is dead, find alternative living bot
+
+    **STEP 1 - Direct Targeting Detection**:
+    • Check for direct mentions: "@Player2", "Player 3", specific bot names
+    • If found AND bot is alive: Use that specific bot to respond
+    • If found BUT bot is dead: Select different living bot to acknowledge the death
+
+    **STEP 2 - Context-Based Selection**:
+    • If user asks about specific roles: Use living bot with that role
+    • If user makes accusations: Let accused bot defend themselves (if alive)
+    • If general chat: Choose most talkative/relevant living bot
+
+    **STEP 3 - Multi-Bot Probability** (20% chance):
+    • Sometimes 2-3 bots respond in sequence
+    • Use different perspectives (suspicious vs friendly)
+    • Keep responses short when multiple bots talk
+
+    🎭 **RESPONSE GENERATION RULES**:
+    • **Stay in Character**: Each bot has distinct personality based on their role
+    • **Game Context**: Reference current phase and recent events
+    • **Natural Language**: Avoid robotic responses, use game slang
+    • **Appropriate Length**: Single sentence to short paragraph
+
+    🚨 **EXECUTION REQUIREMENTS**:
+    0. **CRITICAL: VERIFY BOT IS ALIVE** - Check is_alive=true before calling addBotChatMessage
+    1. **Always call addBotChatMessage** for selected bot(s) - ONLY if they are alive
+    2. **Use exact player IDs** (e.g., "2", "3", not "Player 2") 
+    3. **Include bot's actual name** from player_states
+    4. **Set messageType: "message"**
+    5. **NO text output** - only tool calls
+    6. **Dead player response**: If user mentions dead player, use living bot to say "Player X is no longer with us"
+
+    📋 **RESPONSE EXAMPLES BY ROLE**:
+    • **Werewolf**: Deflect suspicion, act innocent, subtly mislead
+    • **Doctor**: Be helpful, logical, protective instincts
+    • **Detective/Seer**: Ask probing questions, share insights carefully
+    • **Villager**: React emotionally, make accusations, seek alliances
+    """
+        
     try:
         response = await model_with_tools.ainvoke([SystemMessage(content=system_prompt)])
         
@@ -835,250 +1113,7 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
         logger.error(f"[ChatBotNode] LLM call failed: {e}")
         return Command(goto=END, update={})
 
-async def FeedbackDecisionNode(state: AgentState, config: RunnableConfig) -> Command[Literal["BotBehaviorNode", "RefereeNode"]]:
-    """
-    FeedbackDecisionNode calls LLM to analyze who needs to provide feedback.
-    
-    Input:
-    - trimmed_messages: Recent message history
-    - player_states: Current player states  
-    - current_phase and declaration: Phase configuration
-    
-    Output:
-    - need_feed_back_dict with player_id_list and feedback message
-    """
-    # Print game name from state
-    game_name = state.get("gameName", "")
-    
-    # Extract inputs - simplified with BaseMessage
-    messages = state.get("messages", [])  # Safe dictionary access to BaseMessage list
-    # logger.info(f"[FeedbackDecisionNode] raw_messages: {messages}")
-    
-    trimmed_messages = messages[-10:] if messages else []  # Keep last 10 messages for context
-    trimmed_messages = filter_incomplete_message_sequences(trimmed_messages)
-    player_states = state.get("player_states", {})
-    current_phase_id = state.get("current_phase_id", 0)
-    dsl_content = state.get("dsl", {})
-    playerActions = state.get("playerActions", {})
-    
-    
-    # Get current phase details
-    phases = dsl_content.get('phases', {}) if dsl_content else {}
-    # Try both int and string keys to handle YAML parsing variations
-    current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
-    declaration = dsl_content.get('declaration', {}) if dsl_content else {}
-    playerActions = state.get("playerActions", {})
-    
-    # Log phase info
-    logger.info(f"[FeedbackDecisionNode] current_phase_id: {current_phase_id}")
-    logger.info(f"[FeedbackDecisionNode] current_phase: {current_phase}")
-    logger.info(f"[FeedbackDecisionNode] player_states: {player_states}")
-    
-    # Initialize LLM
-    model = init_chat_model("openai:gpt-4o")
-    # Bind both update_player_actions and set_feedback_decision in this node
-    model_with_tools = model.bind_tools([update_player_actions, set_feedback_decision])
-    
-    # Extract last human message - Handle both LangChain Message objects and dict format
-    # Get last message and check if it's human - simplified
-    last_human_message = ""
-    if messages and isinstance(messages[-1], HumanMessage):
-        last_msg = messages[-1]
-        content_lower = str(last_msg.content).lower().strip()
-        # Skip generic control messages
-        if content_lower not in ['continue', 'start game', 'start game.']:
-            last_human_message = str(last_msg.content)
-
-    logger.info(f"[FeedbackDecisionNode] last_human_message: {last_human_message}")
-
-    # Create system message with structured approach like ActionExecutor
-    system_message = SystemMessage(
-        content=(
-            "📊 **CURRENT GAME STATE** (Analyze these carefully):\n"
-            f"Current Phase ID: {current_phase_id}\n"
-            f"Current Phase Details: {current_phase}\n"
-            f"Player States: {player_states}\n"
-            f"Player Actions: {playerActions}\n"
-            f"Recent Messages: {[str(msg) for msg in trimmed_messages]}\n"
-            f"Last Human Message: {last_human_message}\n"
-            f"Game Declaration: {declaration}\n\n"
-            
-            "🎯 **FEEDBACK DECISION CORE RESPONSIBILITIES**:\n"
-            "1. **HUMAN ACTION LOGGING**: Record Player 1's actions when new messages exist\n"
-            "2. **PHASE ANALYSIS**: Determine if current phase requires player feedback\n"
-            "3. **TARGET IDENTIFICATION**: Find specific players who need to respond\n"
-            "4. **COMPLETION CHECK**: Verify who has/hasn't responded yet\n"
-            "5. **JSON OUTPUT**: Return structured feedback decision\n\n"
-            
-            "📋 **CORE WORKFLOW** (Execute in order):\n"
-            "**STEP 1 - Human Action Logging**:\n"
-            "• IF new human message exists: call update_player_actions once for Player 1\n"
-            "• Parameters: player_id='1', actions='concise summary', phase='current_phase.name'\n"
-            "• OTHERWISE: skip tool call\n\n"
-            
-            "**STEP 2 - Phase Type Analysis**:\n"
-            "• Check completion_criteria.type:\n"
-            "  - 'player_action': Players need feedback ✅\n"
-            "  - 'timer': No feedback needed ❌\n"
-            "  - 'UI_displayed': No feedback needed ❌\n\n"
-            
-            "**STEP 3 - Target Player Identification**:\n"
-            "• Use completion_criteria.target_players.condition to find WHO responds:\n"
-            "  - Role-based: \"player.role == 'Werewolf'\": Find werewolf players\n"
-            "  - Status-based: \"player.is_alive == true\": Find living players\n"
-            "  - Combined: \"player.role == 'Doctor' and player.is_alive == true\"\n"
-            "• Include ALL players matching condition (human + bots)\n"
-            "• Use numeric IDs: [1, 2, 3]\n\n"
-            
-            "**STEP 4 - Response Status Check**:\n"
-            "• Review playerActions and messages to see who already responded\n"
-            "• Only include players who STILL need to respond\n"
-            "• Empty list [] = no one needs feedback\n\n"
-            
-            "🚨 **CRITICAL RULES**:\n"
-            "• SPECIFIC ROLES ONLY: Don't include all players when only specific roles need to respond\n"
-            "• EXACT MATCHING: Use completion_criteria condition to identify precise player set\n"
-            "• HUMAN INCLUSION: Always include Player 1 if they match target criteria\n"
-            "• BOT COORDINATION: Include matching bot players for their actions\n\n"
-            
-            "⚡ **EXECUTION STEPS**:\n"
-            "1. **IF** new human message exists: call update_player_actions(player_id='1', actions='summary', phase='current_phase')\n"
-            "2. **ALWAYS** call set_feedback_decision(player_id_list=[...], need_feedback_message='...')\n\n"
-            
-            "📋 **TOOL CALL EXAMPLES**:\n"
-            "• **Voting Phase**: set_feedback_decision([1,2,3,4], \"Please submit your vote\")\n"
-            "• **Werewolf Night**: set_feedback_decision([2,5], \"Werewolves, choose your target\")\n"
-            "• **Doctor Action**: set_feedback_decision([3], \"Doctor, choose who to protect\")\n"
-            "• **Timer/Display**: set_feedback_decision([], \"Waiting for phase completion\")\n"
-            "• **All Responded**: set_feedback_decision([], \"Phase complete, proceeding\")\n\n"
-            
-            "🚨 **NO TEXT OUTPUT**: Only make tool calls, no explanations or JSON responses."
-        )
-    )
-
-    # Treat both update_player_actions and set_feedback_decision as backend here
-    backend_tool_names = {"update_player_actions", "set_feedback_decision"}
-    
-    full_messages = state.get("messages", []) or []
-    try:
-        if full_messages:
-            last_msg = full_messages[-1]
-            if isinstance(last_msg, AIMessage):
-                pending_frontend_call = False
-                for tc in getattr(last_msg, "tool_calls", []) or []:
-                    name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-                    if name and name not in backend_tool_names:
-                        pending_frontend_call = True
-                        break
-            if pending_frontend_call:
-                try:
-                    # print("[TRACE] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
-                    logger.info("[chatnode][end] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
-                except Exception:
-                    pass
-                return Command(
-                    goto=END
-                    
-                )
-    except Exception:
-        pass
-    
-    # Call LLM (with backend tools bound)
-    response = await model_with_tools.ainvoke([system_message], config)
-    
-    # === TOOL CALL PROCESSING ===
-    logger.info(f"[FeedbackDecisionNode][LLM_OUTPUT] Raw response content: {response.content}")
-    logger.info(f"[FeedbackDecisionNode][LLM_OUTPUT] Response type: {type(response)}")
-    
-    # Initialize default feedback decision
-    need_feed_back_dict = {"player_id_list": [], "need_feedback_message": "Phase proceeding"}
-    
-    # Apply backend tool effects inline (no ToolMessage)
-    tool_calls = getattr(response, "tool_calls", []) or []
-    logger.info(f"[FeedbackDecisionNode][TOOL_CALLS] Total tool calls: {len(tool_calls)}")
-    logger.info(f"[FeedbackDecisionNode][TOOL_CALLS] Tool calls details: {tool_calls}")
-    current_player_states = dict(player_states)
-    current_player_actions = dict(state.get("playerActions", {}))
-    logged_human = False
-    for tc in tool_calls:
-        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-        args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
-        if not isinstance(args, dict):
-            try:
-                import json as _json
-                args = _json.loads(args)
-            except Exception:
-                args = {}
-        if name == "update_player_actions":
-            pid = args.get("player_id")
-            actions = args.get("actions")
-            phase = args.get("phase")
-            if pid and actions and phase:
-                current_player_actions = _execute_update_player_actions(
-                    current_player_actions, pid, actions, phase, state, current_player_states
-                )
-                if str(pid) == "1":
-                    logged_human = True
-        elif name == "set_feedback_decision":
-            player_id_list = args.get("player_id_list", [])
-            need_feedback_message = args.get("need_feedback_message", "")
-            if isinstance(player_id_list, list):
-                need_feed_back_dict = _execute_set_feedback_decision(
-                    player_id_list, need_feedback_message, state
-                )
-                logger.info(f"[FeedbackDecisionNode][TOOL] Set feedback decision: {need_feed_back_dict}")
-        elif name == "update_player_state":
-            pid = args.get("player_id")
-            state_name = args.get("state_name")
-            state_value = args.get("state_value")
-            if pid and state_name is not None:
-                current_player_states = _execute_update_player_state(
-                    current_player_states, pid, state_name, state_value
-                )
-
-    # Extract player_id_list for routing decisions
-    player_id_list = need_feed_back_dict.get("player_id_list", [])
-    
-    # Add detailed routing decision logging
-    logger.info(f"[FeedbackDecisionNode][ROUTING] need_feed_back_dict: {need_feed_back_dict}")
-    logger.info(f"[FeedbackDecisionNode][ROUTING] player_id_list: {player_id_list}")
-    logger.info(f"[FeedbackDecisionNode][ROUTING] len(player_id_list): {len(player_id_list)}")
-    
-    # Prepare common updates for all routes
-    common_updates = {
-        "need_feed_back_dict": need_feed_back_dict,
-        "player_states": current_player_states,
-        "playerActions": current_player_actions,
-        "roomSession": state.get("roomSession", {})
-    }
-    
-    # Route based on feedback requirements
-    if len(player_id_list) == 0:
-        logger.info("[FeedbackDecisionNode] No players need feedback - routing to PhaseNode")
-        phasenode_updates = {**common_updates, "dsl": state.get("dsl", {})}
-        
-        # === DETAILED OUTPUT LOGGING ===
-        logger.info(f"[FeedbackDecisionNode][OUTPUT] Command goto: RefereeNode")
-        logger.info(f"[FeedbackDecisionNode][OUTPUT] Updates keys: {list(phasenode_updates.keys())}")
-        logger.info(f"[FeedbackDecisionNode][OUTPUT] Updates player_states: {phasenode_updates.get('player_states', 'NOT_SET')}")
-        logger.info(f"[FeedbackDecisionNode][OUTPUT] Updates playerActions: {phasenode_updates.get('playerActions', 'NOT_SET')}")
-        
-        return Command(goto="RefereeNode", update=phasenode_updates)    
-    else:
-        logger.info("[FeedbackDecisionNode] Players need feedback - routing to BotBehaviorNode")
-        # Note: Player 1 feedback will be handled by ActionExecutor UI creation
-        botbehavior_updates = {**common_updates, "dsl": state.get("dsl", {}),"messages": ([])}
-        
-        # === DETAILED OUTPUT LOGGING ===
-        logger.info(f"[FeedbackDecisionNode][OUTPUT] Command goto: BotBehaviorNode")
-        logger.info(f"[FeedbackDecisionNode][OUTPUT] Updates keys: {list(botbehavior_updates.keys())}")
-        logger.info(f"[FeedbackDecisionNode][OUTPUT] Updates player_states: {botbehavior_updates.get('player_states', 'NOT_SET')}")
-        logger.info(f"[FeedbackDecisionNode][OUTPUT] Updates playerActions: {botbehavior_updates.get('playerActions', 'NOT_SET')}")
-        
-        return Command(goto="BotBehaviorNode", update=botbehavior_updates)
-
-
-async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["RefereeNode"]]:
+async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["PhaseNode"]]:
     """
     BotBehaviorNode analyzes bot behavior and generates responses for non-human players.
     
@@ -1112,94 +1147,117 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
     need_feed_back_dict = state.get("need_feed_back_dict", {})
     dsl_content = state.get("dsl", {})
     
-    # Get current phase details
+    # Get current phase details and NEXT phase for pre-analysis
     phases = dsl_content.get('phases', {}) if dsl_content else {}
     # Try both int and string keys to handle YAML parsing variations
     current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
+    
+    # BotBehaviorNode should only focus on current phase - no next phase prediction
+    # This prevents bots from gaming the system by knowing future phases
+    
     declaration = dsl_content.get('declaration', {}) if dsl_content else {}
     playerActions = state.get("playerActions", {})
     
-    # Log phase info
+    # Log phase info  
     logger.info(f"[BotBehaviorNode] current_phase_id: {current_phase_id}")
     logger.info(f"[BotBehaviorNode] current_phase: {current_phase}")
     logger.info(f"[BotBehaviorNode] player_states: {player_states}")
     
-    # Initialize LLM
-    model = init_chat_model("openai:gpt-4o")
+    # Log referee_conclusions for debugging
+    referee_conclusions = state.get('referee_conclusions', [])
+    logger.info(f"[BotBehaviorNode] Referee Conclusions Count: {len(referee_conclusions)}")
+    if referee_conclusions:
+        logger.info(f"[BotBehaviorNode] Full Referee Conclusions: {referee_conclusions}")
+    else:
+        logger.info(f"[BotBehaviorNode] No Referee Conclusions Available")
+
+    # Initialize LLM with Claude 4.5 for better bot behavior
+    # model = init_chat_model("anthropic:claude-3-5-sonnet-20241022")
+
+    model = ChatAnthropic(
+    model="claude-haiku-4-5-20251001",  # 最新版本
+    api_key=os.getenv("ANTHROPIC_API_KEY") ,  # 或使用环境变量 ANTHROPIC_API_KEY
+    temperature=0.7,
+    max_tokens=4096
+)
     model_with_tools = model.bind_tools([update_player_actions])
+    items_summary = summarize_items_for_prompt(state)
     
-    # Simplified system message - only essential data
-    need_feed_back_dict = need_feed_back_dict.get("player_id_list", [])
-    
+    # Simplified system message - only essential data based on dm_agent_with_bot.py pattern
+    need_feedback_player_list = need_feed_back_dict.get("player_id_list", [])
     
     system_message = SystemMessage(
         content=(
-            "BOT BEHAVIOR GENERATION WITH AUTONOMOUS PHASE ANALYSIS\n"
-            f"Current Phase: {current_phase}\n"
-            f"Game Declaration: {declaration}\n"
-            f"Need Feedback Dict: {need_feed_back_dict}\n"
+            "🤖 **YOU REPRESENT ALL BOT PLAYERS - ACT BASED ON PLAYER STATES**\n\n"
+            
+            f"📊 **CURRENT GAME STATE:**\n"
+            f"Phase: {current_phase}\n"
+            f"Game Rules: {declaration}\n"
             f"Player States: {player_states}\n"
-            f"Current Player Actions: {playerActions}\n\n"
+            f"Player Actions: {playerActions}\n"
+            f"UI Components: {items_summary}\n\n"
             
-            "TASK: Generate bot behaviors for current phase through dual analysis.\n\n"
+            "🎯 **YOUR MISSION:**\n"
+            "Examine player_states and represent each bot player (player 2, 3, 4, etc.) based on their specific role and status. Make concrete decisions to win and get high scores.\n\n"
             
-            "ANALYSIS METHOD:\n"
-            "1. PRIMARY: Use need_feed_back_dict as initial guidance for which players need to act\n"
-            "2. AUTONOMOUS: Analyze current_phase.completion_criteria and playerActions to independently determine missing bot actions\n\n"
+            "📋 **ACTION STEPS:**\n"
+            "1. **Check Player States**: Look at each bot's role, is_alive, team, and other status fields\n"
+            "2. **Analyze Phase Requirements**: What does completion_criteria require this phase?\n"
+            "3. **Review UI Components**: What voting panels, text inputs, buttons are available?\n"
+            "4. **Make Specific Decisions**: Act as each bot based on their role characteristics\n\n"
             
-            "AUTONOMOUS ANALYSIS STEPS:\n"
-            "- Examine current_phase.completion_criteria to understand what actions are required in this phase\n"
-            "- Check playerActions to see which players (excluding player '1') have already completed required actions for this phase\n"
-            "- Identify all bot players (players '2', '3', '4', etc.) who:\n"
-            "  * Are alive and eligible to act based on their role and phase requirements\n"
-            "  * Have NOT yet completed the required action for this phase\n"
-            "  * Need to perform actions according to completion_criteria\n\n"
+            "🎮 **ROLE-BASED BEHAVIOR:**\n"
+            "• **Werewolf players**: Choose specific elimination targets, protect teammates\n"
+            "• **Villager players**: Vote to eliminate suspicious players, protect village\n"
+            "• **Doctor players**: Choose specific players to protect\n"
+            "• **Detective players**: Investigate specific suspicious players\n"
+            "• **Speaker players**: Submit 3 specific statements in Two Truths game\n"
+            "• **Voting players**: Make specific vote choices based on game information\n\n"
             
-            "ACTION GENERATION:\n"
-            "- For each identified bot player, call update_player_actions with:\n"
-            "  * player_id: the bot's ID (e.g., '2', '3', '4')\n"
-            "  * actions: role-appropriate action description for this phase\n"
-            "  * phase: use Current Phase name'\n"
-            "- Generate realistic, role-based behaviors that fulfill phase completion requirements\n"
-            "- Make multiple tool calls as needed for different bot players\n\n"
+            "⚙️ **USE THE TOOL:**\n"
+            "For each bot that needs to act, call:\n"
+            "• update_player_actions(player_id='[PLAYER_ID]', actions='[SPECIFIC_ACTION]', phase='[CURRENT_PHASE_NAME]')\n\n"
             
-            "EXECUTION RULES:\n"
-            "- NO text output - only tool calls\n"
-            "- Always exclude player '1' (human player)\n"
-            "- If no bots need to act, make no tool calls\n"
-            "- Prioritize completion_criteria analysis over need_feed_back_dict when they conflict"
+            "✅ **SPECIFIC ACTION EXAMPLES:**\n"
+            "• 'voted to eliminate Player 3'\n"
+            "• 'protected Player 1 from werewolf attack'\n"
+            "• 'investigated Player 4 - found villager team'\n"
+            "• 'submitted statements: I can play piano, I have been to Japan, I own 5 cats'\n"
+            "• 'voted that statement 2 is the lie'\n\n"
+            
+            "🚨 **IMPORTANT**: Only generate actions for bot players (non-Player 1) based on their roles and states in player_states!"
         )
     )
-    
     # Only treat update_player_actions as backend here
     backend_tool_names = {"update_player_actions"}
     
-    full_messages = state.get("messages", []) or []
-    try:
-        if full_messages:
-            last_msg = full_messages[-1]
-            if isinstance(last_msg, AIMessage):
-                pending_frontend_call = False
-                for tc in getattr(last_msg, "tool_calls", []) or []:
-                    name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-                    if name and name not in backend_tool_names:
-                        pending_frontend_call = True
-                        break
-            if pending_frontend_call:
-                try:
-                    # print("[TRACE] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
-                    logger.info("[chatnode][end] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
-                except Exception:
-                    pass
-                return Command(
-                    goto=END
-                )
-    except Exception:
-        pass
+    # full_messages = state.get("messages", []) or []
+    # try:
+    #     if full_messages:
+    #         last_msg = full_messages[-1]
+    #         if isinstance(last_msg, AIMessage):
+    #             pending_frontend_call = False
+    #             for tc in getattr(last_msg, "tool_calls", []) or []:
+    #                 name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+    #                 if name and name not in backend_tool_names:
+    #                     pending_frontend_call = True
+    #                     break
+    #         if pending_frontend_call:
+    #             try:
+    #                 # print("[TRACE] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
+    #                 logger.info("[chatnode][end] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
+    #             except Exception:
+    #                 pass
+    #             return Command(
+    #                 goto=END
+    #             )
+    # except Exception:
+    #     pass
 
 
-    # Call LLM with backend tool bound
-    response = await model_with_tools.ainvoke([system_message], config)
+    # Call LLM with backend tool bound - Claude needs at least one user message
+    user_message = HumanMessage(content="Generate bot actions for the current game phase based on player states and phase requirements.")
+    response = await model_with_tools.ainvoke([system_message, user_message], config)
     
     # === DETAILED LLM RESPONSE LOGGING ===
     logger.info(f"[BotBehaviorNode][LLM_OUTPUT] Raw response content: {response.content}")
@@ -1215,7 +1273,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
     current_player_states = dict(state.get("player_states", {}))
     current_player_actions = dict(state.get("playerActions", {}))
     logger.info(f"[BotBehaviorNode] current_player_actions: {current_player_actions}")
-    logger.info(f"[BotBehaviorNode][DEBUG] need_feed_back_dict: {need_feed_back_dict}")
+    # No longer using need_feed_back_dict - using autonomous analysis
     logger.info(f"[BotBehaviorNode][DEBUG] Processing all backend tool calls without filtering")
     for tc in tool_calls:
         name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
@@ -1235,10 +1293,10 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
                     current_player_actions, pid, actions, phase, state, current_player_states
                 )
     
-    # Route to RefereeNode
-    logger.info("[BotBehaviorNode] Routing to RefereeNode")
+    # Route back to PhaseNode for condition re-check
+    logger.info("[BotBehaviorNode] Routing back to PhaseNode for completion condition re-check")  
     return Command(
-        goto="RefereeNode",
+        goto="PhaseNode",
         update={
             "player_states": current_player_states,
             "playerActions": current_player_actions,
@@ -1247,7 +1305,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
         }
     )
 
-async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Literal["PhaseNode"]]:
+async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Literal["RoleAssignmentNode"]]:
     """
     RefereeNode processes player behaviors and updates game state according to rules.
     
@@ -1271,9 +1329,6 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     logger.info("[RefereeNode] Starting referee analysis and state updates")
     
     # Extract inputs - simplified with BaseMessage
-    messages = state.get("messages", [])  # Safe dictionary access to BaseMessage list
-    trimmed_messages = messages[-10:] if messages else []
-    trimmed_messages = filter_incomplete_message_sequences(trimmed_messages)
     player_states = state.get("player_states", {})
     current_phase_id = state.get("current_phase_id", 0)
     dsl_content = state.get("dsl", {})
@@ -1283,6 +1338,7 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     phases = dsl_content.get('phases', {}) if dsl_content else {}
     # Try both int and string keys to handle YAML parsing variations
     current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
+    # next_phase = phases.get(current_phase_id + 1, {}) or phases.get(str(current_phase_id + 1), {})
     declaration = dsl_content.get('declaration', {}) if dsl_content else {}
     
     # Log phase info
@@ -1291,138 +1347,105 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     logger.info(f"[RefereeNode] player_states (input): {player_states}")
 
     playerActions = state.get("playerActions", {})
-    # Initialize LLM
-    model = init_chat_model("openai:gpt-4o")
-    # Bind only update_player_state; enforce single-call semantics
-    model_with_tools = model.bind_tools([update_player_state], parallel_tool_calls=False)
     
-    # Check if this phase requires role/speaker assignment
-    phase_name = current_phase.get('name', '').lower()
-    phase_description = current_phase.get('description', '').lower()
-    requires_assignment = any(keyword in f"{phase_name} {phase_description}" 
-                            for keyword in ['assign', 'role', 'speaker', 'set current speaker', 'rotation', 'turn order'])
+    # Log referee_conclusions for debugging
+    referee_conclusions = state.get('referee_conclusions', [])
+    logger.info(f"[RefereeNode] Referee Conclusions Count: {len(referee_conclusions)}")
+    if referee_conclusions:
+        logger.info(f"[RefereeNode] Current Referee Conclusions: {referee_conclusions}")
+    else:
+        logger.info(f"[RefereeNode] No Referee Conclusions Available")
+    
+    # Initialize LLM
+    model = ChatAnthropic(
+        model="claude-haiku-4-5-20251001",
+        api_key=os.getenv("ANTHROPIC_API_KEY"),
+        temperature=0.7,
+        max_tokens=4096
+    )
+    # Bind state management tools
+    model_with_tools = model.bind_tools([update_player_state, add_referee_conclusion, update_player_actions], parallel_tool_calls=True)
+    
+    # Format declaration with clear status definitions  
+    formatted_declaration = format_declaration_for_referee(declaration)
     
     # Create system message with all inputs
     system_message = SystemMessage(
         content=(
-            "REFEREE ANALYSIS AND STATE UPDATES (TOOL-DRIVEN)\n"
-
-            f"Current Phase ID: {current_phase_id}\n"
-            f"Current Phase Details: {current_phase}\n"
-            f"Game Declaration: {declaration}\n"
-            f"Game Phases: {phases}\n"
-            f"Current Player States: {player_states}\n"
-            f"Recent Messages: {[str(msg) for msg in trimmed_messages]}\n\n"
-            f"Player Actions: {playerActions}\n\n"
+            "🎯 **GAME MANAGER - UPDATE STATES & CONCLUSIONS**\n\n"
             
-            + ("🚨 **PRIORITY TASK - STATE MANAGEMENT PHASE:**\n"
-               "This phase requires careful state updates. Follow these principles:\n\n"
-               "**COMPLETE ASSIGNMENT RULE:**\n"
-               "• If setting turn_order, set it for ALL players (1,2,3... complete sequence)\n"
-               "• If assigning roles, assign to ALL players (no one left without a role)\n"
-               "• Never leave partial assignments - complete the full set\n\n"
-               "**SEQUENTIAL vs PARALLEL MECHANICS:**\n"
-               "• SEQUENTIAL (turn-based): Only ONE player active at a time\n"
-               "  - Example: is_speaker=True for current player, False for all others\n"
-               "  - Example: turn_order determines WHO goes next in sequence\n"
-               "• PARALLEL (simultaneous): Multiple players can act together\n"
-               "  - Example: can_vote=True for all non-speakers simultaneously\n"
-               "  - Example: All werewolves vote together at night\n\n"
-               "**GAME STATE ANALYSIS:**\n"
-               "• Check declaration.player_states to understand each field's purpose\n"
-               "• Review phase description to determine what states need updating\n"
-               "• Ensure state changes align with game mechanics and flow\n\n"
-               if requires_assignment else "") +
+            f"📊 **CURRENT GAME DATA:**\n"
+            f"Phase {current_phase_id}: {current_phase.get('name', 'Unknown')}\n"
+            f"Player States: {player_states}\n"
+            f"Player Actions: {playerActions if playerActions else 'None'}\n"
+            f"Game Rules: {formatted_declaration}\n\n"
             
-            "TASK 1: Process all Player Actions and update player states accordingly.\n"
-            "\n"
-            "**PLAYERACTIONS PARSING INSTRUCTIONS:**\n"
-            "- Parse each entry in Player Actions to extract specific game actions\n"
-            "- For target-based actions like 'chose target player X for [action]':\n"
-            "  * Set night_action_submitted=True (if night phase) or day_action_submitted=True (if day phase)\n"  
-            "  * Set last_night_action='[action_type]' or last_day_action='[action_type]'\n"
-            "  * Set last_night_target=X or last_day_target=X (extract target player ID from action text)\n"
-            "- For protection/support actions like 'protected/helped player X':\n"
-            "  * Update relevant action tracking fields based on game rules\n"
-            "  * Set target fields appropriately\n"
-            "- For investigation/info actions like 'investigated/checked player X':\n"
-            "  * Update investigation tracking fields\n"
-            "  * Set investigation targets and results as needed\n"
-            "- For voting actions, update vote_target_id or relevant voting fields\n"
-            "- For resource/item actions, update inventory, health, currency, or relevant game resources\n"
-            "\n"
-            "Use update_player_state tool to update player states based on:\n"
-            "- Bot behaviors from Player Actions (extract target IDs from action descriptions)\n"
-            "- Human message actions\n" 
-            "- Game rules from Game Declaration and Game Phases\n"
-            "Ensure all updates are consistent with game mechanics\n\n"
-
-            "TASK 2: EMERGENCY Role Assignment (ONLY if ALL players have completely empty roles).\n"
-            "IMPORTANT: Primary role assignment is handled by PhaseNode for phases 0-2.\n"
-            "RefereeNode should ONLY assign roles as emergency fallback.\n\n"
+            "🎮 **YOUR ROLE:**\n"
+            "You are the Game Manager. Update player states based on rules and player actions. "
+            "Record important events in conclusions for game history.\n\n"
+            "assign roles to players if needed using update_player_name tool\n"
+            "Set the current/next speaker for the next phase using update_player_state tool\n"
             
-            "Role Assignment Emergency Criteria (ALL must be true):\n"
-            "- Phase name/description explicitly mentions 'assign' or 'role' (case-insensitive)\n"  
-            "- declaration.roles exists\n"
-            "- ALL players have completely empty/missing role field (not just some)\n"
-            "- No player has any assigned role whatsoever\n\n"
+            "🔧 **TOOLS:**\n"
+            "• update_player_state(player_id, field_name, value) - Update any player field that is needed to be updated\n"
+            "• add_referee_conclusion(category, message) - Record all events updated and the decisions you made\n"
+            "Categories: 'DECISION', 'CRITICAL', 'GAME_STATUS', 'DM_ACTION'\n\n"
             
-            "CRITICAL PROTECTION - When assigning roles:\n"
-            "- NEVER overwrite any existing role (even empty string '' counts as 'assigned')\n"
-            "- If ANY player already has a role, SKIP role assignment entirely\n"
-            "- Only proceed if player_states shows ALL players with role=null or role missing\n"
-            "- This ensures PhaseNode has priority for role assignment"
-           
-           "- The ouput is updated_player_states, which is a updated version of player_states, keep the same keys and values for each player, don't change the keys and values for each player, only update the values that have changed.\n"
+            "📝 **EXAMPLES:**\n\n"
             
+            "**Two Truths and a Lie - Speaker Rotation:**\n"
+            "• update_player_state('2', 'is_speaker', False)  # Previous speaker done\n"
+            "• update_player_state('3', 'is_speaker', True)   # Set next speaker\n"
+            "• update_player_state('3', 'speaker_rounds_completed', 1)\n"
+            "• add_referee_conclusion('DM_ACTION', 'Rotated speaker from Player 2 to Player 3')\n\n"
             
-            "  Use update_player_state tool to update player state, you can call the tool for multiple in one time.\n"
-            "- Maintain consistency with game rules and phase requirements\n"
-            "- Handle eliminations, votes, role abilities, and status changes\n"
-            "- Use player IDs as string keys (\"1\", \"2\", \"3\", etc.)\n"
-            "- Include conclusions array with key events that happened:\n"
-            "  * Player eliminations/deaths (who died and how)\n"
-            "  * Game outcomes (who won/lost)\n"
-            "  * Important discoveries or revelations\n"
-            "  * No events (if nothing significant happened)\n\n"
+            "**Two Truths and a Lie - Voting Results:**\n"
+            "• update_player_state('1', 'score', 2)  # Correct guess +1 point\n"
+            "• update_player_state('2', 'score', 1)  # Successfully deceived +1 point\n"
+            "• add_referee_conclusion('GAME_STATUS', 'Player 1 guessed correctly, Player 2 fooled others')\n\n"
             
-            "💀 **CRITICAL ELIMINATION RULE**:\n"
-            "- If ANY player is eliminated/dies/is voted out during the game:\n"
-            "  * IMMEDIATELY set their is_alive=false using update_player_state tool\n"
-            "  * This marks them as dead and removes them from active gameplay\n"
-            "  * Dead players cannot vote, act, or participate in any game mechanics\n"
-            "  * Example: update_player_state(player_id='3', state_name='is_alive', state_value=False)\n"
-            "- ALWAYS update player status when processing elimination events\n"
-            "- Remember: is_alive=false means the player is considered dead in the game\n"
+            "**Werewolf - Night Elimination:**\n"
+            "• update_player_state('3', 'is_alive', False)  # Werewolf victim\n"
+            "• update_player_state('3', 'role_revealed', True)  # Reveal role on death\n"
+            "• add_referee_conclusion('CRITICAL', 'Player 3 (Villager) eliminated by werewolves')\n\n"
+            
+            "**Werewolf - Day Voting Elimination:**\n"
+            "• update_player_state('2', 'is_alive', False)  # Voted out player\n"
+            "• update_player_state('2', 'role_revealed', True)  # Public role reveal\n"
+            "• add_referee_conclusion('CRITICAL', 'Player 2 (Werewolf) eliminated by village vote')\n\n"
+            
+            "**Werewolf - Detective Investigation:**\n"
+            "• update_player_state('4', 'known_alignments', {'2': 'werewolves'})  # Detective learns info\n"
+            "• add_referee_conclusion('DECISION', 'Detective investigated Player 2, learned werewolf team')\n\n"
         )
     )
     
 
     # Only treat update_player_state as backend here
-    backend_tool_names = {"update_player_state"}
+    # backend_tool_names = {"update_player_state"}
     
-    full_messages = state.get("messages", []) or []
-    try:
-        if full_messages:
-            last_msg = full_messages[-1]
-            if isinstance(last_msg, AIMessage):
-                pending_frontend_call = False
-                for tc in getattr(last_msg, "tool_calls", []) or []:
-                    name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-                    if name and name not in backend_tool_names:
-                        pending_frontend_call = True
-                        break
-            if pending_frontend_call:
-                try:
-                    # print("[TRACE] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
-                    logger.info("[chatnode][end] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
-                except Exception:
-                    pass
-                return Command(
-                    goto=END
-                )
-    except Exception:
-        pass
+    # full_messages = state.get("messages", []) or []
+    # try:
+    #     if full_messages:
+    #         last_msg = full_messages[-1]
+    #         if isinstance(last_msg, AIMessage):
+    #             pending_frontend_call = False
+    #             for tc in getattr(last_msg, "tool_calls", []) or []:
+    #                 name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+    #                 if name and name not in backend_tool_names:
+    #                     pending_frontend_call = True
+    #                     break
+    #         if pending_frontend_call:
+    #             try:
+    #                 # print("[TRACE] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
+    #                 logger.info("[chatnode][end] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
+    #             except Exception:
+    #                 pass
+    #             return Command(
+    #                 goto=END
+    #             )
+    # except Exception:
+    #     pass
     
     # Call LLM with tool bound
     response = await model_with_tools.ainvoke([system_message], config)
@@ -1433,17 +1456,17 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     
     # No JSON expected; start with current states
     updated_player_states = player_states
-    conclusions = []
     
-    # Apply update_player_state tool calls inline (no ToolMessage)
+    # Apply tool calls inline (no ToolMessage) 
     tool_calls = getattr(response, "tool_calls", []) or []
     logger.info(f"[RefereeNode][TOOL_CALLS] Total tool calls: {len(tool_calls)}")
     logger.info(f"[RefereeNode][TOOL_CALLS] Tool calls details: {tool_calls}")
+    
     current_player_states = dict(updated_player_states)
+    current_referee_conclusions = list(state.get("referee_conclusions", []))
+    
     for tc in tool_calls:
         name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-        if name != "update_player_state":
-            continue
         args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
         if not isinstance(args, dict):
             try:
@@ -1451,23 +1474,34 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
                 args = _json.loads(args)
             except Exception:
                 args = {}
-        pid = args.get("player_id")
-        state_name = args.get("state_name")
-        state_value = args.get("state_value")
-        if pid and state_name is not None:
-            current_player_states = _execute_update_player_state(
-                current_player_states, pid, state_name, state_value
-            )
+        
+        if name == "update_player_state":
+            pid = args.get("player_id")
+            state_name = args.get("state_name")
+            state_value = args.get("state_value")
+            if pid and state_name is not None:
+                current_player_states = _execute_update_player_state(
+                    current_player_states, pid, state_name, state_value
+                )
+        elif name == "add_referee_conclusion":
+            note_type = args.get("note_type")
+            content = args.get("content")
+            if note_type and content:
+                current_referee_conclusions = _execute_add_referee_conclusion(
+                    current_referee_conclusions, note_type, content
+                )
 
-    # Route to PhaseNode with updated player states and conclusions
-    logger.info("[RefereeNode] Routing to PhaseNode with updated player states and conclusions")
+    # Notes are now created via tool calls (add_referee_conclusion), no need for direct creation
+    # current_referee_conclusions already contains all tool-created notes
+    
+    # Route to ActionExecutor with updated player states and game notes
+    notes_created = len(current_referee_conclusions) - len(state.get("referee_conclusions", []))
+    logger.info(f"[RefereeNode] Created {notes_created} new game notes via tools, routing to ActionExecutor")
     return Command(
-        goto="PhaseNode",
+        goto="RoleAssignmentNode",
         update={
             "player_states": current_player_states,
-            "referee_conclusions": conclusions,
-            "roomSession": state.get("roomSession", {}),
-            "dsl": state.get("dsl", {})
+            "referee_conclusions": current_referee_conclusions,
         }
     )
 
@@ -1525,11 +1559,7 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
         return Command(
             goto="ActionExecutor",
             update={
-                "current_phase_id": current_phase_id,
                 "player_states": player_states,
-                "roomSession": state.get("roomSession", {}),
-                "dsl": dsl_content,
-                "playerActions": state.get("playerActions", {}),
             }
         )
     
@@ -1578,7 +1608,12 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
     )
     
     try:
-        response = await model_with_tools.ainvoke([system_message])
+        # Add 10 second timeout to prevent hanging
+        import asyncio
+        response = await asyncio.wait_for(
+            model_with_tools.ainvoke([system_message], config),
+            timeout=10.0
+        )
         
         # === LLM RESPONSE LOGGING ===
         logger.info(f"[RoleAssignmentNode][LLM_OUTPUT] Response content: {response.content}")
@@ -1621,9 +1656,22 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
             }
         )
         
+    except asyncio.TimeoutError:
+        logger.warning("[RoleAssignmentNode] LLM call timed out after 10 seconds, skipping role assignment")
+        # Skip role assignment and continue with ActionExecutor
+        return Command(
+            goto="ActionExecutor",
+            update={
+                "current_phase_id": current_phase_id,
+                "player_states": player_states,
+                "roomSession": state.get("roomSession", {}),
+                "dsl": dsl_content,
+                "playerActions": state.get("playerActions", {}),
+            }
+        )
     except Exception as e:
-        logger.error(f"[RoleAssignmentNode] LLM call failed: {e}")
-        # Fallback: pass through without role assignment
+        logger.error(f"[RoleAssignmentNode] LLM call failed: {e}, skipping role assignment")
+        # Skip role assignment and continue with ActionExecutor
         return Command(
             goto="ActionExecutor",
             update={
@@ -1635,17 +1683,20 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
             }
         )
 
-async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Literal["RoleAssignmentNode"]]:
+async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Literal["BotBehaviorNode", "RefereeNode", "ActionExecutor"]]:
     """
-    PhaseNode determines the next phase based on DSL and current game state.
+    PhaseNode - Entry point that checks completion conditions first.
     
-    Input:
-    - dsl: Game DSL rules
-    - current_phase_id: Current phase identifier
-    - current_phase and declaration: Phase configuration
+    New Architecture:
+    1. Check current phase completion conditions
+    2. If conditions not met and needs Bot -> route to BotBehaviorNode  
+    3. If conditions met -> route to RefereeNode for state management
+    4. For Phase 0 (initial setup) -> route directly to ActionExecutor
     
-    Output:
-    - next_phase_id: Determined next phase
+    Routes to:
+    - ActionExecutor: For Phase 0 (initial UI setup)  
+    - BotBehaviorNode: When completion conditions not met and Bot action needed
+    - RefereeNode: When completion conditions are met, for state updates
     """
     # Print game name from state
     game_name = state.get("gameName", "")
@@ -1715,97 +1766,122 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
     logger.info(f"[PhaseNode] current_phase: {current_phase}")
     logger.info(f"[PhaseNode] player_states: {player_states}")
     
-    # Initialize LLM with set_next_phase tool
-    model = init_chat_model("openai:gpt-4.1-mini")
-    model_with_tools = model.bind_tools([set_next_phase])
+    # Log referee_conclusions for debugging
+    referee_conclusions = state.get('referee_conclusions', [])
+    logger.info(f"[PhaseNode] Referee Conclusions Count: {len(referee_conclusions)}")
+
+    # Initialize LLM with set_next_phase and set_feedback_decision tools
+    model = ChatAnthropic(
+        model="claude-haiku-4-5-20251001",
+        api_key=os.getenv("ANTHROPIC_API_KEY"),
+        temperature=0.7,
+        max_tokens=4096
+    )
+    model_with_tools = model.bind_tools([set_next_phase, set_feedback_decision])
     logger.info(f"[PhaseNode] Phase {current_phase_id}: Phase transition analysis with set_next_phase tool")
     
-    messages = state.get("messages", []) or []
-    trimmed_messages = messages[-10:]  # Get more messages before filtering
-    filtered_messages = filter_incomplete_message_sequences(trimmed_messages)
-    trimmed_messages = filtered_messages[-3:]  # Keep only 3 after filtering
 
     # PhaseNode focuses purely on phase transition - no role assignment
     
     system_message = SystemMessage(
         content=(
-            "PHASE TRANSITION ANALYSIS WITH ROLE MANAGEMENT\n"
-            f"itemsState (current frontend layout):\n{items_summary}\n"
-            f"Current Phase ID: {current_phase_id}\n"
-            f"Current Phase Details: {current_phase}\n"
-            f"Game Declaration: {declaration}\n"
-            f"Player States: {player_states}\n"
-            f"Phase History: {state.get('phase_history', [])[-3:]}\n" 
-            f"Recent Messages: {[str(msg)[:200] for msg in trimmed_messages]}\n\n"
-            f"Player Actions: {playerActions}\n\n"
+            "**PHASE NODE: GAME PROGRESSION CONTROLLER**\n\n"
             
-            "MAIN TASK: Analyze the Current Phase Details's next_phase conditions and determine which branch to follow based on game state and Player Actions and message history.\n"
-            "Your mechanism is to drive game progression forward by carefully evaluating next_phase rules.\n\n"
+            "**CURRENT GAME CONTEXT**:\n"
+            f"**CURRENT PHASE INFORMATION:**\n"
+            f"  Current Phase ID: {current_phase_id}\n"
+            f"  Current Phase info and completion conditions: {current_phase}\n\n"
             
-            "⚠️ MANDATORY PROGRESSION RULE ⚠️\n"
-            "CRITICAL: You MUST advance the phase unless there is a genuine, specific condition preventing progression.\n"
-            "- DEFAULT ACTION: transition=true (advance phase)\n"
-            "- ONLY use transition=false for explicit waiting conditions (player actions incomplete, voting in progress, etc.)\n"
-            "- NEVER stay at the same phase without clear DSL-defined blocking conditions\n"
-            "- When in doubt, ADVANCE THE PHASE\n"
-            "- Staying at the same phase should be rare and require strong justification\n"
-            "- EXCEPTION: True loops (DSL explicitly defines next_phase_id = current_phase_id for iteration)\n"
-            "- EXCEPTION: Explicit wait_for conditions not yet met (incomplete voting, pending player actions)\n\n"
+            f"**Game Configuration:**\n"
+            f"  Game Declaration: {declaration}\n\n"
             
-            "NEXT_PHASE CONDITION ANALYSIS:\n"
-            "1. Examine the current_phase's next_phase field for conditional branches\n"
-            "2. Evaluate each condition against current player_states and game context\n"
-            "3. Select the branch matching condition\n"
-            "4. Return the corresponding phase_id from the matching branch\n"
-            "5. IF CONDITIONS ARE MET OR UNCLEAR: Always choose transition=true\n\n"
+            f"**Player States:**\n"
+            f"  {player_states}\n\n"
             
-            "CONDITION EVALUATION EXAMPLES:\n"
-            "- Player count conditions: Count alive/dead players by checking player_states[player_id].alive\n"
-            "- Role-based conditions: Check player_states[player_id].role values\n"
-            "- Turn/round conditions: Check player_states[player_id].speaker_turns_taken or similar counters\n"
-            "- Game completion: Evaluate win/loss conditions based on role distributions\n\n"
+            f"**Player Actions:**\n"
+            f"  {playerActions if playerActions else 'No actions recorded'}\n\n"
             
+            f"**Frontend Items State:**\n"
+            f"  {items_summary}\n\n"
             
-            "IMPORTANT: The 'itemsState' shows what UI elements are currently displayed to players. Only showing UI for player with ID 1 (the human) for what he need is enough. All other players are bots and their UI is not visible to the human.\n"
-            "Items represent the actual frontend components visible on screen (buttons, voting panels, text displays, etc.)\n\n"
+            f"**Game History:**\n"
+            f"  Referee Conclusions: {referee_conclusions if referee_conclusions else 'None'}\n"
+            f"  Phase History: {state.get('phase_history', [])}\n\n"
             
-            "EVALUATION STEPS:\n"
-            "1. Check current_phase's conditions (wait_for, completion, etc.)\n"
-            "2. If current phase is complete, analyze next_phase conditions\n"
-            "3. Match conditions against player_states data\n"
-            "4. Select appropriate next_phase_id\n"
+            "**🎯 YOUR MISSION:**\n"
+            "Analyze current phase completion and determine game progression path.\n"
+            "Drive game forward by evaluating phase transition conditions and player actions.\n\n"
             
-            "OUTPUT FORMAT - MANDATORY TOOL CALL:\n"
-            "You MUST call the set_next_phase tool. Do not write explanations.\n"
-            "1. Analyze conditions silently\n"
-            "2. Call set_next_phase tool immediately with:\n"
-            "   - transition=true + target phase_id (PREFERRED - advance to next phase)\n"
-            "   - transition=false + current phase_id (ONLY if specific conditions block progression)\n"
-            "3. Include brief transition_reason\n"
-            "\n"
-            "PROGRESSION BIAS:\n"
-            "✅ GOOD: set_next_phase(transition=true, next_phase_id=4, transition_reason='Phase conditions met')\n"
-            "✅ ACCEPTABLE: set_next_phase(transition=false, next_phase_id=3, transition_reason='Waiting for all werewolves to submit votes')\n"
-            "❌ BAD: Staying at phase without clear DSL-defined blocking condition\n"
-            "\n"
-            "CRITICAL: Default to transition=true unless there's explicit evidence of incomplete requirements.\n"
-            "CRITICAL: Call the tool immediately. Do not write analysis text.\n\n"
+            "🤖 **BOT ANALYSIS & PHASE CONTROL:**\n"
+            "Check if bots (players 2,3,4...) need to act. Advance phase when conditions met.\n\n"
             
-            "SPECIFIC GAME EXAMPLES:\n\n"
+            "🔧 **TOOLS:**\n"
+            "• set_feedback_decision(player_id_list, message) - Request bot actions if needed\n"
+            "• set_next_phase(transition, next_phase_id, transition_reason) - Advance or stay\n\n"
             
-            "Two Truths and a Lie - Phase 6 Analysis:\n"
-            "DSL condition: 'If all players have speaker_turns_taken >= the agreed number of rounds (default 1)'\n"
-            "Analysis: Check player_states for each player's speaker_turns_taken value\n"
-            "All players completed turns: set_next_phase(transition=true, next_phase_id=7, transition_reason='All players have completed their turns')\n"
-            "Some players still need turns: set_next_phase(transition=false, next_phase_id=6, transition_reason='Player 3 still needs to speak - staying in current phase')\n\n"
+            "⚠️ **TIMER CONDITIONS ALREADY SATISFIED:**\n"
+            "If current phase completion_criteria mentions 'timer' or 'time', the condition is already met.\n"
+            "You were only triggered because the timer expired. Proceed to next phase immediately.\n\n"
             
-            "DSL condition: 'If living Werewolves >= living Villagers': phase 99 (Werewolves Win)\n"
-            "Analysis: Count alive werewolves vs alive villagers\n"
-            "Werewolves equal/outnumber villagers: set_next_phase(transition=true, next_phase_id=99, transition_reason='Werewolves win by numbers')\n"
-            "Otherwise continue game: set_next_phase(transition=true, next_phase_id=2, transition_reason='Game continues - moving to night phase')\n\n"
+            "📝 **EXAMPLES:**\n\n"
             
-            "DSL condition: 'Otherwise, continue to next Night cycle': phase 2\n"
-            "Game continues: set_next_phase(transition=true, next_phase_id=2, transition_reason='Game continues to night phase')\n\n"
+            "**Timer Phase - Discussion Timer Expired:**\n"
+            "• Phase completion_criteria: 'Discussion timer has expired'\n"
+            "• Timer already expired (that's why PhaseNode was triggered)\n"
+            "• set_feedback_decision(player_id_list=[], message='Timer expired, no bot actions needed')\n"
+            "• set_next_phase(transition=true, next_phase_id=6, transition_reason='Discussion timer expired')\n\n"
+            
+            "**Bot Action Example - Werewolf Voting Phase**:\n"
+            "Phase completion_criteria: 'All living players must vote'\n"
+            "Bot Analysis:\n"
+            "• Check Player Actions: {'1': 'voted for player 3', '2': missing, '3': missing, '4': 'voted for player 1'}\n"
+            "• Bots 2,3 haven't voted yet → set_feedback_decision(player_id_list=[2,3], message='Bots need to vote')\n"
+            "• Result: Routes to BotBehaviorNode to generate missing votes\n\n"
+            
+            "**Bot Completion Example - Night Actions Complete**:\n"
+            "Phase completion_criteria: 'Werewolves select victim, Doctor protects'\n"
+            "Bot Analysis:\n"
+            "• Check Player Actions: {'2': 'werewolf_attack:player_1', '3': 'doctor_protect:player_4'}\n"
+            "• All required bot actions present → set_feedback_decision(player_id_list=[], message='All bot night actions completed')\n"
+            "• Phase complete → set_next_phase(transition=true, next_phase_id=6, transition_reason='Night actions complete')\n\n"
+            
+            "**Two Truths and a Lie - Round Completion Check**:\n"
+            "DSL condition: 'If every player has speaker_rounds_completed equal to the agreed rounds'\n"
+            "Bot Analysis:\n"
+            "• Check Player Actions for bot statements: {'2': 'submitted_statements', '3': 'submitted_statements'}\n"
+            "• All bot statements present → set_feedback_decision(player_id_list=[], message='All bot statements submitted')\n"
+            "• All rounds done: set_next_phase(transition=true, next_phase_id=99, transition_reason='All players completed required rounds')\n\n"
+            
+            "**Bot Mixed Example - Werewolf Day Discussion Phase**:\n"
+            "Phase completion_criteria: 'Discussion complete, ready for voting'\n"
+            "Bot Analysis:\n"
+            "• Check Player Actions: {'1': 'player_discussion_ready', '2': missing, '3': 'bot_discussion_complete', '4': missing}\n"
+            "• Bots 2,4 need to participate in discussion → set_feedback_decision(player_id_list=[2,4], message='Bots need discussion input')\n"
+            "• Result: Routes to BotBehaviorNode for bot discussion generation\n\n"
+            
+            "**No Bot Needed Example - Human-Only Phase**:\n"
+            "Phase completion_criteria: 'Human player selects game mode'\n"
+            "Bot Analysis:\n"
+            "• This phase only requires human input (player 1)\n"
+            "• No bot actions needed → set_feedback_decision(player_id_list=[], message='Human-only phase, no bot actions required')\n"
+            "• Check if human completed → proceed with phase completion assessment\n\n"
+            
+            "**Werewolf Phase 10 - Win Condition Analysis** (COMPLEX EXAMPLE):\n"
+            "Bot Analysis: Check if any bot actions needed before win check\n"
+            "• If no pending bot actions → proceed with win condition evaluation\n"
+            "SEQUENTIAL EVALUATION (first match wins):\n"
+            "1. 'If no living Werewolves remain' → count team='werewolves' with is_alive=true\n"
+            "   • werewolf_count = 0 → set_next_phase(true, 98, 'Village wins')\n"
+            "   • werewolf_count > 0 → Continue to condition 2\n\n"
+            "2. 'If living Werewolves ≥ living Villagers' → compare team counts\n"
+            "   • werewolf_count >= villager_count → set_next_phase(true, 99, 'Werewolves win')\n"
+            "   • werewolf_count < villager_count → Continue to condition 3\n\n"
+            
+            "**General Pattern for Any Game**:\n"
+            "1. Read all next_phase conditions from DSL\n"
+            "2. Evaluate each condition against current player_states\n"
+            "3. Select first matching condition (order matters!)\n"
+            "4. Use corresponding phase_id from matched branch\n\n"
             
 
         )
@@ -1830,10 +1906,12 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
     if tool_calls:
         logger.info(f"[PhaseNode][TOOL_CALLS] Tool calls details: {tool_calls}")
     
-    # Extract phase decision from tool calls
+    # Extract phase decision and feedback decision from tool calls
     transition_from_tool = None
     next_phase_id_from_tool = None
     transition_reason = ""
+    need_feed_back_dict = {"player_id_list": [], "need_feedback_message": "Phase proceeding"}
+    
     for tc in tool_calls:
         name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
         if name == "set_next_phase":
@@ -1848,7 +1926,18 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             next_phase_id_from_tool = args.get("next_phase_id")
             transition_reason = args.get("transition_reason", "")
             logger.info(f"[PhaseNode] Tool call: transition={transition_from_tool}, next_phase_id={next_phase_id_from_tool}, reason: {transition_reason}")
-            break
+        elif name == "set_feedback_decision":
+            args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
+            if not isinstance(args, dict):
+                try:
+                    import json as _json
+                    args = _json.loads(args)
+                except Exception:
+                    args = {}
+            player_id_list = args.get("player_id_list", [])
+            need_feedback_message = args.get("need_feedback_message", "")
+            need_feed_back_dict = _execute_set_feedback_decision(player_id_list, need_feedback_message, state)
+            logger.info(f"[PhaseNode] Feedback decision: {need_feed_back_dict}")
     
     # Use tool call result or fallback logic
     if transition_from_tool is not None and next_phase_id_from_tool is not None:
@@ -1925,23 +2014,40 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
 
     logger.info("[PhaseNode] Routing to ActionExecutor")
     
+    # Get phase info using helper function
+    target_phase, target_phase_name = get_phase_info_from_dsl(target_phase_id, dsl_content)
+    
+    # Add need_feed_back_dict to outputs
     phasenode_outputs = {
         "current_phase_id": target_phase_id,
+        "current_phase_name": target_phase_name,
         "player_states": state.get("player_states", {}),
         "roomSession": state.get("roomSession", {}),
         "dsl": state.get("dsl", {}),
-        "phase_history": current_phase_history
+        "phase_history": current_phase_history,
+        "need_feed_back_dict": need_feed_back_dict
     }
     
+    # Routing logic based on feedback decision
+    player_id_list = need_feed_back_dict.get("player_id_list", [])
+    
+    # If feedback needed (players need to take action) - go to BotBehaviorNode
+    if player_id_list and len(player_id_list) > 0:
+        route_target = "BotBehaviorNode" 
+        logger.info(f"[PhaseNode] Players {player_id_list} need feedback - routing to BotBehaviorNode")
+    # If no feedback needed (phase complete) - go to RefereeNode for state management
+    else:
+        route_target = "RefereeNode"
+        logger.info("[PhaseNode] No feedback needed - routing to RefereeNode for state management")
+    
     # === DETAILED OUTPUT LOGGING ===
-    logger.info(f"[PhaseNode][OUTPUT] Command goto: ActionExecutor")
+    logger.info(f"[PhaseNode][OUTPUT] Command goto: {route_target}")
     logger.info(f"[PhaseNode][OUTPUT] Updates keys: {list(phasenode_outputs.keys())}")
     logger.info(f"[PhaseNode][OUTPUT] Updates current_phase_id: {phasenode_outputs.get('current_phase_id')}")
-    logger.info(f"[PhaseNode][OUTPUT] Updates player_states: {phasenode_outputs.get('player_states', 'NOT_SET')}")
-    logger.info(f"[PhaseNode][OUTPUT] Updates playerActions: NOT_INCLUDED")
+    logger.info(f"[PhaseNode][OUTPUT] need_feed_back_dict: {need_feed_back_dict}")
     
     return Command(
-        goto="RoleAssignmentNode",
+        goto=route_target,
         update=phasenode_outputs
     )
 
@@ -1950,7 +2056,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     Execute actions from DSL and current phase by calling frontend tools.
     Audience-aware rendering: always choose explicit audience permissions per component
     and render public, group, and individual UIs according to the DSL phase design.
-    Can make announcements based on RefereeNode conclusions.
+    Can make announcements based on referee_conclusions.
     """
     # Print game name from state
     game_name = state.get("gameName", "")
@@ -1987,7 +2093,12 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
         logger.info(f"[ActionExecutor][DEBUG] Received player_states: {state.get('player_states', {})}")
     
     # 1. Define the model
-    model = init_chat_model("openai:gpt-4.1")
+    model = ChatAnthropic(
+        model="claude-haiku-4-5-20251001",
+        api_key=os.getenv("ANTHROPIC_API_KEY"),
+        temperature=0.7,
+        max_tokens=4096
+    )
 
     # 2. Prepare and bind frontend tools to the model
     def _extract_tool_name(tool: Any) -> Optional[str]:
@@ -2048,7 +2159,6 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     dsl_content = state.get("dsl", {})
     declaration = dsl_content.get('declaration', {}) if dsl_content else {}
     player_states = state.get("player_states", {})
-    referee_conclusions = state.get("referee_conclusions", [])
     playerActions = state.get("playerActions", {})
     
     # Get current phase details
@@ -2056,6 +2166,14 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     # Try both int and string keys to handle YAML parsing variations
     current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
     
+    # Log referee_conclusions for debugging
+    referee_conclusions = state.get('referee_conclusions', [])
+    logger.info(f"[ActionExecutor] Referee Conclusions Count: {len(referee_conclusions)}")
+    if referee_conclusions:
+        logger.info(f"[ActionExecutor] Current Referee Conclusions: {referee_conclusions}")
+    else:
+        logger.info(f"[ActionExecutor] No Referee Conclusions Available")
+
     # Generate actions from DSL phase if not explicitly provided
     actions_to_execute = state.get("actions", []) or []
     if not actions_to_execute and current_phase:
@@ -2088,9 +2206,9 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             f"itemsState (current frontend layout): {items_summary}\n"
             f"player_states: {player_states}\n"
             f"playerActions: {playerActions}\n"
-            f"referee_conclusions: {referee_conclusions}\n"
             f"{current_phase_str}\n"
             f"phase history: {state.get('phase_history', [])}\n" 
+            f"referee_conclusions: {referee_conclusions if referee_conclusions else 'None'}\n"
             f"dsl_info: {dsl_info}\n"
             f"declaration: {declaration}\n"
             "GAME DSL REFERENCE (for understanding game flow):\n"
@@ -2098,12 +2216,13 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             f"Actions to execute: {actions_to_execute}\n\n"
  
             "📋 **DM CORE RESPONSIBILITIES** (Master these completely):\n"
-            "1. **SPEAKER MANAGEMENT**: Always identify who is the current speaker this round\n"
-            "2. **ROUND CONCLUSIONS**: Understand what happened last round and what was concluded\n"
-            "3. **PERSISTENT DISPLAYS**: Know what information must stay visible on screen always\n"
-            "4. **DISCUSSION TOPICS**: Decide what players should be discussing this round\n"
-            "5. **RULE MASTERY**: Deeply understand the game rules and DSL inside-out\n"
-            "6. **SCREEN STATE AWARENESS**: Use itemsState to know what players currently see\n"
+            "1. **REFEREE CONCLUSIONS AWARENESS**: Read referee_conclusions for critical state changes and UI guidance\n"
+            "2. **DEAD PLAYER FILTERING**: NEVER create voting options for players with is_alive=false\n"
+            "3. **SPEAKER MANAGEMENT**: Always identify who is the current speaker this round\n"
+            "4. **ROUND CONCLUSIONS**: Understand what happened last round and what was concluded\n"
+            "5. **PERSISTENT DISPLAYS**: Know what information must stay visible on screen always\n"
+            "6. **RULE MASTERY**: Deeply understand the game rules and DSL inside-out\n"
+            "7. **SCREEN STATE AWARENESS**: Use itemsState to know what players currently see\n"
             "7. **COMPONENT LIFECYCLE**: Determine what UI components to keep vs delete vs create\n"
             "8. **DELETE BEFORE CREATE**: You MUST delete outdated components before creating new ones\n"
             "9. **ROUND OBJECTIVES**: Clearly understand what this round is trying to achieve\n"
@@ -2124,14 +2243,27 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "  • CRITICAL: Include proper audience permissions on each component (audience_type=true for public; or audience_type=false with audience_ids list)\n"
             "**Examples**: deleteItem('existing_id') + createPhaseIndicator(audience_type=true) + createActionButton(audience_ids=['2'])\n\n"
             
+            "📝 **USER INPUT COLLECTION**: For games requiring player text input (like Two Truths and a Lie statements):\n"
+            "• Use createTextInputPanel() - creates floating input panel at bottom of screen\n"
+            "• Perfect for: statement collection, confession phases, text-based responses\n"
+            "• Position: Fixed at bottom center of canvas for easy access\n"
+            "• Example: createTextInputPanel(title='Enter your statements', placeholder='Type your 3 statements...', audience_ids=['1'])\n\n"
+            
             "🚨 **ABSOLUTE PROHIBITION**: NEVER return with ONLY deleteItem calls - THIS IS TASK FAILURE!\n"
             "**MANDATORY CREATE REQUIREMENT**: Every deleteItem MUST be followed by create tools in SAME response!\n"
             "**EXECUTION PATTERN**: deleteItem(wo'abc7') + createPhaseIndicator() + createTimer() + createVotingPanel()\n"
             "⚡ **COMPLETE PHASE EXECUTION**: Execute delete + create actions for current_phase in ONE response!\n"
             "**Role Selection**: Analyze player_states - Werewolves: role='Werewolf', Alive: is_alive=true, Human: always ID '1'\n"
             "**Timers**: ~10 seconds (max 20), Phase indicators at 'top-center', Layout: 'center' default\n"
-            "**DEFAULT VISIBILITY**: Unless explicitly private/group-targeted, make items PUBLIC with audience_type=true.\n"
-            "**UI POSITION PRIORITY**: Always use 'center' first. Priority order: center → center-top → top-center → bottom-center → middle-left → middle-right. Only use next priority if current position is occupied.\n\n"
+            "**DEFAULT VISIBILITY**: Unless explicitly private/group-targeted, make items PUBLIC with audience_type=true.\n\n"
+            
+            "📝 **REFEREE CONCLUSIONS CRITICAL USAGE RULES**:\n"
+            "• **🔴 CRITICAL notes**: Indicate player deaths - MUST exclude these players from all UI\n"
+            "• **🚫 UI FILTER notes**: Explicitly tell you which players to exclude from voting/targeting\n"
+            "• **⚠️ VOTING STATUS notes**: Show who hasn't voted - create reminders for these players\n"
+            "• **🎯 DECISION notes**: Show automatic decisions made - incorporate into UI context\n"
+            "• **🤖 BOT REMINDER notes**: Indicate which bots need UI for actions\n"
+            "• ALWAYS read referee_conclusions FIRST before creating any voting panels or target selection UI\n\n"
             
             "🎭 **CRITICAL ROLE ASSIGNMENT RULE** (Phase 1 'Role Assignment'):\n"
             "**MANDATORY ROLE TRANSPARENCY**: When assigning roles, you MUST inform each player of their identity! Don't hide the role from the player who has the role.\n"
@@ -2141,6 +2273,14 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "  • Each character card is visible ONLY to its assigned player (private audience)\n"
             "  • Example: Player 1 gets Detective card (only they see it), Player 2 gets Werewolf card (only they see it)\n"
             "**ROLE CARD REQUIREMENT**: Every player with a role must receive their own private character card!\n\n"
+            
+            f"🚨 **PHASE 1 ENFORCEMENT** - Current phase_id is {current_phase_id}:\n"
+            "IF current_phase_id == 1 (Role Assignment):\n"
+            "  • You MUST create createCharacterCard for each player showing their specific role\n"
+            f"  • Current player_states show these roles: {[(pid, pdata.get('role', 'NO_ROLE')) for pid, pdata in player_states.items()]}\n"
+            "  • Create one createCharacterCard for each player with their actual role from player_states\n"
+            "  • Use audience_type=false and audience_ids=[player_id] for each card\n"
+            "  • DO NOT create generic role assignment messages - CREATE SPECIFIC ROLE CARDS!\n\n"
             
             "🔧 TOOL USAGE:\n"
             "- Exact tool names (no prefixes), capture returned IDs for reuse\n"
@@ -2259,7 +2399,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
                 logger.info(f"[ActionExecutor][GUARD] Merged deletion + creation tool calls: {len(merged_calls)} total")
             else:
                 logger.warning("[ActionExecutor][GUARD] Follow-up produced no creation calls; using original deletions only.")
-    except Exception as e:
+    except Exception:
         logger.exception("[ActionExecutor][GUARD] Creation follow-up failed")
 
     # Do not change phase here; PhaseNode is authoritative for transitions
@@ -2272,18 +2412,11 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
 
     # Actions completed, end execution; mark phase 0 UI as done so InitialRouter won't loop back
     logger.info(f"[ActionExecutor][end] === ENDING ===")
-    # Determine if this response contains frontend tool calls
-    tool_calls = getattr(response, "tool_calls", []) or []
-    has_frontend_tool_calls = bool(tool_calls)
-    
     # === DETAILED OUTPUT LOGGING ===
     logger.info(f"[ActionExecutor][OUTPUT] Command goto: END")
     logger.info(f"[ActionExecutor][OUTPUT] final_player_states: {final_player_states}")
     logger.info(f"[ActionExecutor][OUTPUT] updated_phase_id: {updated_phase_id}")
-    
-    # Check if currently in progress (similar to agent.py logic)
-    plan_status = state.get("planStatus", "")
-    currently_in_progress = (plan_status == "in_progress")
+
 
     return Command(
         goto="__end__",
@@ -2293,6 +2426,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "items": state.get("items", []),
             "player_states": final_player_states,  # Updated with role assignments
             "current_phase_id": updated_phase_id,
+            "current_phase_name": get_phase_info_from_dsl(updated_phase_id, dsl_content)[1],
             "actions": [],  # Clear actions after execution
             "dsl": state.get("dsl", {}),  # Persist DSL
             "roomSession": state.get("roomSession", {}),  # Persist roomSession
@@ -2303,18 +2437,16 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
 # Define the workflow graph
 workflow = StateGraph(AgentState)
 
-# Add all nodes
+# Add all nodes - Keep InitialRouterNode as entry, BotBehaviorNode routes to PhaseNode
 workflow.add_node("InitialRouterNode", InitialRouterNode)
 workflow.add_node("ChatBotNode", ChatBotNode)
-workflow.add_node("FeedbackDecisionNode", FeedbackDecisionNode)
-workflow.add_node("BotBehaviorNode", BotBehaviorNode)
+workflow.add_node("BotBehaviorNode", BotBehaviorNode) 
 workflow.add_node("RefereeNode", RefereeNode)
 workflow.add_node("PhaseNode", PhaseNode)
 workflow.add_node("RoleAssignmentNode", RoleAssignmentNode)
 workflow.add_node("ActionExecutor", ActionExecutor)
-# workflow.add_node("ActionValidatorNode", ActionValidatorNode)
 
-# Set entry point
+# Keep InitialRouterNode as entry point
 workflow.set_entry_point("InitialRouterNode")
 
 # Compile the graph (LangGraph API handles persistence itself in local_dev/cloud)

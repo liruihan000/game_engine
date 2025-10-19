@@ -192,7 +192,7 @@ phases:
         panel to confirm "Statements Ready" when prepared
       tools:
       - createTextDisplay
-      - createVotingPanel
+      - createTextInputPanel
     completion_criteria:
       type: player_action
       description: Speaker has confirmed that their three statements are ready via

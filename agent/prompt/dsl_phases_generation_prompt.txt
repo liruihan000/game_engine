@@ -164,7 +164,7 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
     - Role-specific instructions (Speaker vs Guesser guidance)  
     - State management (tracking turns, votes, scores)
     - Progressive disclosure (revealing information at right moments)
-    - Text collection phases: Use displayBroadcastInput for collecting statements, responses, or descriptions from players
+    - Text collection phases: Use createTextInputPanel for collecting statements, responses, or descriptions from players
     - Card-based elements: Use createHandsCard for displaying card-like information with audience targeting (player hands, role cards, etc.)
     - Score tracking phases: Use createScoreBoard for displaying current rankings, final results, and progress tracking with audience targeting
     - Component persistence and updates: Use update tools (updateScoreBoard, updateTextDisplay, etc.) to modify existing components instead of recreating them
@@ -194,104 +194,81 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
   - Timer adjustments: Use `updateTimer` instead of delete+create cycle
   - Content changes: Use `updateTextDisplay` for information updates
 
-- createTextDisplay: Create a text panel.
-  - params: name (string), content (string), position (string), title? (string), type? ("info" | "warning" | "error" | "success"), audience_type? (boolean), audience_ids? (string[])
-- createPhaseIndicator: Create a phase indicator.
-  - params: name (string), currentPhase (string), position (string), description? (string), timeRemaining? (number), audience_type? (boolean), audience_ids? (string[])
-- createActionButton: Create an action button.
-  - params: name (string), label (string), action (string), enabled (boolean), position (string), size? ("small" | "medium" | "large"), variant? ("primary" | "secondary" | "danger"), audience_type? (boolean), audience_ids? (string[])
-- createCharacterCard: Create a character card.
-  - params: name (string), role (string), position (string), size? ("small" | "medium" | "large"), description? (string), audience_type? (boolean), audience_ids? (string[])
-- createVotingPanel: Create a voting UI for ANY player choice or decision. Use this for all player selections including voting, role selection, target selection, yes/no decisions, multiple choice questions.
-  - params: name (string), votingId (string), options (string[]), position (string), title? (string), audience_type? (boolean), audience_ids? (string[])
-- createAvatarSet: Create an avatar set for players.
-  - params: name (string), avatarType ("human" | "wolf" | "dog" | "cat"), audience_type? (boolean), audience_ids? (string[])
-- createResultDisplay: Create a result display (large gradient text).
-  - params: name (string), content (string), position (string), audience_type? (boolean), audience_ids? (string[])
-- createBackgroundControl: Create background color control panel.
-  - params: name (string), backgroundColor? ("white" | "gray-900" | "blue-50" | "green-50" | "purple-50"), audience_type? (boolean), audience_ids? (string[])
-- changeBackgroundColor: Change background color.
-  - params: name (string), backgroundColor? ("white" | "gray-900" | "blue-50" | "green-50" | "purple-50")
-- deleteItem: Delete a specific item by id.
-  - params: itemId (string)
-- markPlayerDead: Mark a player as dead (avatar grayed out).
-  - params: playerId (string), playerName (string)
-- createTimer: Create a timer component that counts down and notifies the Agent when expired.
-  - params: name (string), duration (number, seconds), label? (string), audience_type? (boolean), audience_ids? (string[])
-- createHandsCard: Create a hand card component for card games.
-  - params: name (string), cardType (string), cardName (string), position (string), descriptions? (string), color? (string), audience_type? (boolean), audience_ids? (string[])
-- updateHandsCard: Update an existing hand card component.
-  - params: itemId (string), cardType? (string), cardName? (string), descriptions? (string), color? (string)
-- setHandsCardAudience: Set audience permissions for an existing hand card.
-  - params: itemId (string), audience_type (boolean), audience_ids? (string[])
-- createHandsCardForPlayer: Create a hand card specifically targeted for a player.
-  - params: name (string), playerId (string), cardType (string), cardName (string), descriptions? (string), color? (string), position? (string)
-- displayBroadcastInput: Display a broadcast input box for collecting text.
-  - params: title? (string), placeholder? (string), prefill? (string)
-- createScoreBoard: Create a score board component to display player rankings and scores.
-  - params: name (string), entries (array), position (string), title? (string), sort? ("asc" | "desc"), accentColor? (string), audience_type? (boolean), audience_ids? (string[])
-- updateScoreBoard: Update scoreboard meta (title/sort/accentColor/position).
-  - params: itemId (string), title? (string), sort? ("asc" | "desc"), accentColor? (string), position? (string)
-- setScoreBoardEntries: Replace all score entries.
-  - params: itemId (string), entries (array)
-- upsertScoreEntry: Add or update a single score entry.
-  - params: itemId (string), entryId (string), name? (string), score? (number)
-- removeScoreEntry: Remove a single score entry by id.
-  - params: itemId (string), entryId (string)
-- createCoinDisplay: Create a coin/currency display component.
-  - params: name (string), count? (number), position? (string), currency? (string), accentColor? (string), showLabel? (boolean), audience_type? (boolean), audience_ids? (string[])
-- updateCoinDisplay: Update an existing coin display.
-  - params: itemId (string), count? (number), currency? (string), accentColor? (string), showLabel? (boolean)
-- incrementCoinCount: Increment/decrement the coin count.
-  - params: itemId (string), delta (number)
-- setCoinAudience: Set audience for coin display.
-  - params: itemId (string), audience_type (boolean), audience_ids? (string[])
-- createStatementBoard: Create a 1–3 statement board (Two Truths and a Lie).
-  - params: name (string), statements? (string[]), highlightIndex? (number), locked? (boolean), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
-- updateStatementBoard: Update a statement board.
-  - params: itemId (string), statements? (string[]), highlightIndex? (number), locked? (boolean), accentColor? (string)
-- createReactionTimer: Create a reaction/challenge timer bar.
-  - params: name (string), duration? (number, seconds), label? (string), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
-- startReactionTimer: Start a reaction timer (and optionally set duration).
-  - params: itemId (string), duration? (number)
-- stopReactionTimer: Pause/stop a reaction timer.
-  - params: itemId (string)
-- resetReactionTimer: Reset a reaction timer to idle.
-  - params: itemId (string)
-- createTurnIndicator: Create an active turn/speaker pill.
-  - params: name (string), currentPlayerId (string), playerName? (string), label? (string), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
-- updateTurnIndicator: Update the turn indicator.
-  - params: itemId (string), currentPlayerId? (string), playerName? (string), label? (string), accentColor? (string), position? (string)
-- createHealthDisplay: Create a health/bullets indicator.
-  - params: name (string), value? (number), max? (number), style? ("hearts"|"bullets"), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
-- updateHealthDisplay: Update the health display.
-  - params: itemId (string), value? (number), max? (number), style? (string), accentColor? (string), position? (string)
-- createInfluenceSet: Create a Coup influence set of 2 cards.
-  - params: name (string), ownerId (string), cards? (array of {name, revealed}), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
-- updateInfluenceSet: Update influence set fields.
-  - params: itemId (string), ownerId? (string), cards? (array), accentColor? (string), position? (string)
-- revealInfluenceCard: Reveal/hide one influence card by index.
-  - params: itemId (string), index (number 0|1), revealed? (boolean)
-- updatePhaseIndicator: Update an existing phase indicator component.
-  - params: itemId (string), currentPhase? (string), description? (string), timeRemaining? (number)
-- updateTextDisplay: Update an existing text display component.
-  - params: itemId (string), content? (string), title? (string), type? ("info" | "warning" | "error" | "success")
-- updateActionButton: Update an existing action button component.
-  - params: itemId (string), label? (string), action? (string), enabled? (boolean), variant? ("primary" | "secondary" | "danger")
-- updateCharacterCard: Update an existing character card component.
-  - params: itemId (string), role? (string), description? (string), size? ("small" | "medium" | "large")
-- updateVotingPanel: Update an existing voting panel component.
-  - params: itemId (string), options? (string[]), title? (string), votingId? (string)
- - submitVote: Submit a vote for the current player without clicking.
-  - params: votingId (string), option (string)
-- updateResultDisplay: Update an existing result display component.
-  - params: itemId (string), content? (string)
-- updateTimer: Update an existing timer component.
-  - params: itemId (string), duration? (number), label? (string)
-- setItemPosition: Set the position of an existing component.
-  - params: itemId (string), position (string)
-- clearCanvas: Clear all items from the canvas except avatar sets.
-  - params: (no parameters)
+## TOOL CATALOG (Categorized, with descriptions and types)
+
+### Basic Operations
+- setGlobalTitle: Set the global page title. Types: title (string)
+- setGlobalDescription: Set the global page subtitle/description. Types: description (string)
+- setItemName: Rename an existing item by id. Types: itemId (string), name (string)
+- setItemSubtitleOrDescription: Set an item's subtitle/short description. Types: itemId (string), subtitleOrDescription (string)
+- setItemPosition: Change an item's position on the grid. Types: itemId (string), position (string)
+- deleteItem: Delete an item by id. Types: itemId (string)
+- clearCanvas: Clear all canvas items except avatar sets. Types: (none)
+
+### Core Game Components
+- createCharacterCard: Create a character card (role, position, size, description). Types: name (string), role (string), position (string), size? ("small"|"medium"|"large"), description? (string), audience_type? (boolean), audience_ids? (string[])
+- updateCharacterCard: Update existing character card properties. Types: itemId (string), role? (string), position? (string), size? ("small"|"medium"|"large"), description? (string)
+- createActionButton: Create an action button (label, action, enabled, position). Types: name (string), label (string), action (string), enabled (boolean), position (string), size? ("small"|"medium"|"large"), variant? ("primary"|"secondary"|"danger"), audience_type? (boolean), audience_ids? (string[])
+- updateActionButton: Update existing action button properties. Types: itemId (string), label? (string), action? (string), enabled? (boolean), position? (string), variant? ("primary"|"secondary"|"danger")
+- createPhaseIndicator: Create a phase indicator (currentPhase, position, timer). Types: name (string), currentPhase (string), position (string), timeRemaining? (number), description? (string), audience_type? (boolean), audience_ids? (string[])
+- updatePhaseIndicator: Update existing phase indicator properties. Types: itemId (string), currentPhase? (string), timeRemaining? (number), description? (string), position? (string)
+- createTextDisplay: Create a text panel (content, title, type, position). Types: name (string), content (string), position (string), title? (string), type? ("info"|"warning"|"error"|"success"), audience_type? (boolean), audience_ids? (string[])
+- updateTextDisplay: Update existing text display content. Types: itemId (string), content? (string), title? (string), type? ("info"|"warning"|"error"|"success")
+- createVotingPanel: Create a voting panel (votingId, options, position). Types: name (string), votingId (string), options (string[]), position (string), title? (string), audience_type? (boolean), audience_ids? (string[])
+- updateVotingPanel: Update existing voting panel options. Types: itemId (string), options? (string[]), title? (string), votingId? (string)
+
+### Player System
+- createAvatarSet: Create player avatars overlay (avatarType). Types: name (string), avatarType ("human"|"wolf"|"dog"|"cat"), audience_type? (boolean), audience_ids? (string[])
+- markPlayerDead: Mark a player as dead (affects avatar display). Types: playerId (string), playerName (string)
+- createPlayerStatesDisplay: Display current player states in scrollable panel. Types: name (string), position (string), audience_type? (boolean), audience_ids? (string[])
+- createPlayerActionsDisplay: Display player actions log in scrollable panel. Types: name (string), position (string), audience_type? (boolean), audience_ids? (string[])
+
+### Timer System
+- createTimer: Create countdown timer that expires and notifies agent. Types: name (string), duration (number), label? (string), audience_type? (boolean), audience_ids? (string[])
+- updateTimer: Update existing timer duration or label. Types: itemId (string), duration? (number), label? (string)
+- createReactionTimer: Create quick reaction/challenge timer bar. Types: name (string), duration? (number), label? (string), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
+- startReactionTimer: Start a reaction timer countdown. Types: itemId (string), duration? (number)
+- stopReactionTimer: Stop a reaction timer. Types: itemId (string)
+- resetReactionTimer: Reset reaction timer to initial state. Types: itemId (string)
+
+### Visual Effects
+- changeBackgroundColor: Create background control and set initial color. Types: name (string), backgroundColor ("white"|"gray-900"|"blue-50"|"green-50"|"purple-50")
+- createBackgroundControl: Create background color control component. Types: name (string), backgroundColor? ("white"|"gray-900"|"blue-50"|"green-50"|"purple-50"), audience_type? (boolean), audience_ids? (string[])
+- createResultDisplay: Create large gradient-styled result display. Types: name (string), content (string), position (string), audience_type? (boolean), audience_ids? (string[])
+- updateResultDisplay: Update result display content. Types: itemId (string), content? (string)
+- createNightOverlay: Create night overlay with title and blur. Types: name (string), title? (string), blur? (number), visible? (boolean), audience_type? (boolean), audience_ids? (string[])
+- setNightOverlay: Update night overlay visibility and properties. Types: itemId (string), visible? (boolean), title? (string), blur? (number)
+
+### Card Games
+- createHandsCard: Create hand card for card games (cardType, cardName). Types: name (string), cardType (string), cardName (string), position (string), descriptions? (string), color? (string), audience_type? (boolean), audience_ids? (string[])
+- createHandsCardForPlayer: Create hand card for specific player. Types: name (string), playerId (string), cardType (string), cardName (string), descriptions? (string), color? (string), position? (string)
+- updateHandsCard: Update hand card properties. Types: itemId (string), cardType? (string), cardName? (string), descriptions? (string), color? (string)
+- setHandsCardAudience: Set hand card audience visibility. Types: itemId (string), audience_type (boolean), audience_ids? (string[])
+
+### Scoring System
+- createScoreBoard: Create score board with player entries. Types: name (string), entries (array), position (string), title? (string), sort? ("asc"|"desc"), accentColor? (string), audience_type? (boolean), audience_ids? (string[])
+- updateScoreBoard: Update score board entries and properties. Types: itemId (string), title? (string), sort? ("asc"|"desc"), accentColor? (string), position? (string)
+- upsertScoreEntry: Add or update a score entry. Types: itemId (string), entryId (string), name? (string), score? (number)
+- removeScoreEntry: Remove score entry by player id. Types: itemId (string), entryId (string)
+
+### Health/Status
+- createHealthDisplay: Create health/bullets display (value, max, style). Types: name (string), value? (number), max? (number), style? ("hearts"|"bullets"), position? (string), audience_type? (boolean), audience_ids? (string[])
+- updateHealthDisplay: Update health display values. Types: itemId (string), value? (number), max? (number), style? (string), position? (string)
+- createInfluenceSet: Create influence cards set (Coup-style games). Types: name (string), ownerId (string), cards? (array of {name, revealed}), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
+- updateInfluenceSet: Update influence set properties. Types: itemId (string), ownerId? (string), cards? (array), accentColor? (string), position? (string)
+- revealInfluenceCard: Reveal influence card by index. Types: itemId (string), index (number), revealed? (boolean)
+
+### Special Input & Turns
+- createTextInputPanel: Create text input panel for user input. Types: name (string), title? (string), placeholder? (string), prefill? (string), audience_type? (boolean), audience_ids? (string[])
+- createStatementBoard: Create statement board for Two Truths and a Lie. Types: name (string), statements? (string[]), highlightIndex? (number), locked? (boolean), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
+- updateStatementBoard: Update statement board content. Types: itemId (string), statements? (string[]), highlightIndex? (number), locked? (boolean), accentColor? (string)
+- createTurnIndicator: Create turn indicator showing current active player. Types: name (string), currentPlayerId (string), playerName? (string), label? (string), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
+- updateTurnIndicator: Update turn indicator properties. Types: itemId (string), currentPlayerId? (string), playerName? (string), label? (string), accentColor? (string), position? (string)
+
+### Interaction System
+- addBotChatMessage: Add bot message to chat. Types: speaker? (string), content (string)
+- promptUserText: Open dialog for user text input with speaker. Types: title? (string), placeholder? (string), prefill? (string), speaker? (string)
+- submitVote: Submit vote for voting panels. Types: votingId (string), option (string)
 
 Notes:
 - Always choose actions.tools from the current phase only; do not schedule next-phase tools early.

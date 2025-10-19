@@ -21,6 +21,18 @@ from langchain.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage, BaseMessage
 from langchain.tools import tool
 import json
+import uuid
+import time
+
+# Global state version counter for monotonic versioning
+_state_version_counter = 0
+
+def get_next_state_version() -> int:
+    """Get next monotonic state version number."""
+    global _state_version_counter
+    _state_version_counter += 1
+    return _state_version_counter
+
 # Monitoring configuration
 VERBOSE_LOGGING = True  # Set to False to disable detailed logging
 
@@ -70,12 +82,15 @@ class AgentState(CopilotKitState):
     gameName: str = ""  # Current game DSL name (e.g., "werewolf", "coup")
     dsl: dict = {}
     # need_feed_back_dict: dict = {}
-    referee_conclusions: List[str] = []
     roomSession: Dict[str, Any] = {}  # Room session data from frontend
     # Chat-specific fields for chatbot synchronization
     playerActions: Dict[str, Any] = {}  # Player actions
     phase_history: List[Dict[str, Any]] = []  # Phase transition history
     game_notes: List[str] = []  # Game events, state changes, and decision reminders
+    # Version control fields for state synchronization
+    stateVersion: int = 0  # Monotonic version number
+    stateTimestamp: float = 0.0  # Unix timestamp
+    updatedBy: str = ""  # Which node updated the state
 
 
 def get_phase_info_from_dsl(phase_id: int, dsl_content: dict) -> tuple[dict, str]:
@@ -865,6 +880,17 @@ async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Comman
     final_dsl = dsl_content if dsl_content else state.get("dsl", {})
     updates["dsl"] = final_dsl
     
+    # Generate monotonic state version for InitialRouter updates
+    state_version = get_next_state_version()
+    timestamp = time.time()
+    
+    logger.info(f"[State Version] {state_version} - Phase {current_phase_id} - Updated by InitialRouter at {timestamp}")
+    
+    # Add version control to updates (avoid underscore prefix for CopilotKit compatibility)
+    updates["stateVersion"] = state_version
+    updates["stateTimestamp"] = timestamp
+    updates["updatedBy"] = "InitialRouter"
+    
     return Command(goto="BotBehaviorNode", update=updates)
 
 async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Literal["__end__"]]:
@@ -944,63 +970,63 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
 
     # Enhanced LLM system for intelligent bot chat responses
     system_prompt = f"""
-🤖 **INTELLIGENT BOT CHAT SYSTEM**
+    🤖 **INTELLIGENT BOT CHAT SYSTEM**
 
-📊 **GAME CONTEXT**:
-- Current Phase: {current_phase_id}
-- Player States: {player_states}
-- Player Actions: {playerActions}
-- Game Notes: {game_notes if game_notes else 'None'}
+    📊 **GAME CONTEXT**:
+    - Current Phase: {current_phase_id}
+    - Player States: {player_states}
+    - Player Actions: {playerActions}
+    - Game Notes: {game_notes if game_notes else 'None'}
 
-🚫 **MANDATORY LIFE STATUS CHECK**:
-- Dead players: {[f"Player {pid} ({data.get('name', f'Bot {pid}')})" for pid, data in player_states.items() if not data.get('is_alive', True) and pid != "1"]}
-- Living bots: {[f"Player {pid} ({data.get('name', f'Bot {pid}')}): {data.get('role', 'Unknown role')}" for pid, data in player_states.items() if data.get('is_alive', True) and pid != "1"]}
-- **CRITICAL**: Dead players CANNOT speak or respond to chat - exclude them entirely!
+    🚫 **MANDATORY LIFE STATUS CHECK**:
+    - Dead players: {[f"Player {pid} ({data.get('name', f'Bot {pid}')})" for pid, data in player_states.items() if not data.get('is_alive', True) and pid != "1"]}
+    - Living bots: {[f"Player {pid} ({data.get('name', f'Bot {pid}')}): {data.get('role', 'Unknown role')}" for pid, data in player_states.items() if data.get('is_alive', True) and pid != "1"]}
+    - **CRITICAL**: Dead players CANNOT speak or respond to chat - exclude them entirely!
 
-💬 **USER MESSAGE**: {last_msg.content}
+    💬 **USER MESSAGE**: {last_msg.content}
 
-🎯 **BOT SELECTION STRATEGY**:
-**STEP 0 - MANDATORY LIFE STATUS VALIDATION**:
-• **BEFORE selecting ANY bot**: Verify the target bot has is_alive=true
-• **NEVER select dead players**: Dead players cannot speak in chat
-• **Skip to next option**: If targeted bot is dead, find alternative living bot
+    🎯 **BOT SELECTION STRATEGY**:
+    **STEP 0 - MANDATORY LIFE STATUS VALIDATION**:
+    • **BEFORE selecting ANY bot**: Verify the target bot has is_alive=true
+    • **NEVER select dead players**: Dead players cannot speak in chat
+    • **Skip to next option**: If targeted bot is dead, find alternative living bot
 
-**STEP 1 - Direct Targeting Detection**:
-• Check for direct mentions: "@Player2", "Player 3", specific bot names
-• If found AND bot is alive: Use that specific bot to respond
-• If found BUT bot is dead: Select different living bot to acknowledge the death
+    **STEP 1 - Direct Targeting Detection**:
+    • Check for direct mentions: "@Player2", "Player 3", specific bot names
+    • If found AND bot is alive: Use that specific bot to respond
+    • If found BUT bot is dead: Select different living bot to acknowledge the death
 
-**STEP 2 - Context-Based Selection**:
-• If user asks about specific roles: Use living bot with that role
-• If user makes accusations: Let accused bot defend themselves (if alive)
-• If general chat: Choose most talkative/relevant living bot
+    **STEP 2 - Context-Based Selection**:
+    • If user asks about specific roles: Use living bot with that role
+    • If user makes accusations: Let accused bot defend themselves (if alive)
+    • If general chat: Choose most talkative/relevant living bot
 
-**STEP 3 - Multi-Bot Probability** (20% chance):
-• Sometimes 2-3 bots respond in sequence
-• Use different perspectives (suspicious vs friendly)
-• Keep responses short when multiple bots talk
+    **STEP 3 - Multi-Bot Probability** (20% chance):
+    • Sometimes 2-3 bots respond in sequence
+    • Use different perspectives (suspicious vs friendly)
+    • Keep responses short when multiple bots talk
 
-🎭 **RESPONSE GENERATION RULES**:
-• **Stay in Character**: Each bot has distinct personality based on their role
-• **Game Context**: Reference current phase and recent events
-• **Natural Language**: Avoid robotic responses, use game slang
-• **Appropriate Length**: Single sentence to short paragraph
+    🎭 **RESPONSE GENERATION RULES**:
+    • **Stay in Character**: Each bot has distinct personality based on their role
+    • **Game Context**: Reference current phase and recent events
+    • **Natural Language**: Avoid robotic responses, use game slang
+    • **Appropriate Length**: Single sentence to short paragraph
 
-🚨 **EXECUTION REQUIREMENTS**:
-0. **CRITICAL: VERIFY BOT IS ALIVE** - Check is_alive=true before calling addBotChatMessage
-1. **Always call addBotChatMessage** for selected bot(s) - ONLY if they are alive
-2. **Use exact player IDs** (e.g., "2", "3", not "Player 2") 
-3. **Include bot's actual name** from player_states
-4. **Set messageType: "message"**
-5. **NO text output** - only tool calls
-6. **Dead player response**: If user mentions dead player, use living bot to say "Player X is no longer with us"
+    🚨 **EXECUTION REQUIREMENTS**:
+    0. **CRITICAL: VERIFY BOT IS ALIVE** - Check is_alive=true before calling addBotChatMessage
+    1. **Always call addBotChatMessage** for selected bot(s) - ONLY if they are alive
+    2. **Use exact player IDs** (e.g., "2", "3", not "Player 2") 
+    3. **Include bot's actual name** from player_states
+    4. **Set messageType: "message"**
+    5. **NO text output** - only tool calls
+    6. **Dead player response**: If user mentions dead player, use living bot to say "Player X is no longer with us"
 
-📋 **RESPONSE EXAMPLES BY ROLE**:
-• **Werewolf**: Deflect suspicion, act innocent, subtly mislead
-• **Doctor**: Be helpful, logical, protective instincts
-• **Detective/Seer**: Ask probing questions, share insights carefully
-• **Villager**: React emotionally, make accusations, seek alliances
-"""
+    📋 **RESPONSE EXAMPLES BY ROLE**:
+    • **Werewolf**: Deflect suspicion, act innocent, subtly mislead
+    • **Doctor**: Be helpful, logical, protective instincts
+    • **Detective/Seer**: Ask probing questions, share insights carefully
+    • **Villager**: React emotionally, make accusations, seek alliances
+    """
     
     try:
         response = await model_with_tools.ainvoke([SystemMessage(content=system_prompt)])
@@ -1141,6 +1167,23 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
             "• If completion_criteria is met, no actions needed\n\n"
             
             "**STEP 4 - Current Phase Action Generation**:\n"
+            "🚨 **CRITICAL OUTPUT FORMAT**: Generate SPECIFIC CONTENT with EXACT DETAILS!\n"
+            "• Two Truths and a Lie → Output actual statements: 'I've been to Japan', 'I can juggle', 'I own five cats'\n"
+            "• Werewolf voting → Output specific decision: 'voted to eliminate Player 3'\n"
+            "• Results phase → PRECISE acknowledgment: 'I see statement 2 (I like dogs) was the lie, I guessed correctly'\n"
+            "• NOT descriptions like: 'Player 2 is ready to share statements' ❌\n"
+            "• NOT vague reactions like: 'Player acknowledged the results' ❌\n"
+            "• ALWAYS include statement numbers AND content when discussing results\n\n"
+            
+            "🗳️ **VOTING PHASES REQUIREMENT**:\n"
+            "When phase requires voting, bots MUST specify their exact vote choice:\n"
+            "• 'voted for Player 3 to be eliminated' ✅\n"
+            "• 'voted that statement 2 is the lie' ✅\n"
+            "• 'chose option 1 in the voting panel' ✅\n"
+            "• NOT 'participated in voting' ❌\n"
+            "• NOT 'is considering their vote' ❌\n"
+            "• Include specific target/choice - never leave votes vague!\n\n"
+            
             "• Generate PRECISE actions based ONLY on current phase requirements:\n"
             "  - Werewolf: \"coordinated with other werewolves and voted to eliminate [target]. Your action must include the exactly target player ID name and the action type.\"\n"
             "  - Doctor: \"chose to protect [target](player DI and name)from werewolf attacks\"\n"
@@ -1209,7 +1252,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
             "• Round completion → Next player → \"completed turn successfully, setting up advantage for next phase\"\n"
             "• Scoring → Final results → \"accumulated points strategically, positioning for final victory\"\n\n"
             
-            "⚡ **EXECUTION**: Only call update_player_actions for bots who still need to act. NO text output."
+            "⚡ **EXECUTION**: Call update_player_actions with CONCRETE GAME CONTENT. NO text output - only tool calls."
         )
     )
     
@@ -1367,6 +1410,56 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             "1. **State Updates**: Process actions → update player_states (highest priority)\n"
             "2. **Game Notes**: Record events, decisions, and reminders for all nodes\n"
             "3. **Phase-Aware Analysis**: Use current + next phase info for smarter decisions\n\n"
+            
+            "📋 **CRITICAL STATE UPDATE RULES**:\n"
+            "🚨 **UNDERSTAND PLAYER STATES FIRST**: Carefully read declaration.player_states definitions!\n"
+            "• Each field has specific meaning and update conditions\n"
+            "• speaker_rounds_completed: Only increment AFTER player actually completed their speaker turn to 1\n"
+            "• is_speaker: Only update based on actual game flow, not speculation\n"
+            "• statements_published: Only set to true AFTER statements are actually shared\n"
+            "• DO NOT fabricate or assume state changes - base on actual evidence\n"
+            "• Example: speaker_rounds_completed += 1 ONLY after player finished speaking phase\n"
+            "• Example: is_speaker = False ONLY when speaker role actually transitions\n"
+            "• TIMING MATTERS: Update states when events actually happen, not when anticipated\n\n"
+            
+            "🗳️ **STRICT PLAYER ACTIONS ANALYSIS RULE**:\n"
+            "🚨 **CRITICAL**: Only use ACTUAL data from playerActions - NEVER use example values!\n"
+            "• Find each player's LATEST action: highest timestamp AND matching current phase name\n"
+            "• Extract EXACT vote choices, targets, statements from actual playerActions content\n"
+            "• Example process: If playerActions shows 'Player 2 voted for statement 1' → vote_choice=1\n"
+            "• If playerActions shows 'shared statements: I love dogs, I hate cats, I own 5 birds' → use THESE exact statements\n"
+            "• FORBIDDEN: Using example values like 'I've been to Japan' when playerActions says different\n"
+            "• FORBIDDEN: Inventing vote results not present in playerActions\n"
+            "• MANDATORY: Cross-reference action timestamp and phase name before processing\n"
+            "• UPDATE game_notes with ACTUAL OUTCOMES from playerActions data only\n"
+            "• UPDATE player_states based on REAL actions, not hypothetical examples\n\n"
+            
+            "📝 **GAME NOTES WRITING STANDARDS**:\n"
+            "✅ CORRECT: 'Player 1 voted statement 2 (correct +1 point), Player 3 voted statement 1 (wrong +0 points)'\n"
+            "❌ WRONG: 'Players voted', 'differing votes', 'All players have voted'\n"
+            "✅ CORRECT: 'Player 2 (speaker) chose statement 2 as lie, earned +0 points this round'\n"
+            "❌ WRONG: 'Voting completed', 'votes received and recorded'\n"
+            "✅ CORRECT: 'Round totals: Player 1: 5 points, Player 2: 3 points, Player 3: 2 points'\n"
+            "RULE: Always specify WHO did WHAT with exact POINTS EARNED and TOTAL SCORES\n\n"
+            
+            "🚫 **VOTING VALIDATION & ERROR HANDLING**:\n"
+            "1. Check voting eligibility BEFORE updating player_states:\n"
+            "   • can_vote=true AND is_speaker=false (for statement voting)\n"
+            "2. If invalid vote detected:\n"
+            "   • DO NOT call update_player_state for vote_choice\n"
+            "   • Record in game_notes: 'Player X vote invalid - is current speaker'\n"
+            "3. Only process and record VALID votes from eligible players\n\n"
+            
+            "🏆 **SCORING & RESULTS RECORDING**:\n"
+            "After voting phase, MUST do:\n"
+            "1. Get correct answer from player_states: speaker's 'chosen_lie' field\n"
+            "2. Compare votes: 'Player 1 voted X (correct/wrong), Player 3 voted Y (correct/wrong)'\n"
+            "3. UPDATE player_states scores: Call update_player_state for each player's new total score\n"
+            "4. Record detailed results in game_notes:\n"
+            "   • Round outcome: 'Player 1 voted 2 (correct), Player 3 voted 1 (wrong)'\n"
+            "   • Score changes: 'Player 1: +1 point, Player 2: +0 points, Player 3: +0 points'\n"
+            "   • Current totals: 'Total scores - Player 1: 3 points, Player 2: 1 point, Player 3: 2 points'\n"
+            "MANDATORY: Update both player_states scores AND record complete results in game_notes\n\n"
             
             "🔮 **PHASE-AWARE DECISION MAKING**:\n"
             f"**Current Phase Analysis** ({current_phase.get('name', 'Unknown')}):\n"
@@ -1570,7 +1663,6 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
         goto="PhaseNode",
         update={
             "player_states": current_player_states,
-            "referee_conclusions": conclusions,
             "game_notes": current_game_notes,
             "roomSession": state.get("roomSession", {}),
             "dsl": state.get("dsl", {}),
@@ -1888,6 +1980,13 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             "- EXCEPTION: True loops (DSL explicitly defines next_phase_id = current_phase_id for iteration)\n"
             "- EXCEPTION: Explicit wait_for conditions not yet met (incomplete voting, pending player actions)\n\n"
             
+            "🚨 **TIMER COMPLETION RULE**:\n"
+            "If current phase completion_criteria.type == 'timer', the condition is ALREADY satisfied!\n"
+            "• Timer expiration triggered PhaseNode - condition is met by definition\n"
+            "• IMMEDIATELY advance to next_phase - no additional waiting required\n"
+            "• Do NOT check for other conditions when timer is the completion criteria\n"
+            "• Timer phases are automatically ready for transition\n\n"
+            
             "NEXT_PHASE CONDITION ANALYSIS:\n"
             "1. Examine the current_phase's next_phase field for conditional branches\n"
             "2. Evaluate each condition against current player_states and game context\n"
@@ -2168,7 +2267,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
         logger.info(f"[ActionExecutor][DEBUG] Received player_states: {state.get('player_states', {})}")
     
     # 1. Define the model
-    model = init_chat_model("openai:gpt-4.1")
+    model = init_chat_model("openai:gpt-4.1-mini")
 
     # 2. Prepare and bind frontend tools to the model
     def _extract_tool_name(tool: Any) -> Optional[str]:
@@ -2229,7 +2328,6 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     dsl_content = state.get("dsl", {})
     declaration = dsl_content.get('declaration', {}) if dsl_content else {}
     player_states = state.get("player_states", {})
-    referee_conclusions = state.get("referee_conclusions", [])
     playerActions = state.get("playerActions", {})
     
     # Get current phase details
@@ -2272,17 +2370,15 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
         content=(
             "🎯 **YOU ARE THE DM (DUNGEON MASTER / GAME MASTER)**\n"
             "As the DM, you have complete responsibility for running this game. You must:\n\n"
-            
              "📊 **CURRENT GAME STATE** (Analyze these carefully):\n"
             f"itemsState (current frontend layout): {items_summary}\n"
+            f"{current_phase_str}\n"
             f"player_states: {player_states}\n"
             f"playerActions: {playerActions}\n"
-            f"referee_conclusions: {referee_conclusions}\n"
-            f"{current_phase_str}\n"
             f"phase history: {state.get('phase_history', [])}\n" 
             f"game_notes: {game_notes if game_notes else 'None'}\n"
-            f"dsl_info: {dsl_info}\n"
-            f"declaration: {declaration}\n"
+            # f"dsl_info: {dsl_info}\n"
+            f"Game Description: {declaration.get('description', 'No description available')}\n"
             "GAME DSL REFERENCE (for understanding game flow):\n"
             "🎯 ACTION EXECUTOR:\n"
             f"Actions to execute: {actions_to_execute}\n\n"
@@ -2295,10 +2391,17 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "5. **PERSISTENT DISPLAYS**: Know what information must stay visible on screen always\n"
             "6. **RULE MASTERY**: Deeply understand the game rules and DSL inside-out\n"
             "7. **SCREEN STATE AWARENESS**: Use itemsState to know what players currently see\n"
-            "7. **COMPONENT LIFECYCLE**: Determine what UI components to keep vs delete vs create\n"
-            "8. **DELETE BEFORE CREATE**: You MUST delete outdated components before creating new ones\n"
-            "9. **ROUND OBJECTIVES**: Clearly understand what this round is trying to achieve\n"
-            "10. **PROGRESSION CONDITIONS**: Know what conditions move the game to the next round\n\n"
+            "8. **COMPONENT LIFECYCLE**: Determine what UI components to keep vs delete vs create\n"
+            "9. **DELETE BEFORE CREATE**: You MUST delete outdated components before creating new ones\n"
+            "10. **ROUND OBJECTIVES**: Clearly understand what this round is trying to achieve\n"
+            "11. **PROGRESSION CONDITIONS**: Know what conditions move the game to the next round\n"
+            "🚨 **SCORE CALCULATION RULE**: NEVER invent scores - use ONLY:\n"
+            "• player_states: Get lie_index (correct answer) and vote_choice (player votes)\n"
+            "• Example: if lie_index=1, then statements[1] is the lie\n"
+            "• Compare each player's vote_choice with lie_index to determine correct/wrong\n"
+            "• Display: 'Statement 2 (I've never broken a bone) was the lie. Player A voted 3 (wrong), Player B voted 1 (wrong)'\n"
+            "• Use actual statements[] array content, not invented examples\n\n"
+            "11.  **If you need you post some text, use createTextInputPanel() - creates floating input panel at bottom of screen\n"
             
             "🧒 **TREAT PLAYERS LIKE CHILDREN**: Give maximum information - they know NOTHING!\n"
             "- Explain everything clearly and simply\n"
@@ -2321,14 +2424,27 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "• Position: Fixed at bottom center of canvas for easy access\n"
             "• Example: createTextInputPanel(title='Enter your statements', placeholder='Type your 3 statements...', audience_ids=['1'])\n\n"
             
+            "🏆 **GAME RESULT ANNOUNCEMENT RULE**:\n"
+            "When announcing game results/winners, base conclusions on ACTUAL DATA:\n"
+            "• Use player_states (scores, is_alive, role, etc.) for factual information\n"
+            "• Use playerActions to understand what players actually did\n"
+            "• Reference recent game_notes for context and decisions\n"
+            "• DO NOT fabricate or guess results - only state verified facts\n"
+            "• Example: 'Player 2 won with 5 points' (from player_states.score)\n"
+            "• Example: 'Village won - all werewolves eliminated' (from player_states.is_alive)\n"
+            "• NO speculation, NO invented details - stick to observable data\n\n"
+            
             "🚨 **ABSOLUTE PROHIBITION**: NEVER return with ONLY deleteItem calls - THIS IS TASK FAILURE!\n"
             "**MANDATORY CREATE REQUIREMENT**: Every deleteItem MUST be followed by create tools in SAME response!\n"
             "**EXECUTION PATTERN**: deleteItem(wo'abc7') + createPhaseIndicator() + createTimer() + createVotingPanel()\n"
             "⚡ **COMPLETE PHASE EXECUTION**: Execute delete + create actions for current_phase in ONE response!\n"
             "**Role Selection**: Analyze player_states - Werewolves: role='Werewolf', Alive: is_alive=true, Human: always ID '1'\n"
-            "**Timers**: ~10 seconds (max 20), Phase indicators at 'top-center', Layout: 'center' default\n"
+            "**Timers**: ~10 seconds (max 15), Layout: 'center' default\n"
+            "**PHASE INDICATORS**: Always place at 'top-center' position (reserved for phase indicators)\n"
             "**DEFAULT VISIBILITY**: Unless explicitly private/group-targeted, make items PUBLIC with audience_type=true.\n\n"
-            
+            "**UI POSITION PRIORITY**: Always use 'center' first. Priority order: center → top-center → bottom-center. Only use next priority if current position is occupied.\n\n"
+            "**CRITICAL**: there must be at least one tool set position='center'; createPhaseIndicator(position='top-center'); createTextDisplay(position='top-center'='center' | 'middle-left'  | 'middle-right'| 'bottom')\n\n"
+
             "📝 **GAME NOTES CRITICAL USAGE RULES**:\n"
             "• **🔴 CRITICAL notes**: Indicate player deaths - MUST exclude these players from all UI\n"
             "• **🚫 UI FILTER notes**: Explicitly tell you which players to exclude from voting/targeting\n"
@@ -2356,7 +2472,6 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             
             "🔧 TOOL USAGE:\n"
             "- Exact tool names (no prefixes), capture returned IDs for reuse\n"
-            f"- Total tools to call this turn: {sum(len(action.get('tools', [])) for action in actions_to_execute if isinstance(action, dict))}\n"
         )
     )
 
@@ -2489,6 +2604,12 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     logger.info(f"[ActionExecutor][OUTPUT] final_player_states: {final_player_states}")
     logger.info(f"[ActionExecutor][OUTPUT] updated_phase_id: {updated_phase_id}")
 
+    # Generate monotonic state version
+    state_version = get_next_state_version()
+    timestamp = time.time()
+    
+    logger.info(f"[State Version] {state_version} - Phase {updated_phase_id} - Updated by ActionExecutor at {timestamp}")
+
     return Command(
         goto="__end__",
         update={
@@ -2502,6 +2623,10 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "dsl": state.get("dsl", {}),  # Persist DSL
             "roomSession": state.get("roomSession", {}),  # Persist roomSession
             "phase0_ui_done": True if updated_phase_id == 0 else state.get("phase0_ui_done", True),
+            # 🔑 Monotonic version control (avoid underscore prefix for CopilotKit compatibility)
+            "stateVersion": state_version,
+            "stateTimestamp": timestamp,
+            "updatedBy": "ActionExecutor",
         }
     )
 

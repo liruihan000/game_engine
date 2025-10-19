@@ -21,36 +21,34 @@ import type { AgentState, PlanStep, Item, ItemData, CardType, GamePosition, Char
 
 // === Unified Game Title and Phase Display System ===
 
-// ✅ Optimized game title component - using unified state management
+// ✅ Optimized game title component - using unified state management without flicker
 function GameTitle({ viewState, titleClasses }: { viewState: AgentState; titleClasses: string }) {
   const [mounted, setMounted] = useState(false);
   const { gameTitle } = useUnifiedGameState(viewState);  // 🎯 Get all logic in one line
-
+  
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  if (!mounted) {
-    return <div className={cn(titleClasses, "text-2xl font-semibold")}>Game Engine</div>;
-  }
-
-  return <div className={cn(titleClasses, "text-2xl font-semibold")}>{gameTitle}</div>;  // 🚀 Concise!
+  
+  // Use stable default during hydration to prevent mismatch
+  const displayTitle = mounted ? gameTitle : 'Game Engine';
+  
+  return <div className={cn(titleClasses, "text-2xl font-semibold")}>{displayTitle}</div>;
 }
 
-// ✅ Optimized game phase component - using unified state management
+// ✅ Optimized game phase component - using unified state management without flicker
 function GamePhaseInfo({ viewState, titleClasses }: { viewState: AgentState; titleClasses: string }) {
   const [mounted, setMounted] = useState(false);
   const { phaseDisplay } = useUnifiedGameState(viewState);  // 🎯 Get all logic in one line
-
+  
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  if (!mounted) {
-    return <div className={cn(titleClasses, "mt-2 text-sm leading-6")}>AI-Powered Game Engine</div>;
-  }
-
-  return <div className={cn(titleClasses, "mt-2 text-sm leading-6")}>{phaseDisplay}</div>;  // 🚀 Concise!
+  
+  // Use stable default during hydration to prevent mismatch
+  const displayPhase = mounted ? phaseDisplay : 'AI-Powered Game Engine';
+  
+  return <div className={cn(titleClasses, "mt-2 text-sm leading-6")}>{displayPhase}</div>;
 }
 
 // ✅ Unified game state management system - define once, reuse everywhere
@@ -158,7 +156,7 @@ export default function CopilotKitPage() {
         if (gameContext && roomSession) {
           const context = JSON.parse(gameContext);
           const room = JSON.parse(roomSession);
-          console.log('🎮 Game initialized from sessionStorage:', { gameName: context.gameName, players: room.players?.length });
+          // console.log('🎮 Game initialized from sessionStorage:', { gameName: context.gameName, players: room.players?.length });
           return {
             ...initialState,
             gameName: context.gameName,
@@ -181,8 +179,18 @@ export default function CopilotKitPage() {
 
   const { appendMessage } = useCopilotChat();
 
+  // Execution state to prevent concurrent operations
+  const [isExecuting, setIsExecuting] = useState(false);
+
   // Unified user interaction handler - replaces scattered state logic
   const handleUserInteraction = useCallback(async (content: string, actionType?: string) => {
+    // Prevent concurrent executions
+    if (isExecuting) {
+      console.log('⚠️ Operation already in progress, skipping...');
+      return;
+    }
+
+    setIsExecuting(true);
     try {
       // Ensure state integrity
       const currentState = state ?? initialState;
@@ -242,11 +250,19 @@ export default function CopilotKitPage() {
       }
     } catch (error) {
       console.error('User interaction failed:', error);
+    } finally {
+      setIsExecuting(false);
     }
-  }, [state, setState, appendMessage]);
+  }, [state, setState, appendMessage, isExecuting]);
 
   // Handle action button clicks
   const handleButtonClick = useCallback(async (item: Item) => {
+    // Prevent concurrent executions
+    if (isExecuting) {
+      console.log('⚠️ Operation already in progress, skipping button click...');
+      return;
+    }
+
     const buttonData = item.data as ActionButtonData;
     
     // Use unified interaction handling
@@ -254,7 +270,7 @@ export default function CopilotKitPage() {
       `Button "${item.name}" (ID: ${item.id}) has been clicked. Action: ${buttonData.action}`,
       'button_click'
     );
-  }, [handleUserInteraction]);
+  }, [handleUserInteraction, isExecuting]);
 
   // Handle voting
   const handleVote = useCallback(async (votingId: string, playerId: string, option: string) => {
@@ -286,24 +302,16 @@ export default function CopilotKitPage() {
     );
   }, [setState, handleUserInteraction]);
 
-  // Global cache for the last non-empty agent state with version protection
+  // Simple cache for the last non-empty agent state
   const cachedStateRef = useRef<AgentState>(state ?? initialState);
+  
   useEffect(() => {
     if (isNonEmptyAgentState(state)) {
       const newState = state as AgentState;
-      const currentPhaseId = newState.current_phase_id;
-      const cachedPhaseId = cachedStateRef.current.current_phase_id;
-      
-      // 🛡️ Phase version protection: only update if phase is same or newer
-      if (currentPhaseId === undefined || cachedPhaseId === undefined || currentPhaseId >= cachedPhaseId) {
-        console.log(`🔄 State updated: Phase ${cachedPhaseId} → ${currentPhaseId}`);
-        cachedStateRef.current = newState;
-      } else {
-        console.warn(`🚫 Blocked phase rollback: Phase ${currentPhaseId} < ${cachedPhaseId}`);
-      }
+      cachedStateRef.current = newState;
     }
   }, [state]);
-  // we use viewState to avoid transient flicker; TODO: troubleshoot and remove this workaround
+  // Use latest state when available, fall back to cached state to prevent flicker
   const viewState: AgentState = isNonEmptyAgentState(state) ? (state as AgentState) : cachedStateRef.current;
 
   // Handle chat messages with bot selection
@@ -1067,7 +1075,7 @@ export default function CopilotKitPage() {
     parameters: [
       { name: "name", type: "string", required: true, description: "Item name" },
       { name: "content", type: "string", required: true, description: "Main text content" },
-      { name: "position", type: "string", required: true, description: "Grid position (select: 'top-left' | 'top-center' | 'top-right' | 'middle-left' | 'center' | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
+      { name: "position", type: "string", required: true, description: "Grid position (select: 'center' | 'top-left' | 'top-center' | 'top-right' | 'middle-left'  | 'middle-right' | 'bottom-left' | 'bottom-center' | 'bottom-right')" },
       { name: "title", type: "string", required: false, description: "Optional title text" },
       { name: "type", type: "string", required: false, description: "Display type (select: 'info' | 'warning' | 'error' | 'success')" },
       { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
@@ -1260,15 +1268,11 @@ export default function CopilotKitPage() {
       { name: "name", type: "string", required: true, description: "Timer name" },
       { name: "duration", type: "number", required: true, description: "Timer duration in seconds" },
       { name: "label", type: "string", required: false, description: "Optional label to display above timer" },
-      { name: "audience_type", type: "boolean", required: false, description: "Whether all players can see this (true) or only specific players (false). Default: true" },
-      { name: "audience_ids", type: "string[]", required: false, description: "Array of player IDs who can see this component (only used when audience_type=false)." },
     ],
-    handler: ({ name, duration, label, audience_type, audience_ids }: {
+    handler: ({ name, duration, label }: {
       name: string;
       duration: number;
       label?: string;
-      audience_type?: boolean;
-      audience_ids?: string[];
     }) => {
       const normalized = (name ?? "").trim();
       
@@ -1286,8 +1290,8 @@ export default function CopilotKitPage() {
         duration: duration || 60,
         label: label || "",
         position: "top-left" as GamePosition,
-        audience_type: audience_type ?? true,
-        audience_ids: audience_ids ?? []
+        audience_type: true, // Force all timers to be public
+        audience_ids: [] // Clear audience restrictions
       };
       
       const timerId = addItem("timer", name, data);
@@ -1666,10 +1670,8 @@ export default function CopilotKitPage() {
       { name: "label", type: "string", required: false },
       { name: "accentColor", type: "string", required: false },
       { name: "position", type: "string", required: false },
-      { name: "audience_type", type: "boolean", required: false },
-      { name: "audience_ids", type: "string[]", required: false },
     ],
-    handler: ({ name, duration, label, accentColor, position, audience_type, audience_ids /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    handler: ({ name, duration, label, accentColor, position /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
 }: any) => {
       const normalized = (name ?? "").trim();
       if (normalized) {
@@ -1683,8 +1685,8 @@ export default function CopilotKitPage() {
         label: label || "Reaction Window",
         accentColor: accentColor || "#22c55e",
         position: normalizePosition(position) || "top-center",
-        audience_type: audience_type ?? true,
-        audience_ids: audience_ids ?? [],
+        audience_type: true, // Force all reaction timers to be public
+        audience_ids: [], // Clear audience restrictions
       };
       return addItem("reaction_timer", name, data);
     },
@@ -2832,12 +2834,13 @@ export default function CopilotKitPage() {
                 variant="default" 
                 size="lg"
                 className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-8 py-3"
+                disabled={isExecuting}
                 onClick={async () => {
                   // Use unified interaction handling
                   await handleUserInteraction("Continue", "continue_game");
                 }}
               >
-                Continue
+                {isExecuting ? "Processing..." : "Continue"}
               </Button>
             </div>
           )}

@@ -51,6 +51,7 @@ This section defines the core rules and data structures of the game, loaded befo
         - Example: "revealed": boolean for controlling information disclosure
 - **player_states_template** (object): Template with player ID 1 and default values.
 - **players_example** (object): Example with numeric player IDs starting from 1.
+- players_example.tools (array): REQUIRED. List all UI tools the game will use in phases. This is a manifest to guide later nodes and validation. Use only supported tool names (see tool catalog); include inputs like createTextInputPanel when text collection is needed.
 - **audience_groups** (object, optional): Define logical player groups for permission targeting and UI visibility control.
     - Each key: group name (e.g., "werewolves", "villagers", "alive_players", "secret_holders").
     - Each value: object with `description` and `selection_criteria`.
