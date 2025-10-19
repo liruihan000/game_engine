@@ -56,7 +56,12 @@ pnpm dev  # launches frontend (:3000) + backend (:8123)
 4. The generated **YAML file** will be saved automatically in the **game directory**.  
 5. Open the **Game Library** at **`:3000`**, and you’ll see the newly created game.  
    - If a game with the same name already exists, it will be **overwritten**.
+  
+### Gameplay Guide
 
+1. Currently, only "Create Room" is available. The "Join Room" feature is a reserved interface for future multiplayer mode.
+
+2. Due to the bot design, after completing a phase, please click “Continue” or wait for the timer to end to proceed to the next round.
 
 ---
 
