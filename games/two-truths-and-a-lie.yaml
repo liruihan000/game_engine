@@ -191,12 +191,10 @@ phases:
     - description: Show private instructions to speaker and create a private voting
         panel to confirm "Statements Ready" when prepared
       tools:
-      - createTextDisplay
       - createTextInputPanel
     completion_criteria:
       type: player_action
-      description: Speaker has confirmed that their three statements are ready via
-        a voting panel, and relevant player state (player_states) has been updated.
+      description: Speaker has submit their three statements.
       wait_for: single_player_choice
       target_players:
         description: Current speaker player

@@ -171,7 +171,7 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
     - Role-specific instructions (Speaker vs Guesser guidance)  
     - State management (tracking turns, votes, scores)
     - Progressive disclosure (revealing information at right moments)
-    - Text collection phases: Use createTextInputPanel for collecting statements, responses, or descriptions from players
+    - Text collection phases: Use createTextInputPanel for collecting statements, responses, or descriptions from players (NO additional confirmation buttons needed)
     - Card-based elements: Use createHandsCard for displaying card-like information with audience targeting (player hands, role cards, etc.)
     - Score tracking phases: Use createScoreBoard for displaying current rankings, final results, and progress tracking with audience targeting
     - Component persistence and updates: Use update tools (updateScoreBoard, updateTextDisplay, etc.) to modify existing components instead of recreating them
@@ -273,7 +273,7 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 - revealInfluenceCard: Reveal influence card by index. Types: itemId (string), index (number), revealed? (boolean)
 
 ### Special Input & Turns
-- createTextInputPanel: Create text input panel for user input. Types: name (string), title? (string), placeholder? (string), prefill? (string), audience_type? (boolean), audience_ids? (string[])
+- createTextInputPanel: Create text input panel for user input. **IMPORTANT**: This is sufficient for player statements/responses - NO additional buttons or voting panels needed for validation. Types: name (string), title? (string), placeholder? (string), prefill? (string), audience_type? (boolean), audience_ids? (string[])
 - createStatementBoard: Create statement board for Two Truths and a Lie. Types: name (string), statements? (string[]), highlightIndex? (number), locked? (boolean), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
 - updateStatementBoard: Update statement board content. Types: itemId (string), statements? (string[]), highlightIndex? (number), locked? (boolean), accentColor? (string)
 - createTurnIndicator: Create turn indicator showing current active player. Types: name (string), currentPlayerId (string), playerName? (string), label? (string), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])

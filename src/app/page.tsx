@@ -2640,14 +2640,28 @@ export default function CopilotKitPage() {
                           return null;
                         }
                         
-                        const actions = Object.entries(playerData.actions)
-                          .map(([actionId, actionData]: [string, any]) => ({
-                            actionId,
-                            phase: actionData?.phase || '',
-                            timestamp: actionData?.timestamp || 0,
-                            action: actionData?.action || ''
-                          }))
-                          .sort((a, b) => b.timestamp - a.timestamp);
+                        // Handle case where actions might be a string or nested object
+                        let actions: any[] = [];
+                        
+                        if (typeof playerData.actions === 'string') {
+                          // If actions is a string, treat as single action
+                          actions = [{
+                            actionId: 'single',
+                            phase: playerData.phase || '',
+                            timestamp: playerData.timestamp || Date.now(),
+                            action: playerData.actions
+                          }];
+                        } else if (typeof playerData.actions === 'object' && playerData.actions !== null) {
+                          // If actions is an object, process entries
+                          actions = Object.entries(playerData.actions)
+                            .map(([actionId, actionData]: [string, any]) => ({
+                              actionId,
+                              phase: actionData?.phase || '',
+                              timestamp: actionData?.timestamp || 0,
+                              action: actionData?.action || ''
+                            }))
+                            .sort((a, b) => b.timestamp - a.timestamp);
+                        }
                         
                         return (
                           <div key={playerId} className="p-3 bg-card border border-border rounded-lg">
@@ -2777,6 +2791,43 @@ export default function CopilotKitPage() {
                           className="relative pb-20 rounded-[18px] border border-[#2a3f2f]/40 ring-1 ring-[#1a2d20]/40 bg-[radial-gradient(80%_80%_at_30%_20%,#1b5e2a_0%,#155c2b_55%,#0e4a22_100%)] overflow-hidden"
                           data-canvas-container
                         >
+                          {/* Text Input Panel - Fixed at center bottom */}
+                          {broadcastOpen && (
+                            <div 
+                              className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50"
+                              style={{ gridArea: 'bottom-center' }}
+                            >
+                              <BroadcastInput
+                                open={broadcastOpen}
+                                title={pendingBroadcast?.title || "Input"}
+                                placeholder={pendingBroadcast?.placeholder || "Type your message..."}
+                                initialValue={pendingBroadcast?.prefill || ""}
+                                onConfirm={async (text: string) => {
+                                  // Add a system-style message to chat (local memory store)
+                                  const sysMessage: ChatMessage = {
+                                    id: `bc-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+                                    playerId: "broadcast",
+                                    playerName: "Input",
+                                    message: text,
+                                    timestamp: Date.now(),
+                                    type: 'system',
+                                  };
+                                  setChatMessages(prev => [...prev, sysMessage]);
+                                  // Sync minimal info to shared state for agent context
+                                  setState(prev => ({ ...(prev ?? initialState), lastBroadcast: text } as AgentState));
+                                  // Notify agent
+                                  await handleUserInteraction(`Input: ${text}`, 'text_input');
+                                  // Close UI
+                                  setBroadcastOpen(false);
+                                  setPendingBroadcast(null);
+                                }}
+                                onClose={() => {
+                                  setBroadcastOpen(false);
+                                  setPendingBroadcast(null);
+                                }}
+                              />
+                            </div>
+                          )}
                       {/* Render all 9 region containers */}
                       {(["top-left", "top-center", "top-right", "middle-left", "center", "middle-right", "bottom-left", "bottom-center", "bottom-right"] as GamePosition[]).map(position => {
                         const itemsInRegion = (viewState.items ?? []).filter(item => {
@@ -2962,36 +3013,6 @@ export default function CopilotKitPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Floating Broadcast Input */}
-      <BroadcastInput
-        open={broadcastOpen}
-        title={pendingBroadcast?.title || "Broadcast"}
-        placeholder={pendingBroadcast?.placeholder || "Type a broadcast message..."}
-        initialValue={pendingBroadcast?.prefill || ""}
-        onConfirm={async (text: string) => {
-          // Add a system-style message to chat (local memory store)
-          const sysMessage: ChatMessage = {
-            id: `bc-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-            playerId: "broadcast",
-            playerName: "Broadcast",
-            message: text,
-            timestamp: Date.now(),
-            type: 'system',
-          };
-          setChatMessages(prev => [...prev, sysMessage]);
-          // Sync minimal info to shared state for agent context
-          setState(prev => ({ ...(prev ?? initialState), lastBroadcast: text } as AgentState));
-          // Notify agent
-          await handleUserInteraction(`Broadcast: ${text}`, 'broadcast');
-          // Close UI
-          setBroadcastOpen(false);
-          setPendingBroadcast(null);
-        }}
-        onClose={() => {
-          setBroadcastOpen(false);
-          setPendingBroadcast(null);
-        }}
-      />
     </div>
   );
 }
