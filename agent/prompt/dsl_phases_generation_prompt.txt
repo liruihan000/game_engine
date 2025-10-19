@@ -129,10 +129,32 @@ Each phase object must contain the following fields:
     - **Loop Logic (Looping):** To implement a loop, simply point the `id` in the next phase object to a phase that has already been executed (i.e., the start node of the loop).
 
 
+
+
 ## AVAILABLE FRONTEND TOOLS (exact names and parameters)
+
+
 
 Use only the tools listed below. Tool names must match exactly (no `functions.` prefix).
 When you create items (e.g., via `createTextDisplay`), capture the returned id (e.g., `0002`) and reuse it in later calls that require `itemId` (e.g., `deleteItem`). Do not pass the item name; always pass the exact id. To delete multiple items, call `deleteItem` once per `itemId`.
+
+    🧹 **CLEANUP RULE**:
+    - **FIRST ACTION UI CLEANUP**: If the first action of a phase needs to create new UI components, include deleteItem for specific cleanup when appropriate
+    - **IMPLEMENTATION**: Add deleteItem to the first action's tool list when UI cleanup is needed
+    - ✅ CORRECT: "Delete previous voting panel and create phase indicator" with tools: [deleteItem, createPhaseIndicator]  
+    - ❌ WRONG: Separate action for cleanup only without creation
+
+    🏆 **CRITICAL SCORING RULE**:
+    - Any phase involving scores, points, rankings, or results MUST use scoreBoard tools
+    - ✅ CORRECT: Use createScoreBoard, updateScoreBoard, upsertScoreEntry
+    - ❌ WRONG: Use createTextDisplay or createResultDisplay for scores
+    - **MANDATORY**: All scoring phases require proper scoreBoard components for tracking
+
+    🛠️ **TOOL SELECTION REMINDER**:
+    - **BEFORE writing any action with tools**: Review the complete tool list below to select appropriate tools
+    - **CHECK AVAILABLE TOOLS**: Ensure you use tools that actually exist in the tool list
+    - **MATCH PURPOSE TO TOOL**: Select tools that match the action's intended purpose
+    - **EXAMPLE**: For voting → check tool list → find createVotingPanel, not createVotePanel
 
 🎯 **Audience Permissions System**: Each player has their own private screen with granular visibility controls. UI components should explicitly set audience permissions for optimal privacy and game experience.
 
@@ -186,7 +208,7 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 ## **COMPONENT LIFECYCLE MANAGEMENT**:
 
 - **Create vs Update Strategy**: 
-  - Use **create*** tools when you need a new component or after clearCanvas
+  - Use **create*** tools when you need a new component or after deleting previous items
   - Use **update*** tools when modifying existing components from previous phases
   - **Both are necessary**: create for new elements, update for progressive changes
   - Consider component lifecycle: some components persist across phases, others are phase-specific
@@ -211,26 +233,7 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 - setItemSubtitleOrDescription: Set an item's subtitle/short description. Types: itemId (string), subtitleOrDescription (string)
 - setItemPosition: Change an item's position on the grid. Types: itemId (string), position (string)
 - deleteItem: Delete an item by id. **IMPORTANT**: Cannot be used alone - must always be combined with create/update tools in same action. Types: itemId (string)
-- clearCanvas: Clear all canvas items except avatar sets. **IMPORTANT**: Cannot be used alone - must always be combined with create/update tools in same action. Types: (none)
 
-🚨 **CRITICAL CLEANUP RULE**: 
-- "Clear UI" actions must ALWAYS include both cleanup AND creation/update in the SAME action
-- NEVER create separate actions that only clear/delete without creating new content
-- ✅ CORRECT: "Clear UI and display final victory message" 
-- ❌ WRONG: "Clear voting UI from previous phase" (cleanup only)
-- ✅ CORRECT: "Clear previous UI and create new phase indicator"
-
-🏆 **CRITICAL SCORING RULE**:
-- Any phase involving scores, points, rankings, or results MUST use scoreBoard tools
-- ✅ CORRECT: Use createScoreBoard, updateScoreBoard, upsertScoreEntry
-- ❌ WRONG: Use createTextDisplay or createResultDisplay for scores
-- **MANDATORY**: All scoring phases require proper scoreBoard components for tracking
-
-🛠️ **TOOL SELECTION REMINDER**:
-- **BEFORE writing any action with tools**: Review the complete tool list below to select appropriate tools
-- **CHECK AVAILABLE TOOLS**: Ensure you use tools that actually exist in the tool list
-- **MATCH PURPOSE TO TOOL**: Select tools that match the action's intended purpose
-- **EXAMPLE**: For voting → check tool list → find createVotingPanel, not createVotePanel
 
 ### Core Game Components
 - createCharacterCard: Create a character card (role, position, size, description). Types: name (string), role (string), position (string), size? ("small"|"medium"|"large"), description? (string), audience_type? (boolean), audience_ids? (string[])
@@ -354,8 +357,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Role Assignment"
   description: "Randomly assign roles to players and display each player's specific role using three-tier audience targeting for maximum privacy."
   actions:
-    - description: "TIER 1 - PUBLIC: Create public phase indicator visible to all players"
-      tools: [createPhaseIndicator]
+    - description: "TIER 1 - PUBLIC: Delete previous UI items and create public phase indicator visible to all players"
+      tools: [deleteItem, createPhaseIndicator]
     - description: "TIER 1 - PUBLIC: Create general announcement about role assignment process"
       tools: [createTextDisplay]
     - description: "TIER 3 - INDIVIDUAL: Create individual character cards - each card visible only to its assigned player using audience_ids=['playerId'] targeting"
@@ -376,8 +379,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Role Assignment"
   description: "Allow players to choose their roles sequentially using voting panels with audience targeting for privacy."
   actions:
-    - description: "Create public phase indicator showing current assignment status"
-      tools: [createPhaseIndicator]
+    - description: "Delete previous UI items and create public phase indicator showing current assignment status"
+      tools: [deleteItem, createPhaseIndicator]
     - description: "Create voting panel for current player only - visible only to player who needs to select role"
       tools: [createVotingPanel]
     - description: "Create status display for other players showing assignment progress"
@@ -406,8 +409,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Night — Werewolves Choose Target"
   description: "Alive werewolves coordinate privately and vote to select a single elimination target."
   actions:
-    - description: "Create public phase indicator for werewolf night phase"
-      tools: [createPhaseIndicator]
+    - description: "Delete previous UI items and create public phase indicator for werewolf night phase"
+      tools: [deleteItem, createPhaseIndicator]
     - description: "Create private voting panel for alive werewolves to choose an alive target"
       tools: [createVotingPanel]
     - description: "Show waiting message to all alive non-werewolf players"
@@ -454,8 +457,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Team Strategy Phase"
   description: "Red team members discuss strategy while Blue team waits."
   actions:
-    - description: "Create public phase indicator for team strategy phase"
-      tools: [createPhaseIndicator]
+    - description: "Delete previous UI items and create public phase indicator for team strategy phase"
+      tools: [deleteItem, createPhaseIndicator]
     - description: "Create strategy panel for Red team members only"
       tools: [createVotingPanel]
     - description: "Show waiting message for Blue team players"
@@ -502,8 +505,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Player Turn Action"
   description: "Current player performs their action while others wait for their turn."
   actions:
-    - description: "Create public phase indicator showing current player's turn"
-      tools: [createPhaseIndicator]
+    - description: "Delete previous UI items and create public phase indicator showing current player's turn"
+      tools: [deleteItem, createPhaseIndicator]
     - description: "Create action buttons for current player only"
       tools: [createActionButton]
     - description: "Create turn indicator and waiting message for other players"
@@ -531,8 +534,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Voting Phase"
   description: "All surviving players vote to select a player to eliminate with targeted UI components."
   actions:
-    - description: "Create public phase indicator visible to all players"
-      tools: [createPhaseIndicator]
+    - description: "Delete previous UI items and create public phase indicator visible to all players"
+      tools: [deleteItem, createPhaseIndicator]
     - description: "Create voting panel visible to all surviving players only"
       tools: [createVotingPanel]
     - description: "Create status display for dead players showing they cannot vote"
@@ -575,8 +578,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Doctor's Night Action"
   description: "Doctor chooses whether to use antidote with three-tier audience targeting for optimal privacy and information flow."
   actions:
-    - description: "TIER 1 - PUBLIC: Create public phase indicator showing night action phase (visible to all)"
-      tools: [createPhaseIndicator]
+    - description: "TIER 1 - PUBLIC: Delete previous UI items and create public phase indicator showing night action phase (visible to all)"
+      tools: [deleteItem, createPhaseIndicator]
     - description: "TIER 1 - PUBLIC: Create timer visible to all showing remaining time"
       tools: [createTimer]
     - description: "TIER 2 - GROUP: Create waiting message for non-doctor players (alive players excluding doctor)"
@@ -605,8 +608,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Statement Collection Phase"
   description: "Speaker provides their three statements using broadcast input with private lie selection."
   actions:
-    - description: "Create public phase indicator for statement collection"
-      tools: [createPhaseIndicator]
+    - description: "Delete previous UI items and create public phase indicator for statement collection"
+      tools: [deleteItem, createPhaseIndicator]
     - description: "Create text input panel for Speaker to submit three statements"
       tools: [createTextInputPanel]
     - description: "Create waiting message for non-Speaker players"
@@ -715,8 +718,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Statement Collection"
   description: "Speaker creates their three statements while other players wait, showcasing individual targeting and turn-based game mechanics."
   actions:
-    - description: "TIER 1 - PUBLIC: Create phase indicator visible to all showing current speaker's turn"
-      tools: [createPhaseIndicator]
+    - description: "TIER 1 - PUBLIC: Delete previous UI items and create phase indicator visible to all showing current speaker's turn"
+      tools: [deleteItem, createPhaseIndicator]
     - description: "TIER 1 - PUBLIC: Create timer visible to all for statement collection"
       tools: [createTimer]
     - description: "TIER 2 - GROUP: Create waiting instructions for non-speaker players (all players except current speaker)"
@@ -746,8 +749,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Quick Draw Challenge"
   description: "Players compete in a reaction-based challenge, demonstrating timer-based gameplay and health tracking."
   actions:
-    - description: "TIER 1 - PUBLIC: Create phase indicator for challenge phase"
-      tools: [createPhaseIndicator]
+    - description: "TIER 1 - PUBLIC: Delete previous UI items and create phase indicator for challenge phase"
+      tools: [deleteItem, createPhaseIndicator]
     - description: "TIER 1 - PUBLIC: Create reaction timer visible to all players"
       tools: [createReactionTimer]
     - description: "TIER 1 - PUBLIC: Create challenge instructions visible to everyone"

@@ -373,6 +373,13 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 - ❌ WRONG: Use createTextDisplay or createResultDisplay for scores
 - **MANDATORY**: All scoring phases require proper scoreBoard components for tracking
 
+🧹 **MANDATORY CLEANUP RULE**:
+- **PHASE TRANSITIONS**: Every phase that creates new UI MUST start with clearing previous components
+- **COMBINED ACTIONS**: Cleanup and creation MUST be in the SAME action (NEVER separate actions)
+- ✅ CORRECT: "Clear previous UI and create phase indicator" with tools: [clearCanvas, createPhaseIndicator]
+- ❌ WRONG: Separate action "Clear previous UI" with tools: [clearCanvas] (cleanup only)
+- **FIRST ACTION REQUIREMENT**: The first action of any phase creating UI should include clearCanvas + create tools
+
 🛠️ **TOOL SELECTION REMINDER**:
 - **BEFORE writing any action with tools**: Review the complete tool list below to select appropriate tools
 - **CHECK AVAILABLE TOOLS**: Ensure you use tools that actually exist in the tool list
