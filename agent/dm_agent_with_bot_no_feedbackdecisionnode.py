@@ -225,6 +225,8 @@ def add_game_note(note_type: str, content: str):
             - "PHASE_STATUS" for phase progression info (⏳)
             - "NEXT_PHASE" for next phase preparation (🔮)
             - "GAME_STATUS" for game state changes (🏆)
+            - "PHASE_SUGGESTION" for phase branch suggestions (💡)
+            - "BRANCH_RECOMMENDATION" for branch selection advice (🔀)
             - "PHASE_SUMMARY" for narrative summaries (📖)
             - "REVEAL_SUMMARY" for dawn/reveal outcomes (🌅)
             - "SCORE_UPDATE" for score/progress updates (📊)
@@ -244,6 +246,8 @@ def add_game_note(note_type: str, content: str):
         "PHASE_STATUS": "⏳",
         "NEXT_PHASE": "🔮", 
         "GAME_STATUS": "🏆",
+        "PHASE_SUGGESTION": "💡",
+        "BRANCH_RECOMMENDATION": "🔀",
         "EVENT": "📝"
     }
     emoji = emoji_map.get(note_type, "📝")
@@ -272,6 +276,8 @@ def _execute_add_game_note(current_game_notes: list, note_type: str, content: st
         "PHASE_STATUS": "⏳",
         "NEXT_PHASE": "🔮", 
         "GAME_STATUS": "🏆",
+        "PHASE_SUGGESTION": "💡",
+        "BRANCH_RECOMMENDATION": "🔀",
         "EVENT": "📝"
     }
     emoji = emoji_map.get(note_type, "📝")
@@ -1591,6 +1597,8 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             "• **EXAMPLE**: If next phase is 'Role Assignment', assign roles like role='Werewolf', role='Villager' NOW\n"
             "• **TIMING**: Do this BEFORE phase transitions to ensure roles are ready when needed\n"
             "• **GAME NOTES FORMAT**: add_game_note('NEXT_PHASE', 'Roles assigned: Player1=Werewolf, Player2=Villager for upcoming Role Assignment phase')\n\n"
+            "• **If next phase is speaker rotation, do Speaker Rotation Analysis**: For speaker rotation phases, count completed vs remaining turns\n"
+            "  - add_game_note('SPEAKER_STATUS', 'Progress: 2 players completed speaking, 2 players remaining')\n\n"
             
             "• Correct who is the current speaker, who is the last speaker.\n"
             "• Correct do you need to select ann one for next round to do something?.\n"
@@ -1682,8 +1690,11 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             "• **Win Condition Checks**: Evaluate if game end conditions are met\n"
             "  - add_game_note('GAME_STATUS', 'Win condition check: 2 werewolves vs 3 villagers - game continues')\n"
             "• **Rule Violations**: Identify invalid actions or rule violations\n"
-            "  - add_game_note('CRITICAL', 'Player 3 attempted to vote while dead - action ignored')\n\n"
-            
+            "  - add_game_note('CRITICAL', 'Player 3 attempted to vote while dead - action ignored')\n"
+            "• **Phase Branch & End Condition Analysis**: If next phase has branches, analyze conditions and suggest path\n"
+            "  - add_game_note('PHASE_SUGGESTION', 'End condition analysis: 3/4 players completed speaking, suggest continue current phase')\n"
+            "  - add_game_note('BRANCH_RECOMMENDATION', 'Branch condition met: all players finished, recommend transition to results phase')\n"
+           
             "⚠️ **IMPORTANT**: When calling add_game_note, provide CLEAN content without emoji prefixes:\n"
             "✅ CORRECT: add_game_note('CRITICAL', 'Player 3 eliminated - marked is_alive=false')\n"
             "❌ WRONG: add_game_note('CRITICAL', '🔴 CRITICAL: Player 3 eliminated')\n"
@@ -2074,7 +2085,10 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             f"Current Phase ID: {current_phase_id}\n"
             f"Current Phase Details: {current_phase}\n"
             f"Game Declaration: {declaration}\n"
+            f"Player States: {player_states}\n"
             f"Game Notes: {game_notes[-5:] if game_notes else 'None'}\n"
+            f"🚫 Living players: {[pid for pid, data in player_states.items() if data.get('is_alive', True)]}\n"
+            f"🚫 Dead players: {[pid for pid, data in player_states.items() if not data.get('is_alive', True)]}\n"
             f"Phase History (last 5): {state.get('phase_history', [])[-5:]}\n" 
             f"Recent Messages: {[str(msg)[:200] for msg in trimmed_messages]}\n\n"
             f"Player Actions: {_limit_actions_per_player(playerActions, 3) if playerActions else {}}\n\n"
@@ -2100,20 +2114,28 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             "• Timer phases are automatically ready for transition\n\n"
             
             "📊 **DATA SOURCE ANALYSIS - Use ACTUAL DATA Only**:\n"
-            "1. **playerActions**: Count actions where phase=current_phase_name\n"
-            "2. **game_notes**: Check for completion indicators and status updates\n"
-            "3. **completion_criteria**: Match required conditions with actual counts\n"
+            "1. **player_states**: Get role='Werewolf' count, is_alive=true status\n"
+            "2. **playerActions**: Count actions where phase=current_phase_name\n"
+            "3. **game_notes**: Check for completion indicators and status updates\n"
+            "4. **completion_criteria**: Match required conditions with actual counts\n"
             "Example: If 1 alive werewolf + 1 werewolf vote in playerActions = complete\n"
             "NEVER guess 'waiting for all werewolves' - count the actual werewolves!\n\n"
             
             "NEXT_PHASE CONDITION ANALYSIS:\n"
             "1. Examine the current_phase's next_phase field for conditional branches\n"
-            "2. Select the branch matching condition\n"
-            "3. Return the corresponding phase_id from the matching branch\n"
-            "4. IF CONDITIONS ARE MET OR UNCLEAR: Always choose transition=true\n\n"
+            "2. Evaluate each condition against current player_states and game context\n"
+            "3. Select the branch matching condition\n"
+            "4. Return the corresponding phase_id from the matching branch\n"
+            "5. IF CONDITIONS ARE MET OR UNCLEAR: Always choose transition=true\n\n"
             
             "📋 **UNIVERSAL CONDITION EVALUATION METHODS**:\n"
-            "**1. State Field Conditions** (most common):\n" 
+            "**1. State Field Conditions** (most common):\n"
+            "🚫 **CRITICAL LIFE STATUS AWARENESS**: Always consider is_alive=false when evaluating conditions\n"
+            "• Count/compare player fields: sum(1 for p in player_states if p.field == value)\n"
+            "• Boolean checks: all(p.field == true for p in player_states)\n"
+            "• **Death Impact**: Dead players (is_alive=false) affect win conditions, voting tallies, role counts\n"
+            "• Examples: is_alive, speaker_rounds_completed, can_vote, etc.\n\n"
+            
             "**2. Sequential Condition Evaluation** (CRITICAL for complex games):\n"
             "• Process conditions in DSL order (first match wins)\n"
             "• Each condition is IF-THEN logic: IF condition true → THEN use that phase_id\n"
@@ -2137,6 +2159,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             "**5. Game-Specific Pattern Recognition**:\n"
             "• **Werewolf Win Conditions**: Team counting (werewolves vs villagers)\n"
             "• **Two Truths Completion**: Round counting (speaker_rounds_completed)\n"
+            "• **General**: Any field-based conditions from game's player_states schema\n\n"
             
             
             "IMPORTANT: The 'itemsState' shows what UI elements are currently displayed to players. Only showing UI for player with ID 1 (the human) for what he need is enough. All other players are bots and their UI is not visible to the human.\n"
@@ -2145,6 +2168,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             "EVALUATION STEPS:\n"
             "1. Check current_phase's conditions (wait_for, completion, etc.)\n"
             "2. If current phase is complete, analyze next_phase conditions\n"
+            "3. Match conditions against player_states data\n"
             "4. Select appropriate next_phase_id\n"
             
             "OUTPUT FORMAT - MANDATORY TOOL CALL:\n"
@@ -2154,6 +2178,8 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             "   - transition=true + target phase_id (PREFERRED - advance to next phase)\n"
             "   - transition=false + current phase_id (ONLY if specific conditions block progression)\n"
             "3. Include brief transition_reason\n"
+            "4. Never write the player finished something (1/1), if there are more than 1 person in the game\n"
+
             "\n"
             "PROGRESSION BIAS:\n"
             "✅ GOOD: set_next_phase(transition=true, next_phase_id=4, transition_reason='Phase conditions met')\n"
@@ -2162,11 +2188,13 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             "\n"
             "CRITICAL: Default to transition=true unless there's explicit evidence of incomplete requirements.\n"
             "CRITICAL: Call the tool immediately. Do not write analysis text.\n\n"
+
             
             "🎮 **MULTI-GAME EXAMPLES**:\n\n"
             
             "**Two Truths and a Lie - Round Completion Check**:\n"
             "DSL condition: 'If every player has speaker_rounds_completed equal to the agreed rounds'\n"
+            "Analysis: Check all player_states[player_id].speaker_rounds_completed values\n"
             "All rounds done: set_next_phase(transition=true, next_phase_id=99, transition_reason='All players completed required rounds')\n"
             "More rounds needed: set_next_phase(transition=true, next_phase_id=10, transition_reason='Continue to next speaker')\n\n"
             
@@ -2188,11 +2216,9 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             
             "**General Pattern for Any Game**:\n"
             "1. Read all next_phase conditions from DSL\n"
-            "2. Evaluate each condition against current player_actions\n"
+            "2. Evaluate each condition against current player_states\n"
             "3. Select first matching condition (order matters!)\n"
             "4. Use corresponding phase_id from matched branch\n\n"
-            
-
         )
     )
     

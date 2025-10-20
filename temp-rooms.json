@@ -1239,6 +1239,16 @@
       "max_players": 8,
       "current_players": 4,
       "created_at": "2025-10-19T23:40:04.165Z"
+    },
+    "d4a5b8ac-18f9-4b72-be70-c8954488a194": {
+      "id": "d4a5b8ac-18f9-4b72-be70-c8954488a194",
+      "game_name": "two-truths-and-a-lie",
+      "thread_id": "b2177c67-adc4-48f0-bddc-d7c2582ddb09",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 3,
+      "created_at": "2025-10-19T23:51:06.996Z"
     }
   },
   "players": {
@@ -4828,7 +4838,36 @@
         "status": "joined",
         "joined_at": "2025-10-19T23:40:05.115Z"
       }
+    ],
+    "d4a5b8ac-18f9-4b72-be70-c8954488a194": [
+      {
+        "id": 1,
+        "room_id": "d4a5b8ac-18f9-4b72-be70-c8954488a194",
+        "name": "d f h d f h",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-19T23:51:06.996Z"
+      },
+      {
+        "id": 233,
+        "room_id": "d4a5b8ac-18f9-4b72-be70-c8954488a194",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:51:07.941Z"
+      },
+      {
+        "id": 234,
+        "room_id": "d4a5b8ac-18f9-4b72-be70-c8954488a194",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-19T23:51:07.949Z"
+      }
     ]
   },
-  "nextPlayerId": 233
+  "nextPlayerId": 235
 }

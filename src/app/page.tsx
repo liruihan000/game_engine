@@ -2739,20 +2739,28 @@ export default function CopilotKitPage() {
             
             {/* Chat Content - conditionally rendered to avoid duplicate rendering */}
             {isDesktop && (
-              <CopilotChat
-                className="flex-1 overflow-auto w-full scroll-smooth"
-                labels={{
-                  title: "Game Master",
-                  initial:
-                    "🎲 Welcome to the AI Game Engine! Click 'Start' to begin a game, or I'll broadcast updates during gameplay.",
-                }}
-                suggestions={[
-                  {
-                    title: "Start",
-                    message: "Start game.",
-                  },
-                ]}
-              />
+              <>
+                <CopilotChat
+                  className="flex-1 overflow-auto w-full scroll-smooth"
+                  labels={{
+                    title: "Game Master",
+                    initial:
+                      "🎲 Welcome to the AI Game Engine! Click 'Start' to begin a game, or I'll broadcast updates during gameplay.",
+                  }}
+                  suggestions={[
+                    {
+                      title: "Start",
+                      message: "Start game.",
+                    },
+                  ]}
+                />
+                {/* Warning message for stop button */}
+                <div className="px-4 py-2 border-t border-sidebar-border bg-yellow-50 dark:bg-yellow-900/20">
+                  <p className="text-xs text-red-600 dark:text-red-400 leading-tight">
+                    ⚠️ Don&apos;t click the stop button in chat - Continue will lose function. Chat input only way to restart agent.
+                  </p>
+                </div>
+              </>
             )}
           </div>
         </aside>

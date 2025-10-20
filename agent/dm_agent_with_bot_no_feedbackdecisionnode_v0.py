@@ -638,6 +638,7 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "createResultDisplay",
     "createTimer",
     "createDeathMarker",
+    "createBackgroundControl",
     "promptUserText",
     # Card game UI
     "createHandsCard",
@@ -1097,7 +1098,7 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
         logger.error(f"[ChatBotNode] LLM call failed: {e}")
         return Command(goto=END, update={})
 
-async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["PhaseNode"]]:
+async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["RefereeNode"]]:
     """
     BotBehaviorNode analyzes bot behavior and generates responses for non-human players.
     
@@ -1392,7 +1393,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
     # Route to RefereeNode
     logger.info("[BotBehaviorNode] Routing to RefereeNode")
     return Command(
-        goto="PhaseNode",
+        goto="RefereeNode",
         update={
             "player_states": current_player_states,
             "playerActions": current_player_actions,
@@ -1401,7 +1402,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
         }
     )
 
-async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Literal["RoleAssignmentNode"]]:
+async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Literal["PhaseNode"]]:
     """
     RefereeNode processes player behaviors and updates game state according to rules.
     
@@ -1437,7 +1438,7 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     phases = dsl_content.get('phases', {}) if dsl_content else {}
     # Try both int and string keys to handle YAML parsing variations
     current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
-    next_phase = current_phase
+    next_phase = phases.get(current_phase_id + 1, {}) or phases.get(str(current_phase_id + 1), {})
     declaration = dsl_content.get('declaration', {}) if dsl_content else {}
     
     # Log phase info
@@ -1454,16 +1455,6 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
         logger.info(f"[RefereeNode] Current Game Notes: {game_notes}")
     else:
         logger.info(f"[RefereeNode] No Game Notes Available")
-
-    phase_history = state.get('phase_history', [])
-    last_phase_id = phase_history[-2]['phase_id'] if len(phase_history) >= 2 else None
-    
-    # Get last phase details from DSL using last_phase_id
-    last_phase = None
-    if last_phase_id is not None:
-        phases = dsl_content.get('phases', {}) if dsl_content else {}
-        # Try both int and string keys to handle YAML parsing variations
-        last_phase = phases.get(last_phase_id, {}) or phases.get(str(last_phase_id), {})
     
     # Initialize LLM
     model = init_chat_model("openai:gpt-4.1-mini")
@@ -1477,8 +1468,8 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
 
             f" **CURRENT GAME ANALYSIS**:\n"
             f"- Phase ID: {current_phase_id} | Phase: {current_phase.get('name', 'Unknown')}\n"
-            f"- Next Phase: {current_phase}\n"
-            f"- Current Phase: {last_phase.get('name', f'Phase {last_phase_id}') if last_phase else 'None'}\n"
+            f"- Current Phase: {current_phase}\n"
+            f"- Next Phase: {next_phase}\n"
             f"- Phase History: {state.get('phase_history', [])[-5:] if state.get('phase_history') else 'None'}\n"
             f"- Player States: {player_states}\n"
             f"- Player Actions: {_limit_actions_per_player(playerActions, 3) if playerActions else {}}\n"
@@ -1772,11 +1763,11 @@ async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     # Notes are now created via tool calls (add_game_note), no need for direct creation
     # current_game_notes already contains all tool-created notes
     
-    # Route to RoleAssignmentNode with updated player states, conclusions, and game notes
+    # Route to PhaseNode with updated player states, conclusions, and game notes
     notes_created = len(current_game_notes) - len(state.get("game_notes", []))
-    logger.info(f"[RefereeNode] Created {notes_created} new game notes via tools, routing to RoleAssignmentNode")
+    logger.info(f"[RefereeNode] Created {notes_created} new game notes via tools, routing to PhaseNode")
     return Command(
-        goto="RoleAssignmentNode",
+        goto="PhaseNode",
         update={
             "player_states": current_player_states,
             "game_notes": current_game_notes,
@@ -1968,7 +1959,7 @@ async def RoleAssignmentNode(state: AgentState, config: RunnableConfig) -> Comma
             }
         )
 
-async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Literal["RefereeNode", "ActionExecutor"]]:
+async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Literal["RoleAssignmentNode"]]:
     """
     PhaseNode determines the next phase based on DSL and current game state.
     
@@ -2074,7 +2065,10 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             f"Current Phase ID: {current_phase_id}\n"
             f"Current Phase Details: {current_phase}\n"
             f"Game Declaration: {declaration}\n"
+            f"Player States: {player_states}\n"
             f"Game Notes: {game_notes[-5:] if game_notes else 'None'}\n"
+            f"🚫 Living players: {[pid for pid, data in player_states.items() if data.get('is_alive', True)]}\n"
+            f"🚫 Dead players: {[pid for pid, data in player_states.items() if not data.get('is_alive', True)]}\n"
             f"Phase History (last 5): {state.get('phase_history', [])[-5:]}\n" 
             f"Recent Messages: {[str(msg)[:200] for msg in trimmed_messages]}\n\n"
             f"Player Actions: {_limit_actions_per_player(playerActions, 3) if playerActions else {}}\n\n"
@@ -2100,20 +2094,28 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             "• Timer phases are automatically ready for transition\n\n"
             
             "📊 **DATA SOURCE ANALYSIS - Use ACTUAL DATA Only**:\n"
-            "1. **playerActions**: Count actions where phase=current_phase_name\n"
-            "2. **game_notes**: Check for completion indicators and status updates\n"
-            "3. **completion_criteria**: Match required conditions with actual counts\n"
+            "1. **player_states**: Get role='Werewolf' count, is_alive=true status\n"
+            "2. **playerActions**: Count actions where phase=current_phase_name\n"
+            "3. **game_notes**: Check for completion indicators and status updates\n"
+            "4. **completion_criteria**: Match required conditions with actual counts\n"
             "Example: If 1 alive werewolf + 1 werewolf vote in playerActions = complete\n"
             "NEVER guess 'waiting for all werewolves' - count the actual werewolves!\n\n"
             
             "NEXT_PHASE CONDITION ANALYSIS:\n"
             "1. Examine the current_phase's next_phase field for conditional branches\n"
-            "2. Select the branch matching condition\n"
-            "3. Return the corresponding phase_id from the matching branch\n"
-            "4. IF CONDITIONS ARE MET OR UNCLEAR: Always choose transition=true\n\n"
+            "2. Evaluate each condition against current player_states and game context\n"
+            "3. Select the branch matching condition\n"
+            "4. Return the corresponding phase_id from the matching branch\n"
+            "5. IF CONDITIONS ARE MET OR UNCLEAR: Always choose transition=true\n\n"
             
             "📋 **UNIVERSAL CONDITION EVALUATION METHODS**:\n"
-            "**1. State Field Conditions** (most common):\n" 
+            "**1. State Field Conditions** (most common):\n"
+            "🚫 **CRITICAL LIFE STATUS AWARENESS**: Always consider is_alive=false when evaluating conditions\n"
+            "• Count/compare player fields: sum(1 for p in player_states if p.field == value)\n"
+            "• Boolean checks: all(p.field == true for p in player_states)\n"
+            "• **Death Impact**: Dead players (is_alive=false) affect win conditions, voting tallies, role counts\n"
+            "• Examples: is_alive, speaker_rounds_completed, can_vote, etc.\n\n"
+            
             "**2. Sequential Condition Evaluation** (CRITICAL for complex games):\n"
             "• Process conditions in DSL order (first match wins)\n"
             "• Each condition is IF-THEN logic: IF condition true → THEN use that phase_id\n"
@@ -2137,6 +2139,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             "**5. Game-Specific Pattern Recognition**:\n"
             "• **Werewolf Win Conditions**: Team counting (werewolves vs villagers)\n"
             "• **Two Truths Completion**: Round counting (speaker_rounds_completed)\n"
+            "• **General**: Any field-based conditions from game's player_states schema\n\n"
             
             
             "IMPORTANT: The 'itemsState' shows what UI elements are currently displayed to players. Only showing UI for player with ID 1 (the human) for what he need is enough. All other players are bots and their UI is not visible to the human.\n"
@@ -2145,6 +2148,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             "EVALUATION STEPS:\n"
             "1. Check current_phase's conditions (wait_for, completion, etc.)\n"
             "2. If current phase is complete, analyze next_phase conditions\n"
+            "3. Match conditions against player_states data\n"
             "4. Select appropriate next_phase_id\n"
             
             "OUTPUT FORMAT - MANDATORY TOOL CALL:\n"
@@ -2167,6 +2171,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             
             "**Two Truths and a Lie - Round Completion Check**:\n"
             "DSL condition: 'If every player has speaker_rounds_completed equal to the agreed rounds'\n"
+            "Analysis: Check all player_states[player_id].speaker_rounds_completed values\n"
             "All rounds done: set_next_phase(transition=true, next_phase_id=99, transition_reason='All players completed required rounds')\n"
             "More rounds needed: set_next_phase(transition=true, next_phase_id=10, transition_reason='Continue to next speaker')\n\n"
             
@@ -2188,7 +2193,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             
             "**General Pattern for Any Game**:\n"
             "1. Read all next_phase conditions from DSL\n"
-            "2. Evaluate each condition against current player_actions\n"
+            "2. Evaluate each condition against current player_states\n"
             "3. Select first matching condition (order matters!)\n"
             "4. Use corresponding phase_id from matched branch\n\n"
             
@@ -2330,7 +2335,7 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
     logger.info(f"[PhaseNode][OUTPUT] Updates playerActions: NOT_INCLUDED")
     
     return Command(
-        goto="RefereeNode",
+        goto="RoleAssignmentNode",
         update=phasenode_outputs
     )
 
