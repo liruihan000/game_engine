@@ -178,7 +178,7 @@ declaration:
     - One player at a time selects from available roles
     - Loop back to same phase ID (phase 1) until all players have roles
     - Use branching logic: "If all assigned" → next phase, "If still unassigned" → loop back to phase 1
-    - Track assignment progress in player_states (role field must be updated)
+    - Track assignment progress in player_states (role field changes)
 
 ## 3. `phases` (Phase Flow)
 
@@ -203,7 +203,7 @@ This section defines the specific flow of the game, with each phase identified b
 - **Result Announcements**: When announcing/declaring results of any action (voting results, game action outcomes, elimination announcements, etc.), consider using a separate phase. This separation helps maintain clear phase boundaries and player understanding.
 - **Example decomposition with audience permissions**: "Action Phase" → Split into audience-aware phases:
   - Phase 2: "Team Action" (private UI for team members only + waiting message for others)
-  - Phase 3: "Individual Action" (private UI for specific player only + status update for others)  
+  - Phase 3: "Individual Action" (private UI for specific player only + status display for others)  
   - Phase 4: "Reveal Action" (private UI for revealer only + general waiting screen)
   - Phase 5: "Announce Results" (public announcements + private feedback to affected players)
 - **Key principle**: If actions require different audience permissions, create separate phases or use targeted actions within same phase
@@ -225,13 +225,21 @@ Before designing phases, ensure consistency with the provided declaration:
 
 ### 3.1. Phase Components
 
+**🎮 MANDATORY PHASE STRUCTURE RULES:**
+- **PHASE 0 (First Phase)**: MUST ALWAYS be game introduction and rules explanation
+- **PHASE 1 (Second Phase)**: MUST ALWAYS be identity/role assignment OR speaker/turn order setup
+
 Each phase object must contain the following fields:
 
 - **name** (string): Display name of the phase.
 - **description** (string): Describes the goal of this phase and the tasks the DM (Dungeon Master/Game Master) needs to complete.
 - **actions** (array): A series of operations the DM needs to execute.
     - Each operation includes `description` (string) and `tools` (array) fields.
-    - **Important**: The first action of each phase should typically be used to clean up UI elements from the previous phase (if needed).
+    - **⚠️ Important**: The first action of each phase must use `clearCanvas` tool:
+      - **Every phase starts with clearing**: Remove outdated UI elements from previous phase
+      - **Smart clearing**: Preserve persistent state components, clear interactive/temporary ones
+      - **Clear action description**: Clearly describe what to clear and what to exempt (e.g., "Clear voting UI, exempt death markers")
+      - **Selective preservation**: Only persistent state components survive phase transitions
     - **Player-Specific Action Design**: Break down broad actions into targeted sub-actions for specific player groups:
         - "Create public announcements" → separate from "Create role-specific UI"
         - "Show voting panel to all players" → vs "Show secret action panel to team members only"
@@ -269,17 +277,54 @@ Each phase object must contain the following fields:
     - **Non-branching Case (Simple Object):** Directly provides the ID and name of the next phase.
         - `id` (number): ID of the next phase.
         - `name` (string): Name of the next phase.
-        - **⚠️ VALIDATION**: Ensure referenced phase ID exists in your phase design
+        - **⚠️ CRITICAL VALIDATION**: 
+          - Ensure referenced phase ID exists in your phase design
+          - **EXACT NAME MATCHING**: The `name` field must EXACTLY match the actual phase name (not a summary or variation)
+          - **Example CORRECT**: `id: 7, name: "Day Discussion"` when phase 7 is actually named "Day Discussion"  
+          - **Example WRONG**: `id: 7, name: "Discussion Phase"` when phase 7 is actually named "Day Discussion"
     - **Branching Case (Conditional Object):** When a phase has multiple possible paths, `next_phase` is an object.
         - **Object key**: Natural language description in one sentence of the **condition** for that branch.
         - **Object value**: Next phase object containing `id` and `name`.
     - **Loop Logic (Looping):** To implement a loop, simply point the `id` in the next phase object to a phase that has already been executed (i.e., the start node of the loop).
+    - **⚠️ AVOID DUPLICATE PHASES**: When creating loops, **DO NOT** create duplicate phases with similar functionality. Instead:
+        - **REUSE existing phases**: Point loop back to already-defined phases (e.g., if phases 2-8 represent a game cycle, loop back to phase 2, not create phases 10-16)
+        - **Distinguish first-time vs loop phases ONLY when necessary**: Only create separate "first" vs "regular" phases if they have meaningfully different content
+        - **SMART BRANCHING STRATEGY**: Use intelligent conditional branches in win-check phases to route back to existing phases rather than creating duplicates
+        - **KEY PRINCIPLE**: If two phases have the same actions and completion criteria, they should be the SAME phase ID with smart routing
+        - **CONTEXT-AWARE BRANCHING**: Single result/win-check phases should handle multiple calling contexts through intelligent branching
+        - **Branch by Caller Context**: Result phases determine next step based on "which phase called me" and "what should happen next if game continues"
+        - **Universal Pattern**: One result phase with branches for: game over conditions + multiple "game continues" paths based on calling context
+
+
 
 
 ## AVAILABLE FRONTEND TOOLS (exact names and parameters)
 
 Use only the tools listed below. Tool names must match exactly (no `functions.` prefix).
-When you create items (e.g., via `createTextDisplay`), capture the returned id (e.g., `0002`) and reuse it in later calls that require `itemId` (e.g., `deleteItem`). Do not pass the item name; always pass the exact id. To delete multiple items, call `deleteItem` once per `itemId`.
+When you create items (e.g., via `createTextDisplay`), each component is created fresh for each phase. No item ID reuse or updates are needed.
+    
+    🚨 **CRITICAL CLEANUP RULE**: 
+    - **Mandatory first action**: Every phase must start with `clearCanvas` as the first action
+    - **Smart exemptions**: Use exemptList ONLY for persistent state components that should survive phase transitions
+    - **Complete recreation**: After clearing, create ALL needed interactive components from scratch using create tools
+    - **Descriptive action text**: Clearly describe what to clear and what to preserve
+      - ✅ Good: "Clear all previous UI elements, exempt death markers to maintain player status"
+      - ✅ Better: "Clear voting UI, exempt elimination indicators and death markers for continuity"
+      - ❌ Bad: "Clear and update UI elements" (no updates, only create)
+      - **Exempt-worthy**: Death markers, elimination indicators, permanent status displays
+      - **Always clear**: Voting panels, timers, temporary text displays, interactive elements
+
+    🏆 **CRITICAL SCORING RULE**:
+    - Any phase involving scores, points, rankings, or results MUST use scoreBoard tools
+    - ✅ CORRECT: Use createScoreBoard
+    - ❌ WRONG: Use createTextDisplay or createResultDisplay for scores
+    - **MANDATORY**: All scoring phases require proper scoreBoard components for tracking
+
+    🛠️ **TOOL SELECTION REMINDER**:
+    - **BEFORE writing any action with tools**: Review the complete tool list below to select appropriate tools
+    - **CHECK AVAILABLE TOOLS**: Ensure you use tools that actually exist in the tool list
+    - **MATCH PURPOSE TO TOOL**: Select tools that match the action's intended purpose
+    - **EXAMPLE**: For voting → check tool list → find createVotingPanel, not createVotePanel
 
 🎯 **Audience Permissions System**: Each player has their own private screen with granular visibility controls. UI components should explicitly set audience permissions for optimal privacy and game experience.
 
@@ -321,8 +366,7 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
     - Text collection phases: Use createTextInputPanel for collecting statements, responses, or descriptions from players (NO additional confirmation buttons needed)
     - Card-based elements: Use createHandsCard for displaying card-like information with audience targeting (player hands, role cards, etc.)
     - Score tracking phases: **MANDATORY** - Use createScoreBoard for displaying current rankings, final results, and progress tracking with audience targeting
-    - Score-related phases: **CRITICAL** - Any phase involving scores, points, rankings, or results MUST use scoreBoard tools (createScoreBoard, updateScoreBoard, upsertScoreEntry)
-    - Component persistence and updates: Use update tools (updateScoreBoard, updateTextDisplay, etc.) to modify existing components instead of recreating them
+    - Score-related phases: **CRITICAL** - Any phase involving scores, points, rankings, or results MUST use scoreBoard tools (createScoreBoard)
     - Incremental state changes: Use specific update tools like upsertScoreEntry for granular score updates without full component recreation
 - **Turn-based Game Clarity**: When roles rotate, each phase should:
     - Clearly identify current role holders with audience targeting
@@ -332,22 +376,17 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 
 ## **COMPONENT LIFECYCLE MANAGEMENT**:
 
-- **Create vs Update Strategy**: 
-  - Use **create*** tools when you need a new component or after clearCanvas
-  - Use **update*** tools when modifying existing components from previous phases
-  - **Both are necessary**: create for new elements, update for progressive changes
-  - Consider component lifecycle: some components persist across phases, others are phase-specific
+- **Create-Only Strategy**: 
+  - Use **create*** tools for ALL components in every phase
+  - **Selective preservation**: Use exemptList ONLY for persistent state components (death markers, permanent status indicators)
+  - **Complete recreation**: All interactive/temporary components are created from scratch each phase
+  - **Avatar sets are automatically preserved** - handled by the system
 
-- **Component Lifecycle Patterns**:
-  - **Cross-phase Components**: Phase indicators, scoreboards, timers - can be created once and updated
-  - **Phase-specific Components**: Voting panels, broadcast inputs - create new for each phase
-  - **Progressive Components**: Text displays showing changing information - create new or update existing based on context
-
-- **Granular Update Examples**:
-  - Score updates: Use `upsertScoreEntry` instead of recreating entire scoreboard
-  - Phase progression: Use `updatePhaseIndicator` instead of creating new indicator
-  - Timer adjustments: Use `updateTimer` instead of delete+create cycle
-  - Content changes: Use `updateTextDisplay` for information updates
+- **Mandatory Cleanup Strategy**:
+  - **Every phase must use clearCanvas as first action** 
+  - **Smart exemptions**: Preserve only persistent state components that should survive phase transitions
+  - **Examples of exempt-worthy components**: Death markers, elimination indicators, permanent player status displays
+  - **Examples of components to clear**: Voting panels, timers, temporary text displays, phase-specific UI
 
 ## TOOL CATALOG (Categorized, with descriptions and types)
 
@@ -357,46 +396,15 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 - setItemName: Rename an existing item by id. Types: itemId (string), name (string)
 - setItemSubtitleOrDescription: Set an item's subtitle/short description. Types: itemId (string), subtitleOrDescription (string)
 - setItemPosition: Change an item's position on the grid. Types: itemId (string), position (string)
-- deleteItem: Delete an item by id. **IMPORTANT**: Cannot be used alone - must always be combined with create/update tools in same action. Types: itemId (string)
-- clearCanvas: Clear all canvas items except avatar sets. **IMPORTANT**: Cannot be used alone - must always be combined with create/update tools in same action. Types: (none)
+- clearCanvas: Clear all canvas items except avatar sets and exempted items. This is useful when transitioning between game phases or starting fresh. Avatar sets are always preserved to maintain player visual representation. Types: exemptList? (string[]) - array of item IDs to preserve during clearing (for persistent state like death markers, player status indicators)
 
-🚨 **CRITICAL CLEANUP RULE**: 
-- "Clear UI" actions must ALWAYS include both cleanup AND creation/update in the SAME action
-- NEVER create separate actions that only clear/delete without creating new content
-- ✅ CORRECT: "Clear UI and display final victory message" 
-- ❌ WRONG: "Clear voting UI from previous phase" (cleanup only)
-- ✅ CORRECT: "Clear previous UI and create new phase indicator"
-
-🏆 **CRITICAL SCORING RULE**:
-- Any phase involving scores, points, rankings, or results MUST use scoreBoard tools
-- ✅ CORRECT: Use createScoreBoard, updateScoreBoard, upsertScoreEntry
-- ❌ WRONG: Use createTextDisplay or createResultDisplay for scores
-- **MANDATORY**: All scoring phases require proper scoreBoard components for tracking
-
-🧹 **MANDATORY CLEANUP RULE**:
-- **PHASE TRANSITIONS**: Every phase that creates new UI MUST start with clearing previous components
-- **COMBINED ACTIONS**: Cleanup and creation MUST be in the SAME action (NEVER separate actions)
-- ✅ CORRECT: "Clear previous UI and create phase indicator" with tools: [clearCanvas, createPhaseIndicator]
-- ❌ WRONG: Separate action "Clear previous UI" with tools: [clearCanvas] (cleanup only)
-- **FIRST ACTION REQUIREMENT**: The first action of any phase creating UI should include clearCanvas + create tools
-
-🛠️ **TOOL SELECTION REMINDER**:
-- **BEFORE writing any action with tools**: Review the complete tool list below to select appropriate tools
-- **CHECK AVAILABLE TOOLS**: Ensure you use tools that actually exist in the tool list
-- **MATCH PURPOSE TO TOOL**: Select tools that match the action's intended purpose
-- **EXAMPLE**: For voting → check tool list → find createVotingPanel, not createVotePanel
 
 ### Core Game Components
 - createCharacterCard: Create a character card (role, position, size, description). Types: name (string), role (string), position (string), size? ("small"|"medium"|"large"), description? (string), audience_type? (boolean), audience_ids? (string[])
-- updateCharacterCard: Update existing character card properties. Types: itemId (string), role? (string), position? (string), size? ("small"|"medium"|"large"), description? (string)
 - createActionButton: Create an action button (label, action, enabled, position). Types: name (string), label (string), action (string), enabled (boolean), position (string), size? ("small"|"medium"|"large"), variant? ("primary"|"secondary"|"danger"), audience_type? (boolean), audience_ids? (string[])
-- updateActionButton: Update existing action button properties. Types: itemId (string), label? (string), action? (string), enabled? (boolean), position? (string), variant? ("primary"|"secondary"|"danger")
 - createPhaseIndicator: Create a phase indicator (currentPhase, position, timer). Types: name (string), currentPhase (string), position (string), timeRemaining? (number), description? (string), audience_type? (boolean), audience_ids? (string[])
-- updatePhaseIndicator: Update existing phase indicator properties. Types: itemId (string), currentPhase? (string), timeRemaining? (number), description? (string), position? (string)
 - createTextDisplay: Create a text panel (content, title, type, position). Types: name (string), content (string), position (string), title? (string), type? ("info"|"warning"|"error"|"success"), audience_type? (boolean), audience_ids? (string[])
-- updateTextDisplay: Update existing text display content. Types: itemId (string), content? (string), title? (string), type? ("info"|"warning"|"error"|"success")
 - createVotingPanel: Create a voting panel (votingId, options, position). Types: name (string), votingId (string), options (string[]), position (string), title? (string), audience_type? (boolean), audience_ids? (string[])
-- updateVotingPanel: Update existing voting panel options. Types: itemId (string), options? (string[]), title? (string), votingId? (string)
 
 ### Player System
 - createAvatarSet: Create player avatars overlay (avatarType). Types: name (string), avatarType ("human"|"wolf"|"dog"|"cat"), audience_type? (boolean), audience_ids? (string[])
@@ -406,7 +414,6 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 
 ### Timer System
 - createTimer: Create countdown timer that expires and notifies agent. Types: name (string), duration (number), label? (string), audience_type? (boolean), audience_ids? (string[])
-- updateTimer: Update existing timer duration or label. Types: itemId (string), duration? (number), label? (string)
 - createReactionTimer: Create quick reaction/challenge timer bar. Types: name (string), duration? (number), label? (string), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
 - startReactionTimer: Start a reaction timer countdown. Types: itemId (string), duration? (number)
 - stopReactionTimer: Stop a reaction timer. Types: itemId (string)
@@ -415,35 +422,26 @@ When you create items (e.g., via `createTextDisplay`), capture the returned id (
 ### Visual Effects
 - changeBackgroundColor: Create background control and set initial color. Types: name (string), backgroundColor ("white"|"gray-900"|"blue-50"|"green-50"|"purple-50")
 - createResultDisplay: Create large gradient-styled result display. Types: name (string), content (string), position (string), audience_type? (boolean), audience_ids? (string[])
-- updateResultDisplay: Update result display content. Types: itemId (string), content? (string)
 - createNightOverlay: Create night overlay with title and blur. Types: name (string), title? (string), blur? (number), visible? (boolean), audience_type? (boolean), audience_ids? (string[])
-- setNightOverlay: Update night overlay visibility and properties. Types: itemId (string), visible? (boolean), title? (string), blur? (number)
 
 ### Card Games
 - createHandsCard: Create hand card for card games (cardType, cardName). Types: name (string), cardType (string), cardName (string), position (string), descriptions? (string), color? (string), audience_type? (boolean), audience_ids? (string[])
 - createHandsCardForPlayer: Create hand card for specific player. Types: name (string), playerId (string), cardType (string), cardName (string), descriptions? (string), color? (string), position? (string)
-- updateHandsCard: Update hand card properties. Types: itemId (string), cardType? (string), cardName? (string), descriptions? (string), color? (string)
 - setHandsCardAudience: Set hand card audience visibility. Types: itemId (string), audience_type (boolean), audience_ids? (string[])
 
 ### Scoring System
 - createScoreBoard: Create score board with player entries. Types: name (string), entries (array), position (string), title? (string), sort? ("asc"|"desc"), accentColor? (string), audience_type? (boolean), audience_ids? (string[])
-- updateScoreBoard: Update score board entries and properties. Types: itemId (string), title? (string), sort? ("asc"|"desc"), accentColor? (string), position? (string)
-- upsertScoreEntry: Add or update a score entry. Types: itemId (string), entryId (string), name? (string), score? (number)
 - removeScoreEntry: Remove score entry by player id. Types: itemId (string), entryId (string)
 
 ### Health/Status
 - createHealthDisplay: Create health/bullets display (value, max, style). Types: name (string), value? (number), max? (number), style? ("hearts"|"bullets"), position? (string), audience_type? (boolean), audience_ids? (string[])
-- updateHealthDisplay: Update health display values. Types: itemId (string), value? (number), max? (number), style? (string), position? (string)
 - createInfluenceSet: Create influence cards set (Coup-style games). Types: name (string), ownerId (string), cards? (array of {name, revealed}), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
-- updateInfluenceSet: Update influence set properties. Types: itemId (string), ownerId? (string), cards? (array), accentColor? (string), position? (string)
 - revealInfluenceCard: Reveal influence card by index. Types: itemId (string), index (number), revealed? (boolean)
 
 ### Special Input & Turns
 - createTextInputPanel: Create text input panel for user input. **IMPORTANT**: This is sufficient for player statements/responses - NO additional buttons or voting panels needed for validation. Types: name (string), title? (string), placeholder? (string), prefill? (string), audience_type? (boolean), audience_ids? (string[])
 - createStatementBoard: Create statement board for Two Truths and a Lie. Types: name (string), statements? (string[]), highlightIndex? (number), locked? (boolean), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
-- updateStatementBoard: Update statement board content. Types: itemId (string), statements? (string[]), highlightIndex? (number), locked? (boolean), accentColor? (string)
 - createTurnIndicator: Create turn indicator showing current active player. Types: name (string), currentPlayerId (string), playerName? (string), label? (string), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
-- updateTurnIndicator: Update turn indicator properties. Types: itemId (string), currentPlayerId? (string), playerName? (string), label? (string), accentColor? (string), position? (string)
 - createDeathMarker: Create death marker to visually indicate eliminated players. Types: name (string), playerName (string), playerId (string), cause? (string), accentColor? (string), position? (string), audience_type? (boolean), audience_ids? (string[])
 
 ### Interaction System
@@ -467,9 +465,11 @@ Before generating phases, verify the following against the provided declaration:
 
 **🔗 Phase Flow Integrity Checks:**  
 - [ ] All `next_phase.id` references point to valid phase IDs in your design
+- [ ] **EXACT NAME MATCHING**: All `next_phase.name` values exactly match the actual phase names (not summaries or variations)
 - [ ] No orphaned phases (phases that are never referenced)
 - [ ] Phase 0 always exists as "Game Introduction"
 - [ ] Phase loops have proper exit conditions
+- [ ] **NO DUPLICATE PHASES**: No functionally identical phases with different IDs (avoid phases like 2-6 + 10-14 doing the same thing)
 
 **⚙️ Completion Criteria Validation:**
 - [ ] `target_players.condition` uses only defined player_states fields
@@ -489,10 +489,14 @@ Before generating phases, verify the following against the provided declaration:
   name: "Game Introduction"
   description: "Introduce the game rules, setup, and objectives to all players."
   actions:
-    - description: "Display game rules and objectives"
-      tools: [display_game_intro]
-    - description: "Show player list and game configuration"
-      tools: [display_player_setup]
+    - description: "Clear all previous UI elements (no exemptions needed for first phase)"
+      tools: [clearCanvas]
+    - description: "Create phase indicator for game introduction"
+      tools: [createPhaseIndicator]
+    - description: "Display game rules and objectives to all players"
+      tools: [createTextDisplay]
+    - description: "Create avatar set and scoreboard for player setup"
+      tools: [createAvatarSet, createScoreBoard]
   completion_criteria:
     type: "UI_displayed"
     description: "Game introduction has been displayed to all players."
@@ -507,6 +511,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Role Assignment"
   description: "Randomly assign roles to players and display each player's specific role using three-tier audience targeting for maximum privacy."
   actions:
+    - description: "Clear previous UI elements from introduction phase"
+      tools: [clearCanvas]
     - description: "TIER 1 - PUBLIC: Create public phase indicator visible to all players"
       tools: [createPhaseIndicator]
     - description: "TIER 1 - PUBLIC: Create general announcement about role assignment process"
@@ -529,6 +535,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Role Assignment"
   description: "Allow players to choose their roles sequentially using voting panels with audience targeting for privacy."
   actions:
+    - description: "Clear previous UI elements from introduction phase"
+      tools: [clearCanvas]
     - description: "Create public phase indicator showing current assignment status"
       tools: [createPhaseIndicator]
     - description: "Create voting panel for current player only - visible only to player who needs to select role"
@@ -559,6 +567,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Night — Werewolves Choose Target"
   description: "Alive werewolves coordinate privately and vote to select a single elimination target."
   actions:
+    - description: "Clear previous day phase UI elements"
+      tools: [clearCanvas]
     - description: "Create public phase indicator for werewolf night phase"
       tools: [createPhaseIndicator]
     - description: "Create private voting panel for alive werewolves to choose an alive target"
@@ -583,8 +593,10 @@ Before generating phases, verify the following against the provided declaration:
   name: "Night — Doctor Protects"
   description: "The doctor chooses a player to protect from werewolf attacks tonight."
   actions:
-    - description: "Update phase indicator to show doctor protection phase"
-      tools: [updatePhaseIndicator]
+    - description: "Clear previous werewolf phase UI, exempt death markers to maintain eliminated player status"
+      tools: [clearCanvas]
+    - description: "Create phase indicator for doctor protection phase"
+      tools: [createPhaseIndicator]
     - description: "Create voting panel for doctor to choose protection target"
       tools: [createVotingPanel]
     - description: "Show waiting screen for all other players"
@@ -607,6 +619,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Team Strategy Phase"
   description: "Red team members discuss strategy while Blue team waits."
   actions:
+    - description: "Clear previous phase UI elements"
+      tools: [clearCanvas]
     - description: "Create public phase indicator for team strategy phase"
       tools: [createPhaseIndicator]
     - description: "Create strategy panel for Red team members only"
@@ -631,8 +645,10 @@ Before generating phases, verify the following against the provided declaration:
   name: "Day Voting Phase"
   description: "All surviving players vote to eliminate someone."
   actions:
-    - description: "Update phase indicator to show day voting phase"
-      tools: [updatePhaseIndicator]
+    - description: "Clear night phase UI for day transition, exempt death markers and elimination indicators"
+      tools: [clearCanvas]
+    - description: "Create phase indicator for day voting phase"
+      tools: [createPhaseIndicator]
     - description: "Create voting panel for all surviving players"
       tools: [createVotingPanel]
     - description: "Show waiting message for dead players"
@@ -655,6 +671,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Player Turn Action"
   description: "Current player performs their action while others wait for their turn."
   actions:
+    - description: "Clear previous UI elements from earlier phase"
+      tools: [clearCanvas]
     - description: "Create public phase indicator showing current player's turn"
       tools: [createPhaseIndicator]
     - description: "Create action buttons for current player only"
@@ -684,6 +702,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Voting Phase"
   description: "All surviving players vote to select a player to eliminate with targeted UI components."
   actions:
+    - description: "Clear previous UI elements from earlier phase"
+      tools: [clearCanvas]
     - description: "Create public phase indicator visible to all players"
       tools: [createPhaseIndicator]
     - description: "Create voting panel visible to all surviving players only"
@@ -705,8 +725,10 @@ Before generating phases, verify the following against the provided declaration:
   name: "Announce Voting Results"
   description: "Display voting results with different information for different player groups."
   actions:
-    - description: "Clear voting UI and create public results display visible to all players"
-      tools: [deleteItem, createResultDisplay]
+    - description: "Clear voting UI from previous phase"
+      tools: [clearCanvas]
+    - description: "Create public results display visible to all players"
+      tools: [createResultDisplay]
     - description: "Create detailed vote breakdown visible to alive players only"
       tools: [createTextDisplay]
     - description: "Mark eliminated player as dead (visible to all)"
@@ -728,6 +750,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Doctor's Night Action"
   description: "Doctor chooses whether to use antidote with three-tier audience targeting for optimal privacy and information flow."
   actions:
+    - description: "Clear previous UI elements from earlier phase"
+      tools: [clearCanvas]
     - description: "TIER 1 - PUBLIC: Create public phase indicator showing night action phase (visible to all)"
       tools: [createPhaseIndicator]
     - description: "TIER 1 - PUBLIC: Create timer visible to all showing remaining time"
@@ -758,6 +782,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Statement Collection Phase"
   description: "Speaker provides their three statements using broadcast input with private lie selection."
   actions:
+    - description: "Clear previous UI elements from earlier phase"
+      tools: [clearCanvas]
     - description: "Create public phase indicator for statement collection"
       tools: [createPhaseIndicator]
     - description: "Create text input panel for Speaker to submit three statements"
@@ -795,20 +821,18 @@ Before generating phases, verify the following against the provided declaration:
     name: "Voting Phase"
 
 10:
-  name: "Score Update and Leaderboard"
-  description: "Update player scores and show results using mix of create and update tools."
+  name: "Score create and Leaderboard"
+  description: "Calculate scores and show results using create tools."
   actions:
-    - description: "Update phase indicator to show scoring phase"
-      tools: [updatePhaseIndicator]
-    - description: "Update individual player scores using granular score updates"
-      tools: [upsertScoreEntry]
-    - description: "Update existing scoreboard with new rankings"
-      tools: [updateScoreBoard]
-    - description: "Display round summary with score breakdown"
+    - description: "Clear the old voting UI, exempt death markers and player status indicators"
+      tools: [clearCanvas]
+    - description: "Create phase indicator for scoring phase"
+      tools: [createPhaseIndicator]
+    - description: "Create scoreboard with updated player scores"
       tools: [createScoreBoard]
   completion_criteria:
     type: "UI_displayed"
-    description: "Scores updated incrementally and leaderboard refreshed."
+    description: "create ScoreBoard."
   next_phase:
     "If game is complete":
       id: 99
@@ -818,18 +842,20 @@ Before generating phases, verify the following against the provided declaration:
       name: "Next Round"
 
 11:
-  name: "Progressive Timer Update Example"
-  description: "Demonstrate updating existing timer with new duration and label."
+  name: "Progressive Timer Create Example"
+  description: "Demonstrate creating new timer and text display."
   actions:
-    - description: "Update existing timer with new countdown duration"
-      tools: [updateTimer]
-    - description: "Update text display to show timer context"
-      tools: [updateTextDisplay]
+    - description: "Clear previous UI, exempt any permanent status indicators"
+      tools: [clearCanvas]
+    - description: "Create new timer with countdown duration"
+      tools: [createTimer]
+    - description: "Create text display to show timer context"
+      tools: [createTextDisplay]
     - description: "Adjust component positions if needed"
       tools: [setItemPosition]
   completion_criteria:
     type: "timer"
-    description: "Updated timer has expired."
+    description: "Timer has expired."
   next_phase:
     id: 12
     name: "Next Phase"
@@ -868,6 +894,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Statement Collection"
   description: "Speaker creates their three statements while other players wait, showcasing individual targeting and turn-based game mechanics."
   actions:
+    - description: "Clear previous UI elements from earlier phase"
+      tools: [clearCanvas]
     - description: "TIER 1 - PUBLIC: Create phase indicator visible to all showing current speaker's turn"
       tools: [createPhaseIndicator]
     - description: "TIER 1 - PUBLIC: Create timer visible to all for statement collection"
@@ -878,8 +906,6 @@ Before generating phases, verify the following against the provided declaration:
       tools: [createTextInputPanel]
     - description: "TIER 3 - INDIVIDUAL: Create turn indicator showing current speaker's role"
       tools: [createTurnIndicator]
-    - description: "TIER 3 - INDIVIDUAL: Create statement board for speaker to preview their statements"
-      tools: [createStatementBoard]
   completion_criteria:
     type: "player_action"
     description: "Speaker has submitted their three statements via broadcast input, and player_states have been updated."
@@ -899,6 +925,8 @@ Before generating phases, verify the following against the provided declaration:
   name: "Quick Draw Challenge"
   description: "Players compete in a reaction-based challenge, demonstrating timer-based gameplay and health tracking."
   actions:
+    - description: "Clear previous UI elements from earlier phase"
+      tools: [clearCanvas]
     - description: "TIER 1 - PUBLIC: Create phase indicator for challenge phase"
       tools: [createPhaseIndicator]
     - description: "TIER 1 - PUBLIC: Create reaction timer visible to all players"
@@ -939,7 +967,7 @@ Before generating phases, verify the following against the provided declaration:
 - **Resource Games**: createScoreBoard, createInfluenceSet  
 - **Action Games**: createReactionTimer, createHealthDisplay, createActionButton
 - **Atmospheric Games**: createPhaseIndicator with descriptions
-- **Score-based Games**: **MANDATORY** - Always use createScoreBoard, updateScoreBoard, upsertScoreEntry for any scoring, ranking, or results phases
+- **Score-based Games**: **MANDATORY** - Always use createScoreBoard for any scoring, ranking, or results phases
 
 This comprehensive approach ensures:
 - **Game diversity** supported across all mechanics

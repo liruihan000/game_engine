@@ -556,17 +556,16 @@ def _execute_update_player_actions(current_player_actions: dict, player_id: str,
             "actions": {}  # Dictionary of action_id -> action_data
         }
     
-    # Generate simple action ID from 1
-    all_action_ids = []
-    for player_data in current_player_actions.values():
-        if isinstance(player_data, dict) and "actions" in player_data:
-            for action_data in player_data["actions"].values():
-                if isinstance(action_data, dict) and "id" in action_data:
-                    try:
-                        all_action_ids.append(int(action_data["id"]))
-                    except (ValueError, TypeError):
-                        pass
-    action_id = str(max(all_action_ids, default=0) + 1)
+    # Generate action ID specific to this player (each player has independent ID sequence)
+    player_action_ids = []
+    player_actions_dict = current_player_actions[str(player_id)]["actions"]
+    for action_data in player_actions_dict.values():
+        if isinstance(action_data, dict) and "id" in action_data:
+            try:
+                player_action_ids.append(int(action_data["id"]))
+            except (ValueError, TypeError):
+                pass
+    action_id = str(max(player_action_ids, default=0) + 1)
     timestamp = int(time.time() * 1000)
     
     current_player_actions[str(player_id)]["name"] = player_name  # Update name
@@ -647,53 +646,34 @@ FRONTEND_TOOL_ALLOWLIST = set([
     "promptUserText",
     # Card game UI
     "createHandsCard",
-    "updateHandsCard",
     "setHandsCardAudience",
     "createHandsCardForPlayer",
     # Text input panel tool - for user input collection and broadcast
     "createTextInputPanel",
     # Scoreboard tools
     "createScoreBoard",
-    "updateScoreBoard",
     "setScoreBoardEntries",
     "upsertScoreEntry",
     "removeScoreEntry",
-    # Update tools for common components
-    "updatePhaseIndicator",
-    "updateTextDisplay",
-    "updateActionButton",
-    "updateCharacterCard",
-    "updateVotingPanel",
-    "updateResultDisplay",
-    "updateTimer",
-    "setItemPosition",
     # Chat-driven vote
     "submitVote",
     # Coins UI tools
     "createCoinDisplay",
-    "updateCoinDisplay",
     "incrementCoinCount",
     "setCoinAudience",
     # Statement board & Reaction timer
     "createStatementBoard",
-    "updateStatementBoard",
     "createReactionTimer",
     "startReactionTimer",
     "stopReactionTimer",
     "resetReactionTimer",
     # Night overlay & Turn indicator
     "createTurnIndicator",
-    "updateTurnIndicator",
     # Health & Influence
     "createHealthDisplay",
-    "updateHealthDisplay",
     "createInfluenceSet",
-    "updateInfluenceSet",
     "revealInfluenceCard",
-    # Score tracking UI  
-    "createScoreBoard",
     # Component management tools
-    "deleteItem",
     "clearCanvas",
     # Player state management
     "markPlayerDead",
@@ -2090,7 +2070,6 @@ async def PhaseNode(state: AgentState, config: RunnableConfig) -> Command[Litera
             f"🚫 Living players: {[pid for pid, data in player_states.items() if data.get('is_alive', True)]}\n"
             f"🚫 Dead players: {[pid for pid, data in player_states.items() if not data.get('is_alive', True)]}\n"
             f"Phase History (last 5): {state.get('phase_history', [])[-5:]}\n" 
-            f"Recent Messages: {[str(msg)[:200] for msg in trimmed_messages]}\n\n"
             f"Player Actions: {_limit_actions_per_player(playerActions, 3) if playerActions else {}}\n\n"
             
             "MAIN TASK: Analyze the Current Phase Details's next_phase conditions and determine which branch to follow based on game state and Player Actions and message history.\n"
@@ -2509,10 +2488,8 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             f"itemsState (current frontend layout): {items_summary}\n"
             f"{current_phase_str}\n"
             f"player_states: {player_states}\n"
-            f"playerActions: {_limit_actions_per_player(playerActions, 3) if playerActions else {}}\n"
             f"phase history: {state.get('phase_history', [])}\n" 
             f"game_notes: {game_notes[-5:] if game_notes else 'None'}\n"
-            # f"dsl_info: {dsl_info}\n"
             f"Game Description: {declaration.get('description', 'No description available')}\n"
             "GAME DSL REFERENCE (for understanding game flow):\n"
             "🎯 ACTION EXECUTOR:\n"
@@ -2568,7 +2545,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "  • Public: audience_type=true (everyone sees it)\n"
             "  • Private: audience_type=false + audience_ids=['1','3'] (only specified players see it)\n"
             "  • CRITICAL: Include proper audience permissions on each component (audience_type=true for public; or audience_type=false with audience_ids list)\n"
-            "**Examples**: deleteItem('existing_id') + createPhaseIndicator(audience_type=true) + createActionButton(audience_ids=['2'])\n\n"
+            "**Examples**: clearCanvas() + createPhaseIndicator(audience_type=true) + createActionButton(audience_ids=['2'])\n\n"
             
             "📝 **USER INPUT COLLECTION**: For games requiring player text input (like Two Truths and a Lie statements):\n"
             "• Use createTextInputPanel() - creates floating input panel at bottom of screen\n"
@@ -2585,7 +2562,6 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "• **FALLBACK ONLY**: Only calculate results yourself if game_notes contain NO conclusions\n\n"
             "**FALLBACK DATA ANALYSIS** (only when game_notes have no conclusions):\n"
             "• Use player_states (scores, is_alive, role, etc.) for factual information\n"
-            "• Use playerActions to understand what players actually did\n"
             "• Reference recent game_notes for context and decisions\n"
             "• DO NOT fabricate or guess results - only state verified facts\n"
             "• Example: 'Player 2 won with 5 points' (from player_states.score)\n"
@@ -2593,20 +2569,20 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "• NO speculation, NO invented details - stick to observable data\n\n"
             
             "🚨 **ABSOLUTE PROHIBITION**: NEVER return with ONLY cleanup calls - THIS IS TASK FAILURE!\n"
-            "**MANDATORY CREATE REQUIREMENT**: Every deleteItem/clearCanvas MUST be followed by create tools in SAME response!\n"
-            "**CLEANUP TOOLS RESTRICTION**: deleteItem/clearCanvas cannot appear alone - must always be paired with create tools\n"
+            "**MANDATORY CREATE REQUIREMENT**: Every clearCanvas MUST be followed by create tools in SAME response!\n"
+            "**CLEANUP TOOLS RESTRICTION**: clearCanvas cannot appear alone - must always be paired with create tools\n"
             "🧹 **AUTOMATIC CLEANUP REQUIREMENT**:\n"
-            "• **PHASE TRANSITION CHECK**: If actions don't include clear/delete, YOU must check itemsState and clean up irrelevant UI\n"
+            "• **PHASE TRANSITION CHECK**: If actions don't include clearCanvas, YOU must check itemsState and clean up irrelevant UI\n"
             "• **OUTDATED UI DETECTION**: Identify items that don't match current phase requirements\n"
-            "• **AUTOMATIC DELETE**: Remove voting panels, timers, or displays that are no longer relevant\n"
-            "• **EXAMPLE**: If switching from voting to results phase, delete old voting panels before creating result displays\n"
+            "• **AUTOMATIC CLEAR**: Use clearCanvas to remove outdated UI, preserve needed components via exemptList\n"
+            "• **EXAMPLE**: If switching from voting to results phase, clearCanvas() before creating result displays\n"
             "🔄 **MANDATORY CLEAR ORDERING**:\n"
-            "• **DELETE FIRST**: deleteItem/clearCanvas calls MUST be executed BEFORE all create tools\n"
+            "• **CLEAR FIRST**: clearCanvas() calls MUST be executed ahead all create tools\n"
             "• **SYNCHRONOUS EXECUTION**: Call cleanup tools first, then creation tools in same response\n"
-            "• **CORRECT ORDER**: clearCanvas() or deleteItem('id1') → deleteItem('id2') → createPhaseIndicator() → createTimer()\n"
+            "• **CORRECT ORDER**: clearCanvas() → createPhaseIndicator() → createTimer()\n"
             "• **WRONG ORDER**: createPhaseIndicator() → clearCanvas() (creates then destroys)\n"
-            "**EXECUTION PATTERN**: [AUTO-CLEANUP] + clearCanvas() or deleteItem('abc7') + createPhaseIndicator() + createTimer() + createVotingPanel() + createDeathMarker(for_dead_players)\n"
-            "⚡ **COMPLETE PHASE EXECUTION**: Execute delete + create actions for current_phase in ONE response!\n"
+            "**EXECUTION PATTERN**: [AUTO-CLEANUP] + clearCanvas() + createPhaseIndicator() + createTimer() + createVotingPanel() + createDeathMarker(for_dead_players)\n"
+            "⚡ **COMPLETE PHASE EXECUTION**: Execute clearCanvas + create actions for current_phase in ONE response!\n"
             "**Role Selection**: Analyze player_states - Werewolves: role='Werewolf', Alive: is_alive=true, Human: always ID '1'\n"
             "**Timers**: ~10 seconds (max 15), Layout: 'center' default\n"
             "**PHASE INDICATORS**: Always place at 'top-center' position (reserved for phase indicators)\n"
@@ -2686,10 +2662,14 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
 
     # 4. Trim messages and filter out orphaned ToolMessages
     full_messages = state.get("messages", []) or []
-    trimmed_messages = full_messages[-30:]  # Increased to accommodate multiple tool calls
+    trimmed_messages = full_messages[-20:]  # Increased to accommodate multiple tool calls
     
     # Filter out incomplete AIMessage + ToolMessage sequences using global function
     trimmed_messages = filter_incomplete_message_sequences(trimmed_messages)
+    
+    # Filter out HumanMessage from history for ActionExecutor
+    from langchain_core.messages import HumanMessage
+    trimmed_messages = [msg for msg in trimmed_messages if not isinstance(msg, HumanMessage)]
     
     latest_state_system = SystemMessage(
         content=(
@@ -2703,7 +2683,6 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
 
     response = await model_with_tools.ainvoke([
         system_message,
-        *trimmed_messages,
         latest_state_system,
     ], config)
 
@@ -2736,16 +2715,16 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
         orig_tool_calls = getattr(response, "tool_calls", []) or []
         def _get_tool_name(tc):
             return tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-        deletion_names = {"deleteItem", "clearCanvas"}
+        deletion_names = {"clearCanvas"}
         only_deletions = bool(orig_tool_calls) and all((_get_tool_name(tc) in deletion_names) for tc in orig_tool_calls)
         if only_deletions:
-            logger.warning("[ActionExecutor][GUARD] Only deletion tool calls detected; issuing follow-up request for creation tools.")
+            logger.warning("[ActionExecutor][GUARD] Only clearCanvas tool calls detected; issuing follow-up request for creation tools.")
             strict_creation_system = SystemMessage(
                 content=(
-                    "You returned ONLY deletion tools (deleteItem/clearCanvas). Now you MUST produce the required creation tools for the current phase in this follow-up.\n"
+                    "You returned ONLY clearCanvas tools. Now you MUST produce the required creation tools for the current phase in this follow-up.\n"
                     "Rules:\n"
-                    "- Do NOT call deleteItem or clearCanvas again.\n"
-                    "- Call only creation/update tools to render the phase UI (e.g., createPhaseIndicator, createTimer, createVotingPanel, createTextDisplay, createDeathMarker, etc.).\n"
+                    "- Do NOT call clearCanvas again.\n"
+                    "- Call only creation tools to render the phase UI (e.g., createPhaseIndicator, createTimer, createVotingPanel, createTextDisplay, createDeathMarker, etc.).\n"
                     f"- Current phase context: ID {current_phase_id}. Follow its 'actions' strictly.\n"
                     "- Include proper audience permissions on each component (audience_type=true for public; or audience_type=false with audience_ids list).\n"
                 )

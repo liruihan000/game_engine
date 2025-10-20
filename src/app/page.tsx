@@ -574,20 +574,14 @@ export default function CopilotKitPage() {
         setItemName: "Rename an existing item by id",
         setItemSubtitleOrDescription: "Set an item's subtitle/short description",
         setItemPosition: "Change an item's position on the grid",
-        deleteItem: "Delete an item by id",
-        clearCanvas: "Clear all canvas items except avatar sets",
+        clearCanvas: "Clear all canvas items except avatar sets and exempted items",
         
-        // 🎮 Core game components (create + update)
+        // 🎮 Core game components
         createCharacterCard: "Create a character card (role, position, size, description)",
-        updateCharacterCard: "Update existing character card properties",
         createActionButton: "Create an action button (label, action, enabled, position)",
-        updateActionButton: "Update existing action button properties", 
         createPhaseIndicator: "Create a phase indicator (currentPhase, position, timer)",
-        updatePhaseIndicator: "Update existing phase indicator properties",
         createTextDisplay: "Create a text panel (content, title, type, position)",
-        updateTextDisplay: "Update existing text display content",
         createVotingPanel: "Create a voting panel (votingId, options, position)",
-        updateVotingPanel: "Update existing voting panel options",
         
         // 👥 Player system
         createAvatarSet: "Create player avatars overlay (avatarType)",
@@ -597,7 +591,6 @@ export default function CopilotKitPage() {
         
         // ⏰ Timer system
         createTimer: "Create countdown timer that expires and notifies agent",
-        updateTimer: "Update existing timer duration or label",
         createReactionTimer: "Create quick reaction/challenge timer bar",
         startReactionTimer: "Start a reaction timer countdown",
         stopReactionTimer: "Stop a reaction timer", 
@@ -607,35 +600,28 @@ export default function CopilotKitPage() {
         changeBackgroundColor: "Create background control and set initial color",
         createBackgroundControl: "Create background color control component",
         createResultDisplay: "Create large gradient-styled result display",
-        updateResultDisplay: "Update result display content",
         createNightOverlay: "Create night overlay with title and blur",
         setNightOverlay: "Update night overlay visibility and properties",
         
         // 🃏 Card games
         createHandsCard: "Create hand card for card games (cardType, cardName)",
         createHandsCardForPlayer: "Create hand card for specific player",
-        updateHandsCard: "Update hand card properties",
         setHandsCardAudience: "Set hand card audience visibility",
         
         // 📊 Scoring system
         createScoreBoard: "Create score board with player entries",
-        updateScoreBoard: "Update score board entries and properties",
         upsertScoreEntry: "Add or update a score entry",
         removeScoreEntry: "Remove score entry by player id",
         
         // 🏥 Health/status
         createHealthDisplay: "Create health/bullets display (value, max, style)",
-        updateHealthDisplay: "Update health display values",
         createInfluenceSet: "Create influence cards set (Coup-style games)",
-        updateInfluenceSet: "Update influence set properties",
         revealInfluenceCard: "Reveal influence card by index",
         
         // 📝 Special input
         createTextInputPanel: "Create text input panel for user input",
         createStatementBoard: "Create statement board for Two Truths and a Lie",
-        updateStatementBoard: "Update statement board content",
         createTurnIndicator: "Create turn indicator showing current active player",
-        updateTurnIndicator: "Update turn indicator properties",
         
         // 🤖 Interaction system
         addBotChatMessage: "Add bot message to chat",
@@ -1923,33 +1909,6 @@ export default function CopilotKitPage() {
     },
   });
 
-  useCopilotAction({
-    name: "updateTurnIndicator",
-    description: "Update turn indicator fields",
-    available: "remote",
-    followUp: false,
-    parameters: [
-      { name: "itemId", type: "string", required: true },
-      { name: "currentPlayerId", type: "string", required: false },
-      { name: "playerName", type: "string", required: false },
-      { name: "label", type: "string", required: false },
-      { name: "accentColor", type: "string", required: false },
-      { name: "position", type: "string", required: false },
-    ],
-    handler: ({ itemId, currentPlayerId, playerName, label, accentColor, position /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-}: any) => {
-      updateItemData(String(itemId), (prev) => {
-        const d = { ...(prev as TurnIndicatorData) };
-        if (typeof currentPlayerId === 'string') d.currentPlayerId = currentPlayerId;
-        if (typeof playerName === 'string') d.playerName = playerName;
-        if (typeof label === 'string') d.label = label;
-        if (typeof accentColor === 'string') d.accentColor = accentColor;
-        if (typeof position === 'string') d.position = position as GamePosition;
-        return d;
-      });
-      return itemId;
-    },
-  });
 
   // Health Display (Bang!)
   useCopilotAction({
@@ -2458,30 +2417,38 @@ export default function CopilotKitPage() {
 
   useCopilotAction({
     name: "clearCanvas",
-    description: "Clear all items from the canvas except avatar sets. This is useful when transitioning between game phases or starting fresh.",
+    description: "Clear all items from the canvas except avatar sets and exempted items. This is useful when transitioning between game phases or starting fresh.",
     available: "remote",
     followUp: false,
-    parameters: [],
-    handler: () => {
-      console.log("🔧 clearCanvas handler called - starting execution");
+    parameters: [
+      { name: "exemptList", type: "string[]", required: false, description: "Array of item IDs to preserve during clearing." },
+    ],
+    handler: ({ exemptList }: { exemptList?: string[] }) => {
+      console.log("🔧 clearCanvas handler called - starting execution", { exemptList });
       setState((prev) => {
         const base = prev ?? initialState;
         const items = base.items ?? [];
-        // Keep only avatar_set items
-        const avatarItems = items.filter(item => item.type === "avatar_set");
-        const removedCount = items.length - avatarItems.length;
-        console.log(`🧹 Clearing canvas: removed ${removedCount} items, kept ${avatarItems.length} avatars`);
+        // Keep avatar_set items and exempted items
+        const keptItems = items.filter(item => 
+          item.type === "avatar_set" || 
+          (exemptList && exemptList.includes(item.id))
+        );
+        const removedCount = items.length - keptItems.length;
+        console.log(`🧹 Clearing canvas: removed ${removedCount} items, kept ${keptItems.length} items (avatars + exempted)`);
         return { 
           ...base, 
-          items: avatarItems,
+          items: keptItems,
           lastAction: `cleared_canvas:${removedCount}_removed`
         } as AgentState;
       });
       
       const originalCount = (viewState.items ?? []).length;
       const avatarCount = (viewState.items ?? []).filter(item => item.type === "avatar_set").length;
-      const removedCount = originalCount - avatarCount;
-      const result = `Canvas cleared. Removed ${removedCount} items, kept ${avatarCount} avatar sets.`;
+      const exemptCount = exemptList ? exemptList.filter(id => 
+        (viewState.items ?? []).some(item => item.id === id && item.type !== "avatar_set")
+      ).length : 0;
+      const removedCount = originalCount - avatarCount - exemptCount;
+      const result = `Canvas cleared. Removed ${removedCount} items, kept ${avatarCount} avatar sets${exemptCount > 0 ? ` and ${exemptCount} exempted items` : ''}.`;
       console.log("✅ clearCanvas handler completed, returning:", result);
       return result;
     },
@@ -2757,7 +2724,7 @@ export default function CopilotKitPage() {
                 {/* Warning message for stop button */}
                 <div className="px-4 py-2 border-t border-sidebar-border bg-yellow-50 dark:bg-yellow-900/20">
                   <p className="text-xs text-red-600 dark:text-red-400 leading-tight">
-                    ⚠️ Don&apos;t click the stop button in chat - Continue will lose function. Chat input only way to restart agent.
+                    ⚠️ Don&apos;t click the stop button in chat - the agent will be reset.
                   </p>
                 </div>
               </>

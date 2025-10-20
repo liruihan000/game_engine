@@ -34,30 +34,34 @@ load_dotenv(ENV_PATH)
 # Monitoring configuration
 VERBOSE_LOGGING = True  # Set to False to disable detailed logging
 
-# 直接配置 logger，不依赖 basicConfig
+# Configure logger directly, not depending on basicConfig
 logger = logging.getLogger('DSLAgent')
-logger.handlers.clear()  # 清除现有 handlers
+logger.handlers.clear()  # Clear existing handlers
 
 if VERBOSE_LOGGING:
     logger.setLevel(logging.INFO)
     
-    # 创建格式器
+    # Create formatter
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
     
-    # 文件处理器 - 使用时间戳创建新的日志文件
+    # File handler - merge daily logs in dev mode (avoid multiple files from hot reload)
     from datetime import datetime
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    log_file = f'/home/lee/game_engine/logs/dsl_agent_{timestamp}.log'
+    date_str = datetime.now().strftime('%Y%m%d')
+    log_file = f'/home/lee/game_engine/logs/dsl_agent_{date_str}.log'
+    
+    # Ensure log directory exists
+    os.makedirs(os.path.dirname(log_file), exist_ok=True)
+    
     file_handler = logging.FileHandler(log_file)
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     
-    # 控制台处理器
+    # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     
-    logger.propagate = False  # 防止传播到root logger
+    logger.propagate = False  # Prevent propagation to root logger
     logger.info(f"Logging to: {log_file}")
 else:
     logger.setLevel(logging.CRITICAL)
@@ -235,18 +239,24 @@ async def phases_node(state: DSLState, config: RunnableConfig) -> Command[str]:
 
     prompt_path = os.path.join(PROMPT_DIR, "dsl_phases_generation_prompt.txt")
     system_prompt = await _read_text_file(prompt_path)
+    game_desc = state.get("game_description") or ""
+    logger.info(f"Game description: {game_desc[:100]}...")
 
     # Provide declaration context explicitly
     declaration_block = _safe_dump_yaml({"declaration": existing.get("declaration", {})})
     logger.info(f"Declaration block being sent to model (length: {len(declaration_block)}):")
     logger.info(f"Declaration block preview: {declaration_block[:200]}...")
 
+    # Construct human message with game description and declaration context
+    human_message_content = "Only output the phases mapping."
+    if game_desc:
+        human_message_content += f"\n\nOriginal Game description: {game_desc}"
+    human_message_content += f"\n\nHere is the declaration (context):\n\n{declaration_block}"
+
     model = init_chat_model("openai:gpt-5")
     response = await model.ainvoke([
         SystemMessage(content=system_prompt),
-        HumanMessage(content=(
-            "Only output the phases mapping. Here is the declaration (context):\n\n" + declaration_block
-        )),
+        HumanMessage(content=human_message_content),
     ], config)
 
     yaml_text = _extract_yaml(response.content or "")
@@ -310,13 +320,19 @@ async def validation_node(state: DSLState, config: RunnableConfig) -> Command[st
 
     prompt_path = os.path.join(PROMPT_DIR, "dsl_validation_node_prompt.txt")
     system_prompt = await _read_text_file(prompt_path)
+    game_desc = state.get("game_description") or ""
+    logger.info(f"Game description: {game_desc[:100]}...")
+
+    # Construct human message with game description and YAML to validate
+    human_message_content = "Validate and correct this YAML; output the full corrected YAML only."
+    if game_desc:
+        human_message_content += f"\n\nOriginal Game description: {game_desc}"
+    human_message_content += f"\n\n{existing_text}"
 
     model = init_chat_model("openai:gpt-5")
     response = await model.ainvoke([
         SystemMessage(content=system_prompt),
-        HumanMessage(content=(
-            "Validate and correct this YAML; output the full corrected YAML only.\n\n" + existing_text
-        )),
+        HumanMessage(content=human_message_content),
     ], config)
 
     yaml_text = _extract_yaml(response.content or "")
