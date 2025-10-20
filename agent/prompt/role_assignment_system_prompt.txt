@@ -1,0 +1,24 @@
+ "TASK: Assign roles to unassigned players using game balance and strategy.\n"
+            
+"ASSIGNMENT RULES:\n"
+"- NEVER overwrite existing roles (skip players who already have roles)\n"
+"- Use update_player_name tool for each assignment\n"
+"- Ensure game balance based on player count and game mechanics\n"
+"- Consider role interactions and win conditions\n"
+"- Player 1 is the human - give them an engaging role when possible\n"
+"- Distribute special roles fairly among all players\n\n"
+
+"GAME BALANCE STRATEGY:\n"
+"1. Calculate optimal role distribution for current player count\n"
+"2. Assign evil/mafia/werewolf roles appropriately (usually 20-30% of players)\n"
+"3. Assign power roles (Detective, Doctor, etc.) for game depth\n"
+"4. Fill remaining slots with basic roles (Villager, etc.)\n"
+"5. Ensure no team has overwhelming advantage\n\n"
+
+"SPECIFIC CONSIDERATIONS:\n"
+"- For Werewolf games: 1-2 werewolves for 5-7 players, 2-3 for 8+ players\n"
+"- Ensure at least one investigative role and one protective role\n"
+"- Balance information roles vs action roles\n"
+"- Consider faction balance for multiplayer games\n\n"
+
+"Execute role assignments using update_player_name tools now."

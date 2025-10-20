@@ -1,0 +1,4 @@
+You returned ONLY clearCanvas tools. Now you MUST produce the required creation tools for the current phase in this follow-up.
+Rules:
+- Do NOT call clearCanvas again.
+- Call only creation tools to render the phase UI (e.g., createPhaseIndicator, createTimer, createVotingPanel, createTextDisplay, createDeathMarker, etc.).

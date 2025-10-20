@@ -407,20 +407,13 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
             chat_tools.append(tool)
             break
     
-    if not chat_tools:
-        logger.warning("[ChatBotNode] addBotChatMessage tool not available")
-        return Command(goto=END, update={})
     
     # Bind tools to model
     model_with_tools = model.bind_tools(chat_tools)
-    
-    # Log game_notes for debugging
     game_notes = state.get('game_notes', [])
-    logger.info(f"[ChatBotNode] Game Notes Count: {len(game_notes)}")
-    if game_notes:
-        logger.info(f"[ChatBotNode] All Game Notes: {game_notes}")
-    else:
-        logger.info(f"[ChatBotNode] No Game Notes Available")
+
+    chat_system_prompt = await _load_prompt_async("chat_system_prompt")
+
 
     # Enhanced LLM system for intelligent bot chat responses
     system_prompt = f"""
@@ -438,48 +431,7 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     - **CRITICAL**: Dead players CANNOT speak or respond to chat - exclude them entirely!
 
     💬 **USER MESSAGE**: {last_msg.content}
-
-    🎯 **BOT SELECTION STRATEGY**:
-    **STEP 0 - MANDATORY LIFE STATUS VALIDATION**:
-    • **BEFORE selecting ANY bot**: Verify the target bot has is_alive=true
-    • **NEVER select dead players**: Dead players cannot speak in chat
-    • **Skip to next option**: If targeted bot is dead, find alternative living bot
-
-    **STEP 1 - Direct Targeting Detection**:
-    • Check for direct mentions: "@Player2", "Player 3", specific bot names
-    • If found AND bot is alive: Use that specific bot to respond
-    • If found BUT bot is dead: Select different living bot to acknowledge the death
-
-    **STEP 2 - Context-Based Selection**:
-    • If user asks about specific roles: Use living bot with that role
-    • If user makes accusations: Let accused bot defend themselves (if alive)
-    • If general chat: Choose most talkative/relevant living bot
-
-    **STEP 3 - Multi-Bot Probability** (20% chance):
-    • Sometimes 2-3 bots respond in sequence
-    • Use different perspectives (suspicious vs friendly)
-    • Keep responses short when multiple bots talk
-
-    🎭 **RESPONSE GENERATION RULES**:
-    • **Stay in Character**: Each bot has distinct personality based on their role
-    • **Game Context**: Reference current phase and recent events
-    • **Natural Language**: Avoid robotic responses, use game slang
-    • **Appropriate Length**: Single sentence to short paragraph
-
-    🚨 **EXECUTION REQUIREMENTS**:
-    0. **CRITICAL: VERIFY BOT IS ALIVE** - Check is_alive=true before calling addBotChatMessage
-    1. **Always call addBotChatMessage** for selected bot(s) - ONLY if they are alive
-    2. **Use exact player IDs** (e.g., "2", "3", not "Player 2") 
-    3. **Include bot's actual name** from player_states
-    4. **Set messageType: "message"**
-    5. **NO text output** - only tool calls
-    6. **Dead player response**: If user mentions dead player, use living bot to say "Player X is no longer with us"
-
-    📋 **RESPONSE EXAMPLES BY ROLE**:
-    • **Werewolf**: Deflect suspicion, act innocent, subtly mislead
-    • **Doctor**: Be helpful, logical, protective instincts
-    • **Detective/Seer**: Ask probing questions, share insights carefully
-    • **Villager**: React emotionally, make accusations, seek alliances
+    {chat_system_prompt}
     """
     
     try:
@@ -982,39 +934,6 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     and render public, group, and individual UIs according to the DSL phase design.
     Can make announcements based on RefereeNode conclusions.
     """
-    # Print game name from state
-    game_name = state.get("gameName", "")
-    logger.info(f"[ActionExecutor] Game name from state: {game_name}")
-    
-    # Log raw_messages at node start
-    # raw_messages = state.get("messages", [])
-    # logger.info(f"[ActionExecutor] raw_messages: {raw_messages}")
-    
-    logger.info(f"[ActionExecutor][start] ==== start ActionExecutor ====")
-    
-    # Extract phase info for logging
-    current_phase_id = state.get("current_phase_id", 0)
-    dsl_content = state.get("dsl", {})
-    
-    # === DETAILED INPUT LOGGING ===
-    player_states = state.get("player_states", {})
-    playerActions = state.get("playerActions", {})
-    logger.info(f"[ActionExecutor][INPUT] current_phase_id: {current_phase_id}")
-    logger.info(f"[ActionExecutor][INPUT] player_states: {player_states}")
-    logger.info(f"[ActionExecutor][INPUT] playerActions: {playerActions}")
-    logger.info(f"[ActionExecutor][INPUT] state keys: {list(state.keys())}")
-    phases = dsl_content.get('phases', {})
-    current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
-    
-    # Log phase info
-    logger.info(f"[ActionExecutor] current_phase_id: {current_phase_id}")
-    logger.info(f"[ActionExecutor] current_phase: {current_phase}")
-    logger.info(f"[ActionExecutor] player_states: {state.get('player_states', {})}")
-    
-    # Debug: Print entire received state
-    logger.info(f"[ActionExecutor][DEBUG] Full received state keys: {list(state.keys())}")
-    if "player_states" in state:
-        logger.info(f"[ActionExecutor][DEBUG] Received player_states: {state.get('player_states', {})}")
     
     # 1. Define the model
     model = init_chat_model("openai:gpt-4.1-mini")
@@ -1071,50 +990,22 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
         parallel_tool_calls=True,  # Allow multiple tool calls in single response
     )
 
-    # 3. Prepare system message with current state and actions to execute
+    # 3. Prepare system states with current state and actions to execute
     items_summary = summarize_items_for_prompt(state)
-    logger.info(f"[ActionExecutor][output] items_summary: {items_summary}")
     current_phase_id = state.get("current_phase_id", 0)
     dsl_content = state.get("dsl", {})
     declaration = dsl_content.get('declaration', {}) if dsl_content else {}
     player_states = state.get("player_states", {})
     playerActions = state.get("playerActions", {})
-    
-    # Get current phase details
     phases = dsl_content.get('phases', {}) if dsl_content else {}
-    # Try both int and string keys to handle YAML parsing variations
     current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
-    
-    # Log game_notes for debugging
     game_notes = state.get('game_notes', [])
-    logger.info(f"[ActionExecutor] Game Notes Count: {len(game_notes)}")
-    if game_notes:
-        logger.info(f"[ActionExecutor] Current Game Notes: {game_notes}")
-    else:
-        logger.info(f"[ActionExecutor] No Game Notes Available")
-
-    # Generate actions from DSL phase if not explicitly provided
-    actions_to_execute = state.get("actions", []) or []
-    if not actions_to_execute and current_phase:
-        # Extract actions from current phase
-        phase_actions = current_phase.get("actions", [])
-        if phase_actions:
-            actions_to_execute = [{"description": f"Execute phase {current_phase_id} actions", "tools": phase_actions}]
-    
-    # Print current phase details
     if current_phase:
-        logger.info(f"[ActionExecutor][DSL] Current phase ID: {current_phase_id}")
-        logger.info(f"[ActionExecutor][DSL] Current phase: {current_phase}")
         current_phase_str = f"Current phase (ID {current_phase_id}):\n{current_phase}\n"
     else:
         logger.info(f"[ActionExecutor][DSL] Current phase ID: {current_phase_id} (not found in DSL phases)")
         current_phase_str = f"Current phase ID: {current_phase_id} (not found in DSL phases)\n"
 
-    dsl_info = f"LOADED GAME DSL:\n{dsl_content}\n" if dsl_content else "No DSL loaded.\n"
-
-    # Role assignment is handled exclusively by RefereeNode; ActionExecutor does not assign roles
-
-    # (no-op here)
 
     system_message = SystemMessage(
         content=(
@@ -1122,14 +1013,13 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "As the DM, you have complete responsibility for running this game. You must:\n\n"
              "📊 **CURRENT GAME STATE** (Analyze these carefully):\n"
             f"itemsState (current frontend layout): {items_summary}\n"
-            f"{current_phase_str}\n"
+            f"**Current Phase**: {current_phase_str}\n"
             f"player_states: {player_states}\n"
             f"phase history: {state.get('phase_history', [])}\n" 
             f"game_notes: {game_notes[-5:] if game_notes else 'None'}\n"
             f"Game Description: {declaration.get('description', 'No description available')}\n"
+            f"**Current Actions to Execute**: {current_phase.get('actions', [])}\n"
             "GAME DSL REFERENCE (for understanding game flow):\n"
-            "🎯 ACTION EXECUTOR:\n"
-            f"Actions to execute: {actions_to_execute}\n\n"
  
             "📋 **DM CORE RESPONSIBILITIES** (Master these completely):\n"
             "1. **GAME NOTES AWARENESS**: Read game_notes for critical state changes and UI guidance\n"
