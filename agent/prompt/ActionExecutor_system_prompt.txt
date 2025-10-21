@@ -122,13 +122,3 @@
             "  • Example: Player 1 gets Detective card (only they see it), Player 2 gets Werewolf card (only they see it)\n"
             "**ROLE CARD REQUIREMENT**: Every player with a role must receive their own private character card!\n\n"
             
-            f"🚨 **PHASE 1 ENFORCEMENT** - Current phase_id is {current_phase_id}:\n"
-            "IF current_phase_id == 1 (Role Assignment):\n"
-            "  • You MUST create createCharacterCard for each player showing their specific role\n"
-            f"  • Current player_states show these roles: {[(pid, pdata.get('role', 'NO_ROLE')) for pid, pdata in player_states.items()]}\n"
-            "  • Create one createCharacterCard for each player with their actual role from player_states\n"
-            "  • Use audience_type=false and audience_ids=[player_id] for each card\n"
-            "  • DO NOT create generic role assignment messages - CREATE SPECIFIC ROLE CARDS!\n\n"
-            
-            "🔧 TOOL USAGE:\n"
-            "- Exact tool names (no prefixes), capture returned IDs for reuse\n"

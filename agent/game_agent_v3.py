@@ -202,24 +202,11 @@ async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Comman
     - ChatBotNode for chat messages
     - BotBehaviorNode for game progression (after processing human actions)
     """
-    # Print game name from state
-    game_name = state.get("gameName", "")
-    logger.info(f"[InitialRouterNode] Game name from state: {game_name}")
-    
-    
+
     # === DETAILED INPUT LOGGING ===
     current_phase_id = state.get('current_phase_id', 0)
     player_states = state.get("player_states", {})
-    # Keep original for updates, limit for internal use
-    playerActions = state.get("playerActions", {})
-    logger.info(f"[InitialRouter][INPUT] current_phase_id: {current_phase_id}")
-    logger.info(f"[InitialRouter][INPUT] player_states: {player_states}")
-    logger.info(f"[InitialRouter][INPUT] playerActions: {playerActions}")
-    logger.info(f"[InitialRouter][INPUT] state keys: {list(state.keys())}")
-
-    
     current_phase_id = state.get('current_phase_id', 0)
-    logger.info(f"[InitialRouter] Starting with phase_id: {current_phase_id}")
     
     # Define backend tools that don't require frontend interaction
     backend_tool_names = BACKEND_TOOL_NAMES
@@ -270,16 +257,13 @@ async def InitialRouterNode(state: AgentState, config: RunnableConfig) -> Comman
     
     # Initialize player_states if empty and we have roomSession data
     if not player_states and dsl_content:
-        logger.info(f"[InitialRouter] player_states empty ({len(player_states)} players), checking roomSession...")
         room_session = state.get("roomSession")
         if room_session and room_session.get("players"):
-            logger.info("[InitialRouter] Initializing player_states from roomSession")
             try:
                 room_players = room_session["players"]
                 initialized_states = await initialize_player_states_from_dsl(dsl_content, room_players)
                 if initialized_states:
                     updates["player_states"] = initialized_states
-                    logger.info(f"[InitialRouter] ✅ Initialized player_states: {len(initialized_states)} players")
                 else:
                     logger.warning("[InitialRouter] Failed to initialize player_states from DSL")
             except Exception as e:
@@ -436,14 +420,10 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     
     try:
         response = await model_with_tools.ainvoke([SystemMessage(content=system_prompt)])
-        
-        # === DETAILED LLM RESPONSE LOGGING ===
-        logger.info(f"[ChatBotNode][LLM_OUTPUT] Raw response content: {response.content}")
-        logger.info(f"[ChatBotNode][LLM_OUTPUT] Response type: {type(response)}")
+
         
         # Check if tool was called
         tool_calls = getattr(response, "tool_calls", []) or []
-        logger.info(f"[ChatBotNode][TOOL_CALLS] Total tool calls: {len(tool_calls)}")
         if tool_calls:
             logger.info(f"[ChatBotNode][TOOL_CALLS] Tool calls details: {tool_calls}")
             return Command(goto=END, update={"messages": [response]})
@@ -641,6 +621,27 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     items_summary = summarize_items_for_prompt(state)
     current_phase_id = state.get("current_phase_id", 0)
     dsl_content = state.get("dsl", {})
+    
+    # Special check for phase 0: Must ensure ActionExecutor has run at least once before allowing transition
+    if current_phase_id == 0:
+        phase_history = state.get("phase_history", [])
+        phase0_executed = any(entry.get("phase_id") == 0 for entry in phase_history)
+        if not phase0_executed:
+            phases = dsl_content.get('phases', {}) if dsl_content else {}
+            phase_name = phases.get(0, {}).get('name', 'Phase 0') or phases.get('0', {}).get('name', 'Phase 0')
+            phase_entry = {
+                "phase_id": 0,
+                "phase_name": phase_name,
+                "timestamp": __import__('datetime').datetime.now().isoformat()
+            }
+            phase_history.append(phase_entry)
+            return Command(
+                goto="UIUpdateNode",
+                update={
+                    "current_phase_id": 0,
+                    "phase_history": phase_history
+                }
+            )
     declaration = dsl_content.get('declaration', {}) if dsl_content else {}
     player_states = state.get("player_states", {})
     playerActions = state.get("playerActions", {})
@@ -670,10 +671,10 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             f"- Player Actions: {playerActions}\n\n"
             f"- Screen Components: {items_summary}\n\n"
 
-            "🔄 **MANDATORY 3-STEP DM WORKFLOW** (MUST execute ALL steps in order):\n\n"
-            "⚠️ **CRITICAL EXECUTION RULE**: You MUST complete ALL 3 STEPS in EVERY response. Skipping any step is forbidden!\n\n"
+            "🔄 **MANDATORY 2-STEP DM WORKFLOW** (MUST execute ALL steps in order):\n\n"
+            "⚠️ **CRITICAL EXECUTION RULE**: You MUST complete ALL 2 STEPS in EVERY response. Skipping any step is forbidden!\n\n"
 
-            "**STEP 1: Analyze Current Player Operations**\n"
+            "**STEP 1: Analyze Player Actions and Phase Update**\n"
             "• **IMPORTANT**: Analyze player operations from playerActions data structure ONLY\n"
             "• Do NOT read or analyze human messages - only use playerActions state\n"
             "• playerActions contains all recorded player behaviors from previous rounds\n"
@@ -681,24 +682,24 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "• Use ONLY actual existing data from playerActions - NEVER fabricate or guess\n"
             "• Use update_player_actions tool to record/update player operations if needed\n"
             "• Output format: 'Player X: [specific operation content from playerActions]'\n"
-            "• If no operation record exists in playerActions, output 'Player X: No operations recorded'\n\n"
+            "• If no operation record exists in playerActions, output 'Player X: No operations recorded'\n"
+            "• Based on analyzed actions, verify current phase completion criteria and requirements\n"
+            "• Check if current phase has all necessary conditions met\n"
+            "• Analyze phase-specific rules and constraints from DSL\n"
+            f"• Current phase completion criteria: {current_phase.get('completion_criteria', {})}\n"
+            "• **MANDATORY Phase Update**: You MUST call set_next_phase based on analysis\n"
+            "  - **SPECIAL CASE**: If current_phase_id=0 AND items are empty, stay in phase 0 (UI not initialized yet)\n"
+            "  - If phase is complete: advance to next phase\n"
+            "  - If phase is not complete: stay in current phase (call set_next_phase with same phase_id)\n"
+            "• Output format: 'Phase Decision: [Complete/Incomplete] - Advancing to Phase X / Staying in Phase X'\n\n"
 
             "**STEP 2: Update Player States**\n"
-            "• Based on STEP 1's actual operations, update corresponding player_states\n"
+            "• Based on STEP 1's analyzed player actions, update corresponding player_states\n"
             "• If players don't have roles assigned, you need to assign roles and update state\n"
             "• Use update_player_state tool for all state updates\n"
             "• Update logic must comply with DSL-defined state field meanings\n"
             "• Calculate scores, life/death status, game progress, etc.\n"
             "• Output format: 'Updated Player X: field_name = new_value (reason)'\n\n"
-
-            "**STEP 3: Phase Management & Transition Decision**\n"
-            "• **MANDATORY Phase Decision**: ALWAYS check current phase completion criteria\n"
-            f"• Current phase completion criteria: {current_phase.get('completion_criteria', {})}\n"
-            "• **MANDATORY Phase Update**: You MUST call set_next_phase in EVERY response\n"
-            "  - **SPECIAL CASE**: If current_phase_id=0 AND items are empty, stay in phase 0 (UI not initialized yet)\n"
-            "  - If phase is complete: advance to next phase\n"
-            "  - If phase is not complete: stay in current phase (call set_next_phase with same phase_id)\n"
-            "• Output format: 'Phase Decision: [Complete/Incomplete] - Advancing to Phase X / Staying in Phase X'\n\n"
 
             "🔧 **Available Backend Tools**:\n"
             "• update_player_actions(player_id, actions, phase) - Record player operations\n"
@@ -962,12 +963,6 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             response = AIMessage(content=cleaned_content, tool_calls=remaining_tool_calls)
             logger.info(f"[ActionExecutor] Removed backend tool calls. Remaining: {len(remaining_tool_calls)} frontend tools")
 
-    # Actions completed, end execution; mark phase 0 UI as done so InitialRouter won't loop back
-    logger.info(f"[ActionExecutor][end] === ENDING ===")
-    # === DETAILED OUTPUT LOGGING ===
-    logger.info(f"[ActionExecutor][OUTPUT] Command goto: END")
-    logger.info(f"[ActionExecutor][OUTPUT] final_player_states: {final_player_states}")
-    logger.info(f"[ActionExecutor][OUTPUT] updated_phase_id: {updated_phase_id}")
 
     # Generate monotonic state version
     state_version = get_next_state_version()
