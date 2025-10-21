@@ -8,7 +8,7 @@ import os
 import yaml
 from dotenv import load_dotenv
 from typing import Literal, List, Dict, Any, Optional
-from tools.prompts import _load_prompt_async
+from prompt.prompt_loader import _load_prompt_async
 # Load environment variables with absolute path
 env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 load_dotenv(env_path)
@@ -135,7 +135,6 @@ class AgentState(CopilotKitState):
 # Centralized backend tools (shared across nodes)
 backend_tools = [
     update_player_state,
-    update_player_actions,
     set_next_phase,
 ]
 
@@ -455,7 +454,7 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
         logger.error(f"[ChatBotNode] LLM call failed: {e}")
         return Command(goto=END, update={})
 
-async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["RefereeNode"]]:
+async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["ActionExecutor"]]:
     """
     BotBehaviorNode analyzes bot behavior and generates responses for non-human players.
     
@@ -532,7 +531,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
     # Route to RefereeNode
     logger.info("[BotBehaviorNode] Routing to RefereeNode")
     return Command(
-        goto="RefereeNode",
+        goto="ActionExecutor",
         update={
             "player_states": current_player_states,
             "playerActions": current_player_actions,
@@ -541,391 +540,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
         }
     )
 
-async def RefereeNode(state: AgentState, config: RunnableConfig) -> Command[Literal["ActionExecutor"]]:
-    """
-    RefereeNode processes player behaviors and updates game state according to rules.
-    
-    Input:
-    - trimmed_messages: Recent message history
-    - last human message: Most recent human player input
-    - player_states: Current player states
-    - current_phase and declaration: Phase configuration  
-    
-    Output:
-    - Updated player_states based on game rules and player actions
-    """
-    # Print game name from state
-    game_name = state.get("gameName", "")
-    logger.info(f"[RefereeNode] Game name from state: {game_name}")
-    
-    # Log raw_messages at node start
-    # raw_messages = state.get("messages", [])
-    # logger.info(f"[RefereeNode] raw_messages: {raw_messages}")
-    
-    logger.info("[RefereeNode] Starting referee analysis and state updates")
-    
-    # Extract inputs - simplified with BaseMessage
-    messages = state.get("messages", [])  # Safe dictionary access to BaseMessage list
-    trimmed_messages = messages[-10:] if messages else []
-    trimmed_messages = filter_incomplete_message_sequences(trimmed_messages)
-    player_states = state.get("player_states", {})
-    current_phase_id = state.get("current_phase_id", 0)
-    dsl_content = state.get("dsl", {})
-    
-    
-    # Get current phase details
-    phases = dsl_content.get('phases', {}) if dsl_content else {}
-    # Try both int and string keys to handle YAML parsing variations
-    current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
-    next_phase = current_phase
-    declaration = dsl_content.get('declaration', {}) if dsl_content else {}
 
-
-    playerActions = state.get("playerActions", {})
-    game_notes = state.get('game_notes', [])
-    phase_history = state.get('phase_history', [])
-    last_phase_id = phase_history[-2]['phase_id'] if len(phase_history) >= 2 else None
-    
-    # Get last phase details from DSL using last_phase_id
-    last_phase = None
-    if last_phase_id is not None:
-        phases = dsl_content.get('phases', {}) if dsl_content else {}
-        # Try both int and string keys to handle YAML parsing variations
-        last_phase = phases.get(last_phase_id, {}) or phases.get(str(last_phase_id), {})
-    
-    # Initialize LLM
-    model = init_chat_model("openai:gpt-4.1-mini")
-    # Bind state management tools
-    model_with_tools = model.bind_tools([update_player_state, add_game_note, set_next_phase], parallel_tool_calls=True)
-    
-    # Create system message with all inputs
-    system_message = SystemMessage(
-        content=(
-            " **REFEREE NODE: STATE MANAGER & GAME NOTES KEEPER**\n\n"
-
-            f" **CURRENT GAME ANALYSIS**:\n"
-            f"- Phase ID: {current_phase_id} | Phase: {current_phase.get('name', 'Unknown')}\n"
-            f"- Next Phase: {current_phase}\n"
-            f"- Current Phase: {last_phase.get('name', f'Phase {last_phase_id}') if last_phase else 'None'}\n"
-            f"- Phase History: {state.get('phase_history', [])[-5:] if state.get('phase_history') else 'None'}\n"
-            f"- Player States: {player_states}\n"
-            f"- Player Actions: {_limit_actions_per_player(playerActions, 3) if playerActions else {}}\n"
-            f"- Game Notes: {game_notes[-5:] if game_notes else 'None'}\n"
-            f"- Declaration Rules: {declaration}\n\n"
-            
-            "🎯 **TRIPLE MISSION**:\n"
-            "1. **State Updates**: Process actions → update player_states (highest priority)\n"
-            "2. **Game Notes**: Record events, decisions, and reminders for all nodes\n"
-            "3. **Phase-Aware Analysis**: Use current + next phase info for smarter decisions\n\n"
-            
-            "📋 **CRITICAL STATE UPDATE RULES**:\n"
-            "🚨 **UNDERSTAND PLAYER STATES FIRST**: Carefully read declaration.player_states definitions!\n"
-            "• Each field has specific meaning and update conditions\n"
-            "• speaker_rounds_completed: Only increment AFTER player actually completed their speaker turn to 1\n"
-            "• is_speaker: Only update based on actual game flow, not speculation\n"
-            "• statements_published: Only set to true AFTER statements are actually shared\n"
-            "• DO NOT fabricate or assume state changes - base on actual evidence\n"
-            "• Example: speaker_rounds_completed += 1 ONLY after player finished speaking phase\n"
-            "• Example: is_speaker = False ONLY when speaker role actually transitions\n"
-            "• TIMING MATTERS: Update states when events actually happen, not when anticipated\n\n"
-            
-            "🗳️ **STRICT PLAYER ACTIONS ANALYSIS RULE**:\n"
-            "🚨 **CRITICAL**: Only use ACTUAL data from playerActions - NEVER use example values!\n"
-            "• Find each player's LATEST action: highest timestamp AND matching current phase name\n"
-            "• Extract EXACT vote choices, targets, statements from actual playerActions content\n"
-            "• Example process: If playerActions shows 'Player 2 voted for statement 1' → vote_choice=1\n"
-            "• If playerActions shows 'shared statements: I love dogs, I hate cats, I own 5 birds' → use THESE exact statements\n"
-            "• FORBIDDEN: Using example values like 'I've been to Japan' when playerActions says different\n"
-            "• FORBIDDEN: Inventing vote results not present in playerActions\n"
-            "• MANDATORY: Cross-reference action timestamp and phase name before processing\n"
-            "• UPDATE game_notes with ACTUAL OUTCOMES from playerActions data only\n"
-            "• UPDATE player_states based on REAL actions, not hypothetical examples\n"
-            "🔍 **COMPREHENSIVE STATE UPDATE CHECK**:\n"
-            "• **SCAN ALL PLAYER_STATES**: Check every field in every player's state for needed updates\n"
-            "• **SCORE CALCULATIONS**: For reveal/results phases, calculate and update scores based on actual data\n"
-            "  - Example: Two Truths - compare vote_choice vs lie_index, update score accordingly\n"
-            "  - Example: Werewolf - update elimination counts, survival streaks, etc.\n"
-            "• **GAME PROGRESSION**: Update round counters, phase completions, win conditions\n"
-            "• **ACHIEVEMENT TRACKING**: Update any achievement or milestone fields\n"
-            "• **MANDATORY**: Every reveal/results phase MUST include score/progress updates\n\n"
-            
-            "📝 **GAME NOTES WRITING STANDARDS**:\n"
-            "✅ CORRECT: 'Player 1 voted statement 2 (correct +1 point), Player 3 voted statement 1 (wrong +0 points)'\n"
-            "❌ WRONG: 'Players voted', 'differing votes', 'All players have voted'\n"
-            "✅ CORRECT: 'Player 2 (speaker) chose statement 2 as lie, earned +0 points this round'\n"
-            "❌ WRONG: 'Voting completed', 'votes received and recorded'\n"
-            "✅ CORRECT: 'Round totals: Player 1: 5 points, Player 2: 3 points, Player 3: 2 points'\n"
-            "RULE: Always specify WHO did WHAT with exact POINTS EARNED and TOTAL SCORES\n\n"
-            
-            "🚫 **VOTING VALIDATION & ERROR HANDLING**:\n"
-            "1. Check voting eligibility BEFORE updating player_states:\n"
-            "   • can_vote=true AND is_speaker=false (for statement voting)\n"
-            "2. If invalid vote detected:\n"
-            "   • DO NOT call update_player_state for vote_choice\n"
-            "   • Record in game_notes: 'Player X vote invalid - is current speaker'\n"
-            "3. Only process and record VALID votes from eligible players\n\n"
-            
-            "🏆 **SCORING & RESULTS RECORDING**:\n"
-            "After voting phase, MUST do:\n"
-            "1. Get correct answer from player_states: speaker's 'chosen_lie' field\n"
-            "2. Compare votes: 'Player 1 voted X (correct/wrong), Player 3 voted Y (correct/wrong)'\n"
-            "3. UPDATE player_states scores: Call update_player_state for each player's new total score\n"
-            "4. Record detailed results in game_notes:\n"
-            "   • Round outcome: 'Player 1 voted 2 (correct), Player 3 voted 1 (wrong)'\n"
-            "   • Score changes: 'Player 1: +1 point, Player 2: +0 points, Player 3: +0 points'\n"
-            "   • Current totals: 'Total scores - Player 1: 3 points, Player 2: 1 point, Player 3: 2 points'\n"
-            "MANDATORY: Update both player_states scores AND record complete results in game_notes\n\n"
-            
-            "💀 **DEATH STATUS & RESULTS ANNOUNCEMENT CHECK**:\n"
-            f"• **CURRENT STATUS**: Living: {[pid for pid, data in player_states.items() if data.get('is_alive', True)]}, Dead: {[pid for pid, data in player_states.items() if not data.get('is_alive', True)]}\n"
-            "🚨 **CRITICAL**: If current phase is a results/announcement phase, check player survival:\n"
-            "• **VALIDATE**: All state updates must respect death/elimination status\n"
-            "• **CRITICAL RULE**: Dead players (is_alive=false) CANNOT perform ANY actions or participate\n"
-            "• Examine player_states for is_alive=false players\n"
-            "• If any player died (is_alive changed from true to false):\n"
-            "  - **RECORD**: Add 🔴 CRITICAL game note when setting is_alive=false for any player\n"
-            "  - Record death in game_notes: 'Player X (RoleName) has been eliminated/died this phase'\n"
-            "  - Include elimination reason if available in playerActions or game context\n"
-        "  - Calculate impact on game state (team balance, role distribution)\n"
-            "• If multiple deaths occurred, record each separately with specific details\n"
-            "📝 **MANDATORY PHASE SUMMARY REQUIREMENT**:\n"
-            "• **ALWAYS write a narrative summary** of what happened in this phase to game_notes\n"
-            "• **FORMAT EXAMPLES**:\n"
-            "  - Night phases: 'Last night, the Werewolves chose to eliminate Player 1 (Detective). However, Player 1 was protected by the Doctor and survived. There were no deaths last night.'\n"
-            "  - Day phases: 'During day voting, Player 2 (Werewolf) was eliminated by majority vote. The village successfully identified a werewolf.'\n"
-            "  - Reveal phases: 'Dawn revealed the night outcomes: Player 3 (Villager) was eliminated by werewolves. The Doctor's protection saved Player 1. Current survivors: Players 1, 2, 4.'\n"
-            "  - Alternative outcomes: 'Last night, the Werewolves eliminated Pla～yer 3 (Villager). The Doctor protected Player 1, but Player 3 was not protected and died.'\n"
-            "• **INCLUDE**: Actions taken, protection attempts, actual outcomes, survival/death results, revelations\n"
-            "• **WRITE**: Clear, narrative-style summaries that explain cause and effect\n"
-            "• **REVEAL PHASES SPECIAL**: Include what was reveale～d, who survived/died, current game state\n"
-            "• **CONCLUSION REQUIREMENT**: Write comprehensive game state conclusion to game_notes\n"
-            "  - Living players summary: 'Remaining alive: Player 2 (Doctor), Player 4 (Villager)'\n"
-            "  - Team/role analysis: 'Team balance: 2 Villagers vs 1 Werewolf remaining'\n"
-            "  - Game progression: 'Phase X completed with Y eliminations'\n\n"
-            
-            "🔮 **PHASE-AWARE DECISION MAKING**:\n"
-            f"**Current Phase Analysis** ({current_phase.get('name', 'Unknown')}):\n"
-            f"• Completion criteria: {current_phase.get('completion_criteria', {}).get('type', 'Unknown')}\n"
-            f"• Expected actions: {current_phase.get('completion_criteria', {}).get('description', 'None')}\n"
-            f"**Next Phase Preview** ({next_phase.get('name', 'Unknown') if next_phase else 'Game End'}):\n"
-            f"• What's coming: {next_phase.get('description', 'Unknown') if next_phase else 'Final phase'}\n"
-            f"• Preparation needed: Use this context to create better game notes and state updates\n\n"
-            
-            "🎭 **CRITICAL NEXT PHASE ROLE ASSIGNMENT RULE**:\n"
-            "⚠️ **IF NEXT PHASE REQUIRES ROLE ASSIGNMENT** (Phase names like 'Role Assignment', 'Identity Assignment', 'Speaker Selection'):\n"
-            "• **MANDATORY PREPARATION**: You MUST assign roles NOW in current phase and store in player_states\n"
-            "• **STORE IN STATES**: Use update_player_state to set role field for each player\n"
-            "• **RECORD IN GAME NOTES**: Add NEXT_PHASE type note documenting role assignments for future reference\n"
-            "• **EXAMPLE**: If next phase is 'Role Assignment', assign roles like role='Werewolf', role='Villager' NOW\n"
-            "• **TIMING**: Do this BEFORE phase transitions to ensure roles are ready when needed\n"
-            "• **GAME NOTES FORMAT**: add_game_note('NEXT_PHASE', 'Roles assigned: Player1=Werewolf, Player2=Villager for upcoming Role Assignment phase')\n\n"
-            "• **If next phase is speaker rotation, do Speaker Rotation Analysis**: For speaker rotation phases, count completed vs remaining turns\n"
-            "  - add_game_note('SPEAKER_STATUS', 'Progress: 2 players completed speaking, 2 players remaining')\n\n"
-            
-            "• Correct who is the current speaker, who is the last speaker.\n"
-            "• Correct do you need to select ann one for next round to do something?.\n"
-            
-            " **Then analyze Game Declaration rules** for elimination/death conditions, role abilities, and win conditions\n"
-            " **Then examine Player Actions** to see what each player actually did:\n"
-            "\n"
-            "**Action-to-State Updates:**\n"
-            "- **Voting actions** ('voted to eliminate X'): Track votes and apply elimination rules from Declaration\n"
-            "  * If rules say 'most voted dies' and X got most votes → set X's is_alive=false\n"
-            "  * Update vote tracking fields in player states\n"
-            "  * **CRITICAL**: Add 🔴 CRITICAL game note when player dies\n"
-            "- **Role ability actions** ('protected/investigated/targeted player X'):\n"
-            "  * Set action completion: night_action_submitted=True or day_action_submitted=True\n"
-            "  * Set last_night_action='[action_type]' or last_day_action='[action_type]'\n"
-            "  * Set targets: last_night_target=X or last_day_target=X\n"
-            "  * Apply ability effects based on Declaration rules (protection saves, investigation reveals, etc.)\n"
-            "- **Game rule applications**:\n"
-            "  * Cross-reference actions with Declaration rules to determine state changes\n"
-            "  * Update known_alignments for investigators based on their targets\n"
-            "  * Handle elimination/death according to game-specific rules\n"
-            "\n"
-            "**EXECUTION APPROACH**:\n"
-            "1. **Read Game Declaration rules** to understand what causes state changes\n"
-            "2. **Analyze each player's actions** from Player Actions data\n"
-            "3. **Make referee judgments** - determine results, winners/losers, rule violations\n"
-            "4. **Apply rules to actions** to determine what states should change\n"
-            "5. **Use update_player_state tool** to make only the necessary state updates\n"
-            "6. **Use add_game_note tool** to record all judgment results and reasoning\n"
-            "\n"
-            "**Examples of Rule-Based Updates**:\n"
-            "• If Declaration says 'werewolves win when equal/outnumber villagers' + current states show this → game_over updates\n"
-            "• If Declaration describes voting elimination + Player Actions show vote tallies → update is_alive for eliminated player\n"
-            "• If Declaration defines role abilities + Player Actions show ability usage → update target/action tracking fields\n\n"
-
-            "TASK 2: EMERGENCY Role Assignment (ONLY if ALL players have completely empty roles).\n"
-            "IMPORTANT: Primary role assignment is handled by PhaseNode for phases 0-2.\n"
-            "RefereeNode should ONLY assign roles as emergency fallback.\n\n"
-            
-            "Role Assignment Emergency Criteria (ALL must be true):\n"
-            "- Phase name/description explicitly mentions 'assign' or 'role' (case-insensitive)\n"  
-            "- declaration.roles exists\n"
-            "- ALL players have completely empty/missing role field (not just some)\n"
-            "- No player has any assigned role whatsoever\n\n"
-            
-            "CRITICAL PROTECTION - When assigning roles:\n"
-            "- NEVER overwrite any existing role (even empty string '' counts as 'assigned')\n"
-            "- If ANY player already has a role, SKIP role assignment entirely\n"
-            "- Only proceed if player_states shows ALL players with role=null or role missing\n"
-            "- This ensures PhaseNode has priority for role assignment"
-           
-           "- The ouput is updated_player_states, which is a updated version of player_states, keep the same keys and values for each player, don't change the keys and values for each player, only update the values that have changed.\n"
-            
-            
-            "  Use update_player_state tool to update player state, you can call the tool for multiple in one time.\n"
-            "- Maintain consistency with game rules and phase requirements\n"
-            "- Handle eliminations, votes, role abilities, and status changes\n"
-            "- Use player IDs as string keys (\"1\", \"2\", \"3\", etc.)\n"
-            "- Include conclusions array with key events that happened:\n"
-            "  * Player eliminations/deaths (who died and how)\n"
-            "  * Game outcomes (who won/lost)\n"
-            "  * Important discoveries or revelations\n"
-            "  * No events (if nothing significant happened)\n\n"
-            
-            "💀 **CRITICAL ELIMINATION RULE**:\n"
-            "- If ANY player is eliminated/dies/is voted out during the game:\n"
-            "  * IMMEDIATELY set their is_alive=false using update_player_state tool\n"
-            "  * This marks them as dead and removes them from active gameplay\n"
-            "  * Dead players cannot vote, act, or participate in any game mechanics\n"
-            "  * Example: update_player_state(player_id='3', state_name='is_alive', state_value=False)\n"
-            "- ALWAYS update player status when processing elimination events\n"
-            "- Remember: is_alive=false means the player is considered dead in the game\n\n"
-            
-            "📝 **GAME NOTES REQUIREMENTS**:\n"
-            "After processing actions, create comprehensive notes for other nodes:\n"
-            "• **Critical Events**: '🔴 CRITICAL: Player 3 (Doctor) eliminated - marked is_alive=false'\n"
-            "• Important decisions**: '🎯 DECISION: Selected Player 2 as next speaker (turn_order)'\n"
-            "• **Bot Reminders**: '🤖 BOT ACTION: Player 4 needs to complete werewolf vote'\n"
-            "• **Voting Status**: '⚠️ REMINDER: Player 1 has NOT voted in current phase'\n"
-            "* **Select the next player to do something**."
-            "These notes guide ActionExecutor, BotBehaviorNode, and PhaseNode decisions.\n\n"
-            
-            "🎯 **REFEREE JUDGMENT & RESULT ANALYSIS**:\n"
-            "As the game referee, you must analyze player actions and make official judgments:\n"
-            "• **Voting Results**: Count votes, determine eliminations, record outcomes\n"
-            "  - add_game_note('DECISION', 'Vote tally complete: Player 3 eliminated with 3 votes vs Player 2 with 1 vote')\n"
-            "• **Night Action Results**: Process werewolf attacks, doctor protections, detective investigations\n"
-            "  - add_game_note('DECISION', 'Werewolves targeted Player 4, Doctor protected Player 4 - no elimination')\n"
-            "• **Win Condition Checks**: Evaluate if game end conditions are met\n"
-            "  - add_game_note('GAME_STATUS', 'Win condition check: 2 werewolves vs 3 villagers - game continues')\n"
-            "• **Rule Violations**: Identify invalid actions or rule violations\n"
-            "  - add_game_note('CRITICAL', 'Player 3 attempted to vote while dead - action ignored')\n"
-            "• **Phase Branch & End Condition Analysis**: If next phase has branches, analyze conditions and suggest path\n"
-            "  - add_game_note('PHASE_SUGGESTION', 'End condition analysis: 3/4 players completed speaking, suggest continue current phase')\n"
-            "  - add_game_note('BRANCH_RECOMMENDATION', 'Branch condition met: all players finished, recommend transition to results phase')\n"
-           
-            "⚠️ **IMPORTANT**: When calling add_game_note, provide CLEAN content without emoji prefixes:\n"
-            "✅ CORRECT: add_game_note('CRITICAL', 'Player 3 eliminated - marked is_alive=false')\n"
-            "❌ WRONG: add_game_note('CRITICAL', '🔴 CRITICAL: Player 3 eliminated')\n"
-            "The function will automatically add the appropriate emoji and formatting.\n\n"
-            
-            "🚨 **TOOL EXECUTION ORDER**:\n"
-            "1. **FIRST**: Analyze player actions and make referee judgments\n"
-            "2. **SECOND**: Use update_player_state tools for all state changes based on judgments\n"
-            "3. **THIRD**: Use add_game_note tools to record judgment results and outcomes\n"
-            "4. **MULTIPLE CALLS**: You can call both tools multiple times as needed\n\n"
-        )
-    )
-    
-    
-
-    response = await model_with_tools.ainvoke([system_message], config)
-
-
-
-    tool_calls = getattr(response, "tool_calls", []) or []
-    current_game_notes = list(state.get("game_notes", []))
-    transition_from_tool = None
-    next_phase_id_from_tool = None
-    transition_reason = ""
-    
-    for tc in tool_calls:
-        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-        args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
-        if not isinstance(args, dict):
-            try:
-                import json as _json
-                args = _json.loads(args)
-            except Exception:
-                args = {}
-        
-        if name == "update_player_state":
-            pid = args.get("player_id")
-            state_name = args.get("state_name")
-            state_value = args.get("state_value")
-            if pid and state_name is not None:
-                current_player_states = _execute_update_player_state(
-                    dict(player_states), pid, state_name, state_value
-                )
-        elif name == "add_game_note":
-            note_type = args.get("note_type")
-            content = args.get("content")
-            if note_type and content:
-                current_game_notes = _execute_add_game_note(
-                    current_game_notes, note_type, content
-                )
-        elif name == "set_next_phase":
-            transition_from_tool = args.get("transition")
-            next_phase_id_from_tool = args.get("next_phase_id")
-            transition_reason = args.get("transition_reason", "")
-            logger.info(f"[RefereeNode] Tool call: transition={transition_from_tool}, next_phase_id={next_phase_id_from_tool}, reason: {transition_reason}")
-
-    def _normalize_and_validate_phase_id(pid: Any, phases_dict: dict) -> tuple[Any, bool]:
-        """Return (normalized_pid, is_valid)"""
-        try:
-            if pid is None:
-                return pid, False
-            # Check direct match
-            if pid in phases_dict:
-                return pid, True
-            # Check string version of pid
-            if str(pid) in phases_dict:
-                return pid, True
-            # Check integer version if pid is a numeric string
-            if isinstance(pid, str) and pid.isdigit():
-                int_pid = int(pid)
-                if int_pid in phases_dict:
-                    return int_pid, True
-            return pid, False
-        except Exception:
-            return pid, False
-
-
-
-    normalized_pid, is_valid = _normalize_and_validate_phase_id(next_phase_id_from_tool, phases)
-    if is_valid:
-        target_phase_id = normalized_pid
-    else:
-        target_phase_id = current_phase_id
-
-
-    # Record current phase in history
-    current_phase_history = state.get("phase_history", [])
-    phase_name = phases.get(target_phase_id, {}).get('name', f'Phase {target_phase_id}') or phases.get(str(target_phase_id), {}).get('name', f'Phase {target_phase_id}')
-    
-    phase_entry = {
-        "phase_id": target_phase_id,
-        "phase_name": phase_name
-    }
-    current_phase_history.append(phase_entry)
-
-
-
-    return Command(
-        goto="ActionExecutor",
-        update={
-            "player_states": current_player_states,
-            "game_notes": current_game_notes,
-            "roomSession": state.get("roomSession", {}),
-            "dsl": state.get("dsl", {}),
-            "phase_history": state.get("phase_history", []),
-            "current_phase_id": target_phase_id,
-            "phase_history": current_phase_history
-        }
-    )
 
 async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[Literal["__end__"]]:
     """
@@ -936,7 +551,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     """
     
     # 1. Define the model
-    model = init_chat_model("openai:gpt-4.1-mini")
+    model = init_chat_model("anthropic:claude-sonnet-4-5-20250929")
 
     # 2. Prepare and bind frontend tools to the model
     def _extract_tool_name(tool: Any) -> Optional[str]:
@@ -985,8 +600,11 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     if len(deduped_frontend_tools) > MAX_FRONTEND_TOOLS:
         deduped_frontend_tools = deduped_frontend_tools[:MAX_FRONTEND_TOOLS]
 
+    # Add all backend tools to ActionExecutor
+    all_tools = [*deduped_frontend_tools, *backend_tools]
+    
     model_with_tools = model.bind_tools(
-        deduped_frontend_tools,
+        all_tools,
         parallel_tool_calls=True,  # Allow multiple tool calls in single response
     )
 
@@ -1009,152 +627,131 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
 
     system_message = SystemMessage(
         content=(
-            "🎯 **YOU ARE THE DM (DUNGEON MASTER / GAME MASTER)**\n"
-            "As the DM, you have complete responsibility for running this game. You must:\n\n"
-             "📊 **CURRENT GAME STATE** (Analyze these carefully):\n"
-            f"itemsState (current frontend layout): {items_summary}\n"
-            f"**Current Phase**: {current_phase_str}\n"
-            f"player_states: {player_states}\n"
-            f"phase history: {state.get('phase_history', [])}\n" 
-            f"game_notes: {game_notes[-5:] if game_notes else 'None'}\n"
-            f"Game Description: {declaration.get('description', 'No description available')}\n"
-            f"**Current Actions to Execute**: {current_phase.get('actions', [])}\n"
-            "GAME DSL REFERENCE (for understanding game flow):\n"
- 
-            "📋 **DM CORE RESPONSIBILITIES** (Master these completely):\n"
-            "1. **GAME NOTES AWARENESS**: Read game_notes for critical state changes and UI guidance\n"
-            "2. **DEAD PLAYER FILTERING**: NEVER create voting options for players with is_alive=false\n"
-            "3. **SPEAKER MANAGEMENT**: Always identify who is the current speaker this round\n"
-            "4. **ROUND CONCLUSIONS**: Understand what happened last round and what was concluded\n"
-            "5. **PERSISTENT DISPLAYS**: Know what information must stay visible on screen always\n"
-            "6. **RULE MASTERY**: Deeply understand the game rules and DSL inside-out\n"
-            "7. **SCREEN STATE AWARENESS**: Use itemsState to know what players currently see\n"
-            "8. **COMPONENT LIFECYCLE**: Determine what UI components to keep vs delete vs create\n"
-            "9. **DELETE BEFORE CREATE**: You MUST delete outdated components before creating new ones\n"
-            "10. **ROUND OBJECTIVES**: Clearly understand what this round is trying to achieve\n"
-            "11. **PROGRESSION CONDITIONS**: Know what conditions move the game to the next round\n"
-            "💀 **DEATH MARKER MANDATORY REQUIREMENTS**:\n"
-            "• **DEATH STATUS CHECK**: EVERY round, check player_states for is_alive=false\n"
-            "• **MISSING MARKER CHECK**: If dead player exists but NO death_marker with audience_ids=[dead_player_id] in items, CREATE one immediately\n"
-            "• **AUTOMATIC DEATH MARKERS**: Create death markers for ALL dead players automatically\n"
-            "• **DEAD PLAYER ONLY VISIBILITY**: Death markers MUST use audience_type=false, audience_ids=[dead_player_id]\n"
-            "• **PERMANENT MARKERS**: Death markers CANNOT be deleted - they persist until game end\n"
-            "• **ONE PER DEAD PLAYER**: Ensure only one death marker exists per dead player\n"
-            "• **EXAMPLE**: if player_states['2']['is_alive']=false, create: createDeathMarker(playerName='Player 2', playerId='2', audience_type=false, audience_ids=['2'], position='top-right')\n"
-            "• **POSITIONING**: Place death markers in unique positions to avoid overlap\n"
-            "• **DETECTION LOGIC**: Scan itemsState for existing death_marker items with matching audience_ids before creating new ones\n"
-            "🚨 **SCORE CALCULATION RULE**: NEVER invent scores - use ONLY:\n"
-            "• player_states: Get lie_index (correct answer) and vote_choice (player votes)\n"
-            "• Example: if lie_index=1, then statements[1] is the lie\n"
-            "• Compare each player's vote_choice with lie_index to determine correct/wrong\n"
-            "• Display: 'Statement 2 (I've never broken a bone) was the lie. Player A voted 3 (wrong), Player B voted 1 (wrong)'\n"
-            "• Use actual statements[] array content, not invented examples\n\n"
-            "11.  **If you need you post some text, use createTextInputPanel() - creates floating input panel at bottom of screen\n"
-            
-            "🧒 **TREAT PLAYERS LIKE CHILDREN**: Give maximum information - they know NOTHING!\n"
+            "🎮 **YOU ARE THE DM (DUNGEON MASTER)**\n"
+            "You have complete control over all players' game screens. Players can only see what you show them.\n\n"
+
+            "📺 **SCREEN CONTROL SYSTEM**:\n"
+            f"- items: Current screen components {items_summary}\n"
+            "- audience_type=true: Everyone can see it\n"
+            "- audience_type=false + audience_ids=['1','2']: Only specified players can see it\n"
+            f"- DSL: Game rules and flow definition\n\n"
+
+            "📊 **CURRENT GAME STATE**:\n"
+            f"- Current Phase: {current_phase_str}\n"
+            f"- Player States: {player_states}\n"
+            f"- Player Actions: {playerActions}\n"
+            f"- Phase History: {state.get('phase_history', [])}\n"
+            f"- Game Description: {declaration.get('description', 'No description available')}\n\n"
+
+            "🔄 **DM EXECUTION WORKFLOW** (Execute in order):\n\n"
+
+            "**STEP 1: ANALYZE CURRENT PHASE**\n"
+            f"• Current phase_id: {current_phase_id}\n"
+            f"• Phase name: {current_phase.get('name', 'Unknown')}\n"
+            f"• Phase description: {current_phase.get('description', 'No description')}\n"
+            f"• Completion criteria: {current_phase.get('completion_criteria', {})}\n"
+            f"• Required actions: {current_phase.get('actions', [])}\n\n"
+
+            "**STEP 2: ANALYZE PLAYER BEHAVIOR - STRICT ANALYSIS**\n"
+            "🚨 **CRITICAL**: Only use ACTUAL data from playerActions - NEVER fabricate!\n"
+            "• Find each player's latest action: highest timestamp + matching current phase name\n"
+            "• Extract exact choices, targets, statements from actual playerActions content\n"
+            "• Process example: playerActions shows 'Player 2 voted for statement 1' → vote_choice=1\n"
+            "• Cross-reference action timestamp and phase name before processing\n"
+            "• FORBIDDEN: Using example values not in playerActions\n"
+            "• FORBIDDEN: Inventing vote results not present in playerActions\n\n"
+
+            "**STEP 3: UPDATE PLAYER STATES - COMPREHENSIVE STATE UPDATE**\n"
+            "🚨 **UNDERSTAND DSL player_states DEFINITIONS FIRST**: Carefully read declaration.player_states definitions!\n"
+            "• Each field has specific meaning and update conditions\n"
+            "• Base updates on actual evidence, don't fabricate or assume state changes\n"
+            "• Timing matters: Update states when events actually happen, not when anticipated\n\n"
+
+            "**STATE UPDATE CHECKLIST**:\n"
+            "• **SCAN ALL PLAYER STATES**: Check every field in every player's state for needed updates\n"
+            "• **SCORE CALCULATIONS**: For reveal/results phases, calculate and update scores based on actual data\n"
+            "  - Example: Two Truths - compare vote_choice vs lie_index, update score accordingly\n"
+            "  - Example: Werewolf - update elimination counts, survival streaks, etc.\n"
+            "• **GAME PROGRESSION**: Update round counters, phase completions, win conditions\n"
+            "• **ACHIEVEMENT TRACKING**: Update any achievement or milestone fields\n"
+            "• **MANDATORY**: Every reveal/results phase MUST include score/progress updates\n\n"
+
+            "**VOTING VALIDATION & ERROR HANDLING**:\n"
+            "1. Check voting eligibility BEFORE updating player_states\n"
+            "2. If invalid vote detected: DO NOT call update_player_state for vote_choice\n"
+            "3. Only process and record VALID votes from eligible players\n\n"
+
+            "**DEATH STATUS CHECK**:\n"
+            f"• Current status: Living {[pid for pid, data in player_states.items() if data.get('is_alive', True)]}, Dead {[pid for pid, data in player_states.items() if not data.get('is_alive', True)]}\n"
+            "• If any player dies (is_alive changes from true to false):\n"
+            "  - Immediately set is_alive=false using update_player_state tool\n"
+            "  - Dead players cannot vote, act, or participate in any game mechanics\n\n"
+
+            "**STEP 4: JUDGE PHASE TRANSITION - COMPLETION CRITERIA ANALYSIS**\n"
+            f"• Check if current phase completion_criteria are satisfied:\n"
+            f"  - Type: {current_phase.get('completion_criteria', {}).get('type', 'Unknown')}\n"
+            f"  - Description: {current_phase.get('completion_criteria', {}).get('description', 'None')}\n"
+            "• If conditions are met, use set_next_phase tool to enter next phase\n"
+            "• Record transition reason and logic\n\n"
+
+            "**STEP 5: UPDATE SCREEN CONTENT - UI MANAGEMENT**\n"
+            "**SCREEN CLEANUP & CREATION**:\n"
+            "• **DELETE FIRST**: clearCanvas() calls MUST be executed before all create tools\n"
+            "• **POSITION OVERLAP PREVENTION**: Check existing item positions, NEVER place multiple items at same position\n"
+            "• **POSITION ANALYSIS**: Read itemsState format '[ID] type:name@position' to identify occupied positions\n"
+            "• **GRID POSITIONS**: top-left, top-center, top-right, middle-left, center, middle-right, bottom-left, bottom-center, bottom-right\n"
+            "• **CONFLICT RESOLUTION**: If position occupied, choose next available position in grid\n\n"
+
+            "**MANDATORY AUDIENCE PERMISSIONS**: Every component MUST specify who can see it:\n"
+            "• Public: audience_type=true (everyone sees it)\n"
+            "• Private: audience_type=false + audience_ids=['1','3'] (only specified players see it)\n\n"
+
+            "**DEATH MARKER REQUIREMENTS**:\n"
+            "• Every round, check player_states for is_alive=false\n"
+            "• If dead player exists but no death_marker in items, CREATE one immediately\n"
+            "• Death markers MUST use audience_type=false, audience_ids=[dead_player_id]\n"
+            "• Example: createDeathMarker(playerName='Player 2', playerId='2', audience_type=false, audience_ids=['2'], position='top-right')\n\n"
+
+            "**COMPONENT CREATION RULES**:\n"
+            "• Phase indicators: Always place at 'top-center' position\n"
+            "• Timers: ~10 seconds (max 15), default position 'center'\n"
+            "• Input panels: createTextInputPanel() for collecting player text input\n"
+            "• Result displays: Check existing conclusions first, don't fabricate results\n\n"
+
+            "**STEP 6: REASONING PROCESS OUTPUT - TRANSPARENT REASONING**\n"
+            "In your response message, explain in detail:\n"
+            "• How you analyzed current phase and player behavior\n"
+            "• Why you made these specific state updates\n"
+            "• Phase transition logic and condition checking\n"
+            "• UI changes reasons and player experience considerations\n"
+            "• Help players understand game progress and decisions\n\n"
+
+            "**STEP 7: VALIDATE REASONING - VALIDATION CHECKLIST**\n"
+            "• Check all updates conform to DSL rules and definitions\n"
+            "• Confirm UI display matches current phase requirements\n"
+            "• Verify player state updates based on actual data, not fabricated\n"
+            "• Ensure dead players are correctly filtered and marked\n"
+            "• Verify audience permission settings are correct\n\n"
+
+            "🔧 **AVAILABLE BACKEND TOOLS**:\n"
+            "- update_player_state(player_id, state_name, state_value): Update player states\n"
+            "- update_player_actions(player_id, actions, phase): Update player action records\n"
+            "- set_next_phase(next_phase_id, transition_reason): Transition to next phase\n\n"
+
+            "🚨 **CRITICAL PROHIBITIONS**:\n"
+            "- NEVER return with ONLY cleanup calls - this is task failure!\n"
+            "- Every clearCanvas MUST be followed by create tools in SAME response!\n"
+            "- NEVER fabricate scores - only use player_states actual data\n"
+            "- NEVER create voting options or interactive UI for dead players\n"
+            "- NEVER assume or fabricate data not in playerActions\n\n"
+
+            "🧒 **TREAT PLAYERS LIKE CHILDREN**:\n"
             "- Explain everything clearly and simply\n"
             "- Provide as much helpful information as possible\n"
             "- Guide them through every step\n"
             "- Never assume they understand anything\n\n"
-            
-            "📋 CORE WORKFLOW (ALL ACTIONS IN SINGLE RESPONSE):\n"
-            "**itemsState Analysis**: Format '[ID] type:name@position' shows current UI layout. Follow current_phase requirements.\n"
-            "**Delete + Create**: Read itemsState to find existing IDs, delete outdated items, then create new components for current_phase.\n"
-            "🚫 **POSITION OVERLAP PREVENTION**:\n"
-            "• **NO DUPLICATE POSITIONS**: Check existing items before creating - NEVER place multiple items at same position\n"
-            "• **POSITION ANALYSIS**: Read itemsState format '[ID] type:name@position' to identify occupied positions\n"
-            "• **UNIQUE PLACEMENT**: Each new component MUST use a different position than existing items\n"
-            "• **GRID POSITIONS**: top-left, top-center, top-right, middle-left, center, middle-right, bottom-left, bottom-center, bottom-right\n"
-            "• **CONFLICT RESOLUTION**: If position occupied, choose next available position in grid\n"
-            "• **EXAMPLE**: If center occupied, use middle-left or middle-right instead\n"
-            "**MANDATORY Audience Permissions**: Every component MUST specify who can see it:\n"
-            "  • Public: audience_type=true (everyone sees it)\n"
-            "  • Private: audience_type=false + audience_ids=['1','3'] (only specified players see it)\n"
-            "  • CRITICAL: Include proper audience permissions on each component (audience_type=true for public; or audience_type=false with audience_ids list)\n"
-            "**Examples**: clearCanvas() + createPhaseIndicator(audience_type=true) + createActionButton(audience_ids=['2'])\n\n"
-            
-            "📝 **USER INPUT COLLECTION**: For games requiring player text input (like Two Truths and a Lie statements):\n"
-            "• Use createTextInputPanel() - creates floating input panel at bottom of screen\n"
-            "• Perfect for: statement collection, confession phases, text-based responses\n"
-            "• Position: Fixed at bottom center of canvas for easy access\n"
-            "• Example: createTextInputPanel(title='Enter your statements', placeholder='Type your 3 statements...', audience_ids=['1'])\n\n"
-            
-            "🏆 **GAME RESULT ANNOUNCEMENT RULE - GAME_NOTES PRIORITY**:\n"
-            "**PRIMARY RULE**: Always check game_notes for conclusions first before making any announcements:\n"
-            "• **MANDATORY CHECK**: Scan recent game_notes for any conclusions, decisions, or results\n"
-            "• **GAME_NOTES PRIORITY**: If game_notes contain conclusions (winner declarations, elimination results, etc.), announce them immediately\n"
-            "• **EXAMPLE**: If game_notes say 'Village team wins - all werewolves eliminated', create result display with this exact conclusion\n"
-            "• **NO OVERRIDE**: NEVER contradict or ignore conclusions found in game_notes\n"
-            "• **FALLBACK ONLY**: Only calculate results yourself if game_notes contain NO conclusions\n\n"
-            "**FALLBACK DATA ANALYSIS** (only when game_notes have no conclusions):\n"
-            "• Use player_states (scores, is_alive, role, etc.) for factual information\n"
-            "• Reference recent game_notes for context and decisions\n"
-            "• DO NOT fabricate or guess results - only state verified facts\n"
-            "• Example: 'Player 2 won with 5 points' (from player_states.score)\n"
-            "• Example: 'Village won - all werewolves eliminated' (from player_states.is_alive)\n"
-            "• NO speculation, NO invented details - stick to observable data\n\n"
-            
-            "🚨 **ABSOLUTE PROHIBITION**: NEVER return with ONLY cleanup calls - THIS IS TASK FAILURE!\n"
-            "**MANDATORY CREATE REQUIREMENT**: Every clearCanvas MUST be followed by create tools in SAME response!\n"
-            "**CLEANUP TOOLS RESTRICTION**: clearCanvas cannot appear alone - must always be paired with create tools\n"
-            "🧹 **AUTOMATIC CLEANUP REQUIREMENT**:\n"
-            "• **PHASE TRANSITION CHECK**: If actions don't include clearCanvas, YOU must check itemsState and clean up irrelevant UI\n"
-            "• **OUTDATED UI DETECTION**: Identify items that don't match current phase requirements\n"
-            "• **AUTOMATIC CLEAR**: Use clearCanvas to remove outdated UI, preserve needed components via exemptList\n"
-            "• **EXAMPLE**: If switching from voting to results phase, clearCanvas() before creating result displays\n"
-            "🔄 **MANDATORY CLEAR ORDERING**:\n"
-            "• **CLEAR FIRST**: clearCanvas() calls MUST be executed ahead all create tools\n"
-            "• **SYNCHRONOUS EXECUTION**: Call cleanup tools first, then creation tools in same response\n"
-            "• **CORRECT ORDER**: clearCanvas() → createPhaseIndicator() → createTimer()\n"
-            "• **WRONG ORDER**: createPhaseIndicator() → clearCanvas() (creates then destroys)\n"
-            "**EXECUTION PATTERN**: [AUTO-CLEANUP] + clearCanvas() + createPhaseIndicator() + createTimer() + createVotingPanel() + createDeathMarker(for_dead_players)\n"
-            "⚡ **COMPLETE PHASE EXECUTION**: Execute clearCanvas + create actions for current_phase in ONE response!\n"
-            "**Role Selection**: Analyze player_states - Werewolves: role='Werewolf', Alive: is_alive=true, Human: always ID '1'\n"
-            "**Timers**: ~10 seconds (max 15), Layout: 'center' default\n"
-            "**PHASE INDICATORS**: Always place at 'top-center' position (reserved for phase indicators)\n"
-            "**DEFAULT VISIBILITY**: Unless explicitly private/group-targeted, make items PUBLIC with audience_type=true.\n\n"
-            "**UI POSITION PRIORITY**: Always use 'center' first. Priority order: center → top-center → bottom-center. Only use next priority if current position is occupied.\n\n"
-            "**CRITICAL**: there must be at least one tool set position='center'; createPhaseIndicator(position='top-center'); createTextDisplay(position='top-center'='center' | 'middle-left'  | 'middle-right'| 'bottom')\n\n"
 
-            "📝 **GAME NOTES CRITICAL USAGE RULES**:\n"
-            "• **🔴 CRITICAL notes**: Indicate player deaths - MUST exclude these players from all UI\n"
-            "• **💀 DEATH MARKERS**: Use createDeathMarker tool to visually mark dead players on screen\n"
-            "• **🚫 UI FILTER notes**: Explicitly tell you which players to exclude from voting/targeting\n"
-            "• **⚠️ VOTING STATUS notes**: Show who hasn't voted - create reminders for these players\n"
-            "• **🎯 DECISION notes**: Show automatic decisions made - incorporate into UI context\n"
-            "• **🤖 BOT REMINDER notes**: Indicate which bots need UI for actions\n"
-            "• **📖 PHASE SUMMARY notes**: Narrative summaries from RefereeNode - use for announcements\n"
-            "• **🌅 REVEAL SUMMARIES**: Special summaries for Dawn/Reveal phases - use for outcome announcements\n"
-            "• **🧠 LOGIC VALIDATION**: Check game_notes for consistency before using in UI\n"
-            "  - Example ERROR: 'Werewolves chose Player 1, but Player 4 was protected' (Player 1 ≠ Player 4)\n"
-            "  - Use player_states as truth source if game_notes contain logical errors\n"
-            "• **📊 EVIDENCE-BASED CONCLUSIONS**: All announcements must be based on player_states data\n"
-            "  - Example: lie_index=2 from player_states means statement 2 is the lie, not statement 1 or 3\n"
-            "  - Example: vote_choice vs lie_index determines correct/wrong answers\n"
-            "  - NEVER write conclusions without supporting data from player_states or game_notes\n"
-            "  - If no evidence exists, display 'Results being calculated...' instead of guessing\n"
-            "• **💀 DEAD PLAYER ACTION**: Always add action to check player_states for is_alive=false and createDeathMarker for each\n"
-            "• ALWAYS read game_notes FIRST before creating any voting panels or target selection UI\n\n"
-            
-            "🎭 **CRITICAL ROLE ASSIGNMENT RULE** (Phase 1 'Role Assignment'):\n"
-            "**MANDATORY ROLE TRANSPARENCY**: When assigning roles, you MUST inform each player of their identity! Don't hide the role from the player who has the role.\n"
-            "  • NEVER hide or conceal a player's role from themselves\n"
-            "  • Each player has their own private screen - they cannot see others' roles\n"
-            "  • Create individual character cards: createCharacterCard(name='Player1Role', role='Detective', audience_type=false, audience_ids=['1'])\n"
-            "  • Each character card is visible ONLY to its assigned player (private audience)\n"
-            "  • Example: Player 1 gets Detective card (only they see it), Player 2 gets Werewolf card (only they see it)\n"
-            "**ROLE CARD REQUIREMENT**: Every player with a role must receive their own private character card!\n\n"
-            
-            f"🚨 **PHASE 1 ENFORCEMENT** - Current phase_id is {current_phase_id}:\n"
-            "IF current_phase_id == 1 (Role Assignment):\n"
-            "  • You MUST create createCharacterCard for each player showing their specific role\n"
-            f"  • Current player_states show these roles: {[(pid, pdata.get('role', 'NO_ROLE')) for pid, pdata in player_states.items()]}\n"
-            "  • Create one createCharacterCard for each player with their actual role from player_states\n"
-            "  • Use audience_type=false and audience_ids=[player_id] for each card\n"
-            "  • DO NOT create generic role assignment messages - CREATE SPECIFIC ROLE CARDS!\n\n"
-            
-            "🔧 TOOL USAGE:\n"
-            "- Exact tool names (no prefixes), capture returned IDs for reuse\n"
+            "🔧 **TOOL USAGE**: Use exact tool names (no prefixes), capture returned IDs for reuse\n"
         )
     )
 
@@ -1186,16 +783,33 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
 
 
 
-    # 4. Trim messages and filter out orphaned ToolMessages
+    # 4. Process messages: remove ToolMessages and tool_calls from AIMessages, no quantity limit
     full_messages = state.get("messages", []) or []
-    trimmed_messages = full_messages[-20:]  # Increased to accommodate multiple tool calls
     
-    # Filter out incomplete AIMessage + ToolMessage sequences using global function
-    trimmed_messages = filter_incomplete_message_sequences(trimmed_messages)
+    # Process all messages without quantity limit
+    # processed_messages = []
+    # for msg in full_messages:
+    #     if isinstance(msg, ToolMessage):
+    #         # Skip all ToolMessages
+    #         continue
+    #     elif isinstance(msg, AIMessage):
+    #         # Skip AIMessages that contain tool calls to avoid tool_use/tool_result mismatch
+    #         has_tools = (hasattr(msg, 'tool_calls') and msg.tool_calls) or \
+    #                    (hasattr(msg, 'content') and isinstance(msg.content, (list, str)) and 'tool_use' in str(msg.content))
+            
+    #         if not has_tools and msg.content and msg.content.strip():
+    #             # Only include AIMessage with pure text content (no tool usage)
+    #             processed_messages.append(msg)
+    #         # Skip all AIMessages with tool calls to avoid Claude API errors
+    #     elif isinstance(msg, HumanMessage):
+    #         # Keep HumanMessages for ActionExecutor
+    #         processed_messages.append(msg)
+    #     else:
+    #         # Keep other message types (SystemMessage, etc.)
+    #         processed_messages.append(msg)
     
-    # Filter out HumanMessage from history for ActionExecutor
-    from langchain_core.messages import HumanMessage
-    trimmed_messages = [msg for msg in trimmed_messages if not isinstance(msg, HumanMessage)]
+    # trimmed_messages = processed_messages
+    
     
     latest_state_system = SystemMessage(
         content=(
@@ -1203,13 +817,15 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             f"- items: {items_summary}\n"
             f"- current_phase_id: {current_phase_id}\n"
             f"- player_states: {player_states}\n"
-            f"- actions to execute: {actions_to_execute}\n"
+            f"- current_phase_actions: {current_phase.get('actions', [])}\n"
         )
     )
 
+    # Use complete full_messages without any processing
     response = await model_with_tools.ainvoke([
         system_message,
         latest_state_system,
+        *full_messages,
     ], config)
 
     # === DETAILED LLM RESPONSE LOGGING ===
@@ -1255,9 +871,12 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
                     "- Include proper audience permissions on each component (audience_type=true for public; or audience_type=false with audience_ids list).\n"
                 )
             )
+            # Claude requires at least one HumanMessage
+            followup_human_msg = HumanMessage(content="Please create the missing UI components based on the system instructions.")
             followup_response = await model_with_tools.ainvoke([
                 strict_creation_system,
                 latest_state_system,
+                followup_human_msg,
             ], config)
             try:
                 logger.info(f"[ActionExecutor][GUARD][FOLLOWUP] Raw response content: {followup_response.content}")
@@ -1275,13 +894,98 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     except Exception:
         logger.exception("[ActionExecutor][GUARD] Creation follow-up failed")
 
-    # Do not change phase here; PhaseNode is authoritative for transitions
-    current_phase_id = state.get("current_phase_id", 0)
-    updated_phase_id = current_phase_id
-    logger.info(f"[ActionExecutor] Maintaining current phase_id: {updated_phase_id}")
+    # Process backend tool calls in ActionExecutor
+    tool_calls = getattr(response, "tool_calls", []) or []
+    current_player_states = dict(state.get("player_states", {}))
+    current_player_actions = dict(state.get("playerActions", {}))
+    current_game_notes = list(state.get("game_notes", []))
+    updated_phase_id = state.get("current_phase_id", 0)
     
-    # Do not modify player_states here; RefereeNode owns role assignment
-    final_player_states = state.get("player_states", {})
+    for tc in tool_calls:
+        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+        args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
+        if not isinstance(args, dict):
+            try:
+                import json as _json
+                args = _json.loads(args)
+            except Exception:
+                args = {}
+        
+        # Handle backend tool calls
+        if name == "update_player_state":
+            pid = args.get("player_id")
+            state_name = args.get("state_name")
+            state_value = args.get("state_value")
+            if pid and state_name is not None:
+                current_player_states = _execute_update_player_state(
+                    current_player_states, pid, state_name, state_value
+                )
+                logger.info(f"[ActionExecutor] Updated player state: {pid}.{state_name} = {state_value}")
+        elif name == "update_player_actions":
+            pid = args.get("player_id")
+            actions = args.get("actions")
+            phase = args.get("phase")
+            if pid and actions and phase:
+                current_player_actions = _execute_update_player_actions(
+                    current_player_actions, pid, actions, phase, state.get("roomSession", {}), current_player_states
+                )
+                logger.info(f"[ActionExecutor] Updated player actions: {pid} in phase {phase}")
+        elif name == "add_game_note":
+            note_type = args.get("note_type")
+            content = args.get("content")
+            if note_type and content:
+                current_game_notes = _execute_add_game_note(
+                    current_game_notes, note_type, content
+                )
+                logger.info(f"[ActionExecutor] Added game note: {note_type} - {content}")
+        elif name == "set_next_phase":
+            next_phase_id = args.get("next_phase_id")
+            transition_reason = args.get("transition_reason", "")
+            if next_phase_id is not None:
+                # Validate phase ID using normalize function
+                phases = dsl_content.get('phases', {})
+                
+                def _normalize_and_validate_phase_id(pid: Any, phases_dict: dict) -> tuple[Any, bool]:
+                    """Return (normalized_pid, is_valid)"""
+                    try:
+                        if pid is None:
+                            return pid, False
+                        # Check direct match
+                        if pid in phases_dict:
+                            return pid, True
+                        # Check string version of pid
+                        if str(pid) in phases_dict:
+                            return pid, True
+                        # Check integer version if pid is a numeric string
+                        if isinstance(pid, str) and pid.isdigit():
+                            int_pid = int(pid)
+                            if int_pid in phases_dict:
+                                return int_pid, True
+                        return pid, False
+                    except Exception:
+                        return pid, False
+                
+                normalized_pid, is_valid = _normalize_and_validate_phase_id(next_phase_id, phases)
+                if is_valid:
+                    updated_phase_id = normalized_pid
+                    logger.info(f"[ActionExecutor] Set next phase: {normalized_pid}, reason: {transition_reason}")
+                else:
+                    logger.warning(f"[ActionExecutor] Invalid phase ID {next_phase_id}, maintaining current phase")
+    
+    # Update phase history when phase changes
+    current_phase_history = list(state.get("phase_history", []))
+    if updated_phase_id != state.get("current_phase_id", 0):
+        phases = dsl_content.get('phases', {})
+        phase_name = phases.get(updated_phase_id, {}).get('name', f'Phase {updated_phase_id}') or phases.get(str(updated_phase_id), {}).get('name', f'Phase {updated_phase_id}')
+        
+        phase_entry = {
+            "phase_id": updated_phase_id,
+            "phase_name": phase_name
+        }
+        current_phase_history.append(phase_entry)
+        logger.info(f"[ActionExecutor] Updated phase history: added phase {updated_phase_id} ({phase_name})")
+    
+    final_player_states = current_player_states
 
     # Actions completed, end execution; mark phase 0 UI as done so InitialRouter won't loop back
     logger.info(f"[ActionExecutor][end] === ENDING ===")
@@ -1297,12 +1001,15 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     logger.info(f"[State Version] {state_version} - Phase {updated_phase_id} - Updated by ActionExecutor at {timestamp}")
 
     return Command(
-        goto="__end__",
+        goto=END,
         update={
             # Use final_messages like agent.py
             "messages": response,
             "items": state.get("items", []),
-            "player_states": final_player_states,  # Updated with role assignments
+            "player_states": final_player_states,  # Updated via backend tool calls
+            "playerActions": current_player_actions,  # Updated via backend tool calls
+            "game_notes": current_game_notes,  # Updated via backend tool calls
+            "phase_history": current_phase_history,  # Updated when phase changes
             "current_phase_id": updated_phase_id,
             "current_phase_name": get_phase_info_from_dsl(updated_phase_id, dsl_content)[1],
             "actions": [],  # Clear actions after execution
@@ -1316,6 +1023,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
         }
     )
 
+
 # Define the workflow graph
 workflow = StateGraph(AgentState)
 
@@ -1323,8 +1031,6 @@ workflow = StateGraph(AgentState)
 workflow.add_node("InitialRouterNode", InitialRouterNode)
 workflow.add_node("ChatBotNode", ChatBotNode)
 workflow.add_node("BotBehaviorNode", BotBehaviorNode)
-workflow.add_node("RefereeNode", RefereeNode)
-# workflow.add_node("PhaseNode", PhaseNode)
 # workflow.add_node("RoleAssignmentNode", RoleAssignmentNode)
 workflow.add_node("ActionExecutor", ActionExecutor)
 # workflow.add_node("ActionValidatorNode", ActionValidatorNode)

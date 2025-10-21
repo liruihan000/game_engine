@@ -3,7 +3,7 @@
   "dockerfile_lines": [],
   "dependencies": ["."],
   "graphs": {
-    "sample_agent": "./dm_agent_with_bot_no_feedbackdecisionnode.py:graph",
+    "sample_agent": "./game_agent_v3.py:graph",
     "dsl_agent": "./dsl_agent.py:graph"
   },
   "env": ".env"

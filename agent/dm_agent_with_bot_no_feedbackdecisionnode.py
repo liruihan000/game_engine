@@ -529,9 +529,8 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
     playerActions = state.get("playerActions", {})
     game_notes = state.get('game_notes', [])
 
-    # Initialize LLM
-    model = init_chat_model("openai:gpt-4.1-mini")
-    model_with_tools = model.bind_tools([update_player_actions])
+    # Initialize LLM - no tools, just generate analysis
+    model = init_chat_model("anthropic:claude-3-5-sonnet-20241022")
     items_summary = summarize_items_for_prompt(state)
     bot_behavior_system_prompt = await _load_prompt_async("bot_behavior_system_prompt")
     
@@ -1066,8 +1065,11 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     if len(deduped_frontend_tools) > MAX_FRONTEND_TOOLS:
         deduped_frontend_tools = deduped_frontend_tools[:MAX_FRONTEND_TOOLS]
 
+    # Add all backend tools to ActionExecutor
+    all_tools = [*deduped_frontend_tools, *backend_tools]
+    
     model_with_tools = model.bind_tools(
-        deduped_frontend_tools,
+        all_tools,
         parallel_tool_calls=True,  # Allow multiple tool calls in single response
     )
 
@@ -1385,13 +1387,63 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     except Exception:
         logger.exception("[ActionExecutor][GUARD] Creation follow-up failed")
 
-    # Do not change phase here; PhaseNode is authoritative for transitions
-    current_phase_id = state.get("current_phase_id", 0)
-    updated_phase_id = current_phase_id
-    logger.info(f"[ActionExecutor] Maintaining current phase_id: {updated_phase_id}")
+    # Process backend tool calls in ActionExecutor
+    tool_calls = getattr(response, "tool_calls", []) or []
+    current_player_states = dict(state.get("player_states", {}))
+    current_player_actions = dict(state.get("playerActions", {}))
+    current_game_notes = list(state.get("game_notes", []))
+    updated_phase_id = state.get("current_phase_id", 0)
     
-    # Do not modify player_states here; RefereeNode owns role assignment
-    final_player_states = state.get("player_states", {})
+    for tc in tool_calls:
+        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+        args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
+        if not isinstance(args, dict):
+            try:
+                import json as _json
+                args = _json.loads(args)
+            except Exception:
+                args = {}
+        
+        # Handle backend tool calls
+        if name == "update_player_state":
+            pid = args.get("player_id")
+            state_name = args.get("state_name")
+            state_value = args.get("state_value")
+            if pid and state_name is not None:
+                current_player_states = _execute_update_player_state(
+                    current_player_states, pid, state_name, state_value
+                )
+                logger.info(f"[ActionExecutor] Updated player state: {pid}.{state_name} = {state_value}")
+        elif name == "update_player_actions":
+            pid = args.get("player_id")
+            actions = args.get("actions")
+            phase = args.get("phase")
+            if pid and actions and phase:
+                current_player_actions = _execute_update_player_actions(
+                    current_player_actions, pid, actions, phase, state.get("roomSession", {}), current_player_states
+                )
+                logger.info(f"[ActionExecutor] Updated player actions: {pid} in phase {phase}")
+        elif name == "add_game_note":
+            note_type = args.get("note_type")
+            content = args.get("content")
+            if note_type and content:
+                current_game_notes = _execute_add_game_note(
+                    current_game_notes, note_type, content
+                )
+                logger.info(f"[ActionExecutor] Added game note: {note_type} - {content}")
+        elif name == "set_next_phase":
+            next_phase_id = args.get("next_phase_id")
+            transition_reason = args.get("transition_reason", "")
+            if next_phase_id is not None:
+                # Validate phase ID exists in DSL
+                phases = dsl_content.get('phases', {})
+                if next_phase_id in phases or str(next_phase_id) in phases:
+                    updated_phase_id = next_phase_id
+                    logger.info(f"[ActionExecutor] Set next phase: {next_phase_id}, reason: {transition_reason}")
+                else:
+                    logger.warning(f"[ActionExecutor] Invalid phase ID {next_phase_id}, maintaining current phase")
+    
+    final_player_states = current_player_states
 
     # Actions completed, end execution; mark phase 0 UI as done so InitialRouter won't loop back
     logger.info(f"[ActionExecutor][end] === ENDING ===")
