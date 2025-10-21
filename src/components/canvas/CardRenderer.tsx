@@ -606,7 +606,8 @@ export function CardRenderer(props: {
                   {/* Pure Cartoon Avatar */}
                   <div className={`w-20 h-20 flex items-center justify-center transition-all duration-200 hover:scale-110 ${isDead ? 'grayscale opacity-60' : ''}`}>
                     {(() => {
-                      const avatarId = parseInt(player.id) % 6;
+                      // Ensure consistent avatar assignment between server and client
+                      const avatarId = typeof window !== 'undefined' ? parseInt(player.id) % 6 : 0;
                       switch (avatarId) {
                         case 0: // Cute Cat
                           return (
@@ -668,7 +669,8 @@ export function CardRenderer(props: {
                   {/* Pure Cartoon Avatar */}
                   <div className={`w-20 h-20 flex items-center justify-center transition-all duration-200 hover:scale-110 ${isDead ? 'grayscale opacity-60' : ''}`}>
                     {(() => {
-                      const avatarId = parseInt(player.id) % 6;
+                      // Ensure consistent avatar assignment between server and client
+                      const avatarId = typeof window !== 'undefined' ? parseInt(player.id) % 6 : 0;
                       switch (avatarId) {
                         case 0: // Cute Cat
                           return (
