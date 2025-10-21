@@ -530,7 +530,7 @@ export function CardRenderer(props: {
           </div>
         )}
         <div className="flex gap-3 flex-wrap flex-1">
-          {d.options.map((option, index) => (
+          {(d.options || []).map((option, index) => (
             <button
               key={index}
               onClick={() => handleVote(option)}

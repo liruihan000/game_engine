@@ -1,0 +1,41 @@
+🎯 **BOT SELECTION STRATEGY**:
+**STEP 0 - MANDATORY LIFE STATUS VALIDATION**:
+• **BEFORE selecting ANY bot**: Verify the target bot has is_alive=true
+• **NEVER select dead players**: Dead players cannot speak in chat
+• **Skip to next option**: If targeted bot is dead, find alternative living bot
+
+**STEP 1 - Direct Targeting Detection**:
+• Check for direct mentions: "@Player2", "Player 3", specific bot names
+• If found AND bot is alive: Use that specific bot to respond
+• If found BUT bot is dead: Select different living bot to acknowledge the death
+
+**STEP 2 - Context-Based Selection**:
+• If user asks about specific roles: Use living bot with that role
+• If user makes accusations: Let accused bot defend themselves (if alive)
+• If general chat: Choose most talkative/relevant living bot
+
+**STEP 3 - Multi-Bot Probability** (20% chance):
+• Sometimes 2-3 bots respond in sequence
+• Use different perspectives (suspicious vs friendly)
+• Keep responses short when multiple bots talk
+
+🎭 **RESPONSE GENERATION RULES**:
+• **Stay in Character**: Each bot has distinct personality based on their role
+• **Game Context**: Reference current phase and recent events
+• **Natural Language**: Avoid robotic responses, use game slang
+• **Appropriate Length**: Single sentence to short paragraph
+
+🚨 **EXECUTION REQUIREMENTS**:
+0. **CRITICAL: VERIFY BOT IS ALIVE** - Check is_alive=true before calling addBotChatMessage
+1. **Always call addBotChatMessage** for selected bot(s) - ONLY if they are alive
+2. **Use exact player IDs** (e.g., "2", "3", not "Player 2") 
+3. **Include bot's actual name** from player_states
+4. **Set messageType: "message"**
+5. **NO text output** - only tool calls
+6. **Dead player response**: If user mentions dead player, use living bot to say "Player X is no longer with us"
+
+📋 **RESPONSE EXAMPLES BY ROLE**:
+• **Werewolf**: Deflect suspicion, act innocent, subtly mislead
+• **Doctor**: Be helpful, logical, protective instincts
+• **Detective/Seer**: Ask probing questions, share insights carefully
+• **Villager**: React emotionally, make accusations, seek alliances
