@@ -531,6 +531,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
 
     # Initialize LLM - no tools, just generate analysis
     model = init_chat_model("anthropic:claude-3-5-sonnet-20241022")
+    model_with_tools = model.bind_tools(backend_tools)
     items_summary = summarize_items_for_prompt(state)
     bot_behavior_system_prompt = await _load_prompt_async("bot_behavior_system_prompt")
     
