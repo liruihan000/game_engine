@@ -84,6 +84,30 @@ def add_game_note(note_type: str, content: str):
     return f"Will add game note: {formatted_note}"
 
 
+@tool  
+def update_complete_player_states(player_states_dict: dict) -> str:
+    """
+    Batch update complete player_states dictionary, dynamically adapting to any game's states structure.
+    Used with initialize_player_states_from_dsl: first get DSL template, then fill and batch update.
+    
+    Args:
+        player_states_dict: Complete player_states dictionary, format:
+        {
+            "1": {"name": "Alice", "role": "werewolf", "is_alive": true, ...},
+            "2": {"name": "Bob", "role": "villager", "is_alive": true, ...}
+        }
+        
+    Returns:
+        Confirmation message about the batch update
+    """
+    player_count = len(player_states_dict)
+    player_ids = list(player_states_dict.keys())
+    
+    # Count total fields across all players for verification
+    total_fields = sum(len(player_data) for player_data in player_states_dict.values())
+    
+    return f"Will batch update {player_count} players ({total_fields} total fields): {', '.join(player_ids)}"
+
 @tool
 def update_player_name(player_id: str, name: str, role: str) -> str:
     """
@@ -200,6 +224,21 @@ def _execute_update_player_state(current_player_states: dict, player_id: str, st
     
     return current_player_states
 
+
+def _execute_update_complete_player_states(current_player_states: dict, player_states_dict: dict) -> dict:
+    """
+    Execute the actual logic to batch update complete player_states. Returns updated player_states dict.
+    
+    Args:
+        current_player_states: Current player states dict (will be completely replaced)
+        player_states_dict: New complete player_states dict
+        
+    Returns:
+        Updated player_states dict with complete new structure
+    """
+    # Completely replace the player_states with the new structure
+    # This ensures all players have consistent field structures
+    return dict(player_states_dict)
 
 def _execute_update_player_name(current_player_states: dict, player_id: str, name: str, role: str) -> dict:
     """

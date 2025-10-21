@@ -56,35 +56,255 @@ def clean_llm_json_response(response_content: str) -> str:
     
     return response_content
 
-def summarize_items_for_prompt(items: list) -> str:
-    """Summarize current UI items with ID, type, name, position - formatted for ActionExecutor deletion/creation decisions."""
+def format_declaration_for_prompt(declaration: dict) -> str:
+    """
+    Format the DSL declaration section for better readability in prompts.
+    
+    Args:
+        declaration: The declaration section from DSL content
+        
+    Returns:
+        Formatted string with structured declaration information
+    """
     try:
+        if not declaration:
+            return "No declaration available"
+        
+        lines = []
+        
+        # Game description (full text)
+        desc = declaration.get('description', '')
+        if desc:
+            lines.append(f"📖 Description: {desc}")
+        
+        # Basic game info
+        if declaration.get('is_multiplayer'):
+            min_players = declaration.get('min_players', 'N/A')
+            lines.append(f"👥 Multiplayer: Yes (Min: {min_players} players)")
+        
+        # Roles with details
+        roles = declaration.get('roles', [])
+        if roles:
+            lines.append(f"🎭 Roles ({len(roles)}):")
+            for role in roles:
+                role_name = role.get('name', 'Unknown')
+                role_desc = role.get('description', 'No description')
+                lines.append(f"    • {role_name}: {role_desc}")
+        
+        # Player states fields with details
+        player_states = declaration.get('player_states', {})
+        if player_states:
+            field_count = len(player_states)
+            lines.append(f"📊 Player State Fields ({field_count}):")
+            for field_name, field_def in player_states.items():
+                field_type = field_def.get('type', 'unknown')
+                example = field_def.get('example', 'N/A')
+                description = field_def.get('description', 'No description')
+                lines.append(f"    • {field_name}: {field_type} (e.g., {example}) - {description}")
+        
+        # Audience groups with details
+        audience_groups = declaration.get('audience_groups', {})
+        if audience_groups:
+            group_count = len(audience_groups)
+            lines.append(f"👥 Audience Groups ({group_count}):")
+            for group_name, group_def in audience_groups.items():
+                description = group_def.get('description', 'No description')
+                condition = group_def.get('selection_criteria', 'No criteria')
+                lines.append(f"    • {group_name}: {description}")
+                lines.append(f"      Criteria: {condition}")
+        
+        return "\n    ".join(lines) if lines else "Empty declaration"
+        
+    except Exception as e:
+        logger.error(f"Error formatting declaration: {e}")
+        return str(declaration)[:300] + ("..." if len(str(declaration)) > 300 else "")
+
+
+def format_dict_for_prompt(data: dict, indent_level: int = 0) -> str:
+    """
+    Generic function to format any dictionary for better readability in prompts.
+    Recursively handles nested dictionaries and lists.
+    
+    Args:
+        data: Dictionary to format
+        indent_level: Current indentation level (for nested structures)
+        
+    Returns:
+        Formatted string with structured dictionary information
+    """
+    if not data:
+        return "{}"
+    
+    lines = []
+    indent = "  " * indent_level
+    
+    for key, value in data.items():
+        if isinstance(value, dict):
+            if value:  # Non-empty dict
+                lines.append(f"{indent}{key}:")
+                nested_lines = format_dict_for_prompt(value, indent_level + 1)
+                lines.append(nested_lines)
+            else:  # Empty dict
+                lines.append(f"{indent}{key}: {{}}")
+        elif isinstance(value, list):
+            if value:  # Non-empty list
+                lines.append(f"{indent}{key}:")
+                for i, item in enumerate(value):
+                    if isinstance(item, dict):
+                        lines.append(f"{indent}  [{i}]:")
+                        nested_lines = format_dict_for_prompt(item, indent_level + 2)
+                        lines.append(nested_lines)
+                    else:
+                        lines.append(f"{indent}  [{i}]: {item}")
+            else:  # Empty list
+                lines.append(f"{indent}{key}: []")
+        else:
+            # Simple value (string, number, boolean, etc.)
+            lines.append(f"{indent}{key}: {value}")
+    
+    return "\n".join(lines)
+
+
+
+
+def format_current_phase_for_prompt(current_phase: dict, current_phase_id: int) -> str:
+    """
+    Format the current phase information for better readability in prompts.
+    
+    Args:
+        current_phase: Current phase data from DSL
+        current_phase_id: Current phase ID
+        
+    Returns:
+        Formatted string with structured current phase information
+    """
+    try:
+        if not current_phase:
+            return f"⚠️ Phase {current_phase_id}: No phase data available"
+        
+        lines = []
+        
+        # Phase header with ID and name
+        phase_name = current_phase.get('name', f'Phase {current_phase_id}')
+        lines.append(f"🎯 Current Phase: ID {current_phase_id} - \"{phase_name}\"")
+        
+        # Phase description (full text)
+        description = current_phase.get('description', '')
+        if description:
+            lines.append(f"📝 Description: {description}")
+        
+        # Actions/requirements - show all actions with full details
+        actions = current_phase.get('actions', [])
+        if actions:
+            action_count = len(actions)
+            lines.append(f"⚙️ Required Actions ({action_count}):")
+            for i, action in enumerate(actions, 1):
+                if isinstance(action, dict):
+                    desc = action.get('description', 'No description')
+                    tools = action.get('tools', [])
+                    tool_str = f" → Tools: [{', '.join(tools)}]" if tools else ""
+                    lines.append(f"    {i}. {desc}{tool_str}")
+                else:
+                    lines.append(f"    {i}. {str(action)}")
+        
+        # Completion criteria
+        completion_criteria = current_phase.get('completion_criteria', {})
+        if completion_criteria:
+            criteria_type = completion_criteria.get('type', 'Unknown')
+            criteria_desc = completion_criteria.get('description', '')
+            
+            # Format specific criteria types
+            if criteria_type == 'player_action':
+                wait_for = completion_criteria.get('wait_for', 'action')
+                target_info = completion_criteria.get('target_players', {})
+                if target_info:
+                    condition = target_info.get('condition', 'Unknown condition')
+                    lines.append(f"✅ Completion: {criteria_type} - {wait_for}")
+                    lines.append(f"    Target: {condition}")
+                else:
+                    lines.append(f"✅ Completion: {criteria_type} - {wait_for}")
+            elif criteria_type == 'timer':
+                lines.append(f"✅ Completion: Timer expires")
+            elif criteria_type == 'UI_displayed':
+                lines.append(f"✅ Completion: UI components displayed")
+            else:
+                lines.append(f"✅ Completion: {criteria_type}")
+            
+            # Add description if different
+            if criteria_desc and criteria_desc != criteria_type:
+                lines.append(f"    Detail: {criteria_desc}")
+        
+        # Next phase info
+        next_phase = current_phase.get('next_phase')
+        if next_phase:
+            if isinstance(next_phase, dict):
+                next_id = next_phase.get('id', 'Unknown')
+                next_name = next_phase.get('name', 'Unknown')
+                lines.append(f"➡️ Next Phase: ID {next_id} - \"{next_name}\"")
+            else:
+                lines.append(f"➡️ Next Phase: {next_phase}")
+        
+        return "\n".join(lines)
+        
+    except Exception as e:
+        logger.error(f"Error formatting current phase: {e}")
+        return f"Phase {current_phase_id}: {str(current_phase)[:200]}{'...' if len(str(current_phase)) > 200 else ''}"
+
+
+def summarize_items_for_prompt(items) -> str:
+    """
+    Summarize current UI items with complete readable JSON format for better LLM understanding.
+    Shows full item structure including all data fields in formatted JSON.
+    
+    Args:
+        items: Items data structure from game state
+        
+    Returns:
+        Formatted JSON string of all items with complete details
+    """
+    import json
+    
+    try:
+        # Handle different input types more robustly
+        if items is None:
+            return "(no items)"
+        
+        # Convert to list if needed
+        if not isinstance(items, (list, tuple)):
+            try:
+                items = list(items)
+            except (TypeError, ValueError):
+                return f"(unable to summarize items: invalid type {type(items)})"
+        
         if not items:
             return "(no items)"
         
-        # Build detailed summary with IDs for deletion
-        lines: List[str] = []
-        for it in items[:15]:  # Show more items for better context
+        # Convert items to JSON-serializable format
+        serializable_items = []
+        for item in items:
             try:
-                item_id = it.get("id", "unknown")
-                item_type = it.get("type", "unknown")
-                item_name = it.get("name", "unnamed")
-                
-                # Get position from data or fallback to item level
-                data = it.get("data", {}) or {}
-                position = data.get("position") or it.get("position") or "none"
-                
-                # Format: [ID] type:name@position
-                lines.append(f"  [{item_id}] {item_type}:{item_name}@{position}")
-            except Exception:
-                continue
+                if isinstance(item, dict):
+                    serializable_items.append(item)
+                else:
+                    # Try to convert to dict if it has attributes
+                    item_dict = {}
+                    for attr in ['id', 'type', 'name', 'subtitle', 'data']:
+                        if hasattr(item, attr):
+                            item_dict[attr] = getattr(item, attr)
+                    if item_dict:
+                        serializable_items.append(item_dict)
+                    else:
+                        serializable_items.append(str(item))
+            except Exception as e:
+                serializable_items.append(f"<error parsing item: {e}>")
         
-        more = "" if len(items) <= 15 else f"\n  (+{len(items)-15} more items...)"
-        header = f"Canvas Items ({len(items)} total):"
-        return header + "\n" + "\n".join(lines) + more
+        # Format as readable JSON
+        formatted_json = json.dumps(serializable_items, indent=2, ensure_ascii=False, default=str)
+        
+        return f"Canvas Items ({len(items)} total):\n{formatted_json}"
         
     except Exception as e:
-        return f"(unable to summarize items: {e})"
+        return f"(unable to summarize items: {e} - type: {type(items)})"
 
 
 def process_human_action_if_needed(messages: list, player_actions: dict, player_states: dict, current_phase_id: int, room_session: dict, dsl_content: dict) -> dict:
@@ -197,6 +417,97 @@ def filter_incomplete_message_sequences(messages: list) -> list:
 
 
 
+
+
+def filter_backend_tools_from_messages(full_messages: list) -> list:
+    """
+    Filter out backend tool calls and tool_use blocks from messages for LLM consumption.
+    Removes tool_calls and tool_use blocks while keeping only text content from AIMessage and HumanMessage.
+    
+    Args:
+        full_messages: List of messages from conversation history
+        
+    Returns:
+        List of filtered messages safe for LLM input (no backend tool remnants)
+    """
+    from langchain_core.messages import AIMessage, HumanMessage
+    
+    processed_messages = []
+    for msg in full_messages:
+        if isinstance(msg, AIMessage):
+            # Keep AIMessage but remove tool_calls and tool_use blocks from content
+            if msg.content:
+                if isinstance(msg.content, str) and msg.content.strip():
+                    # String content - keep as is
+                    processed_messages.append(AIMessage(content=msg.content))
+                elif isinstance(msg.content, list) and msg.content:
+                    # List content - filter out tool_use blocks, keep text blocks
+                    filtered_content = []
+                    for item in msg.content:
+                        if isinstance(item, dict) and item.get("type") == "tool_use":
+                            # Skip tool_use blocks to avoid Claude API errors
+                            continue
+                        else:
+                            # Keep text blocks and other content
+                            filtered_content.append(item)
+                    
+                    # Only add message if it has non-tool content
+                    if filtered_content:
+                        processed_messages.append(AIMessage(content=filtered_content))
+        elif isinstance(msg, HumanMessage):
+            # Keep HumanMessage as is
+            processed_messages.append(msg)
+        # Skip ToolMessage and other types
+    
+    return processed_messages
+
+
+def filter_backend_tools_from_response(response, backend_tool_names: set):
+    """
+    Remove backend tool calls from LLM response to prevent tool_use/tool_result mismatch.
+    Keeps only frontend tool calls and cleans content accordingly.
+    
+    Args:
+        response: AIMessage response from LLM
+        backend_tool_names: Set of backend tool names to filter out
+        
+    Returns:
+        Cleaned AIMessage with only frontend tool calls
+    """
+    try:
+        from langchain_core.messages import AIMessage
+    except ImportError:
+        # Return original response if import fails
+        return response
+    
+    if not hasattr(response, 'tool_calls') or not response.tool_calls:
+        return response
+    
+    remaining_tool_calls = []
+    for tc in response.tool_calls:
+        name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+        if name and name not in backend_tool_names:
+            remaining_tool_calls.append(tc)
+    
+    # Update response with only frontend tool calls
+    if remaining_tool_calls != response.tool_calls:
+        # Clean content: remove backend tool_use blocks
+        cleaned_content = response.content
+        if isinstance(cleaned_content, list):
+            # Filter out backend tool_use blocks from content list
+            filtered_content = []
+            for item in cleaned_content:
+                if isinstance(item, dict) and item.get("type") == "tool_use":
+                    tool_name = item.get("name", "")
+                    if tool_name not in backend_tool_names:
+                        filtered_content.append(item)
+                else:
+                    filtered_content.append(item)
+            cleaned_content = filtered_content
+        
+        response = AIMessage(content=cleaned_content, tool_calls=remaining_tool_calls)
+    
+    return response
 
 
 def _limit_actions_per_player(player_actions: dict, limit: int = 5) -> dict:

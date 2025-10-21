@@ -1329,6 +1329,46 @@
       "max_players": 8,
       "current_players": 4,
       "created_at": "2025-10-21T12:59:46.934Z"
+    },
+    "cdc270ea-09a8-4b64-b10a-004c1ae94869": {
+      "id": "cdc270ea-09a8-4b64-b10a-004c1ae94869",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "61c7cf6d-55c9-4042-8b9f-7e9ca9d35b00",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 4,
+      "created_at": "2025-10-21T17:44:29.638Z"
+    },
+    "b599291a-0cfb-4b57-968e-07fd0d595cb9": {
+      "id": "b599291a-0cfb-4b57-968e-07fd0d595cb9",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "410440f7-5a20-41d1-819a-1a3187bd1ac4",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 4,
+      "created_at": "2025-10-21T18:00:47.484Z"
+    },
+    "0e2654c2-7c84-4eb0-93ef-855ac4dff3ea": {
+      "id": "0e2654c2-7c84-4eb0-93ef-855ac4dff3ea",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "1cfb55af-5e1e-448e-977c-8e7ceacf4502",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 4,
+      "created_at": "2025-10-21T20:33:55.973Z"
+    },
+    "7cd87439-98a8-451e-9bcf-502165144f90": {
+      "id": "7cd87439-98a8-451e-9bcf-502165144f90",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "3ac3499d-fcd3-49dc-8f9b-fc9fefc7aa23",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 4,
+      "created_at": "2025-10-21T20:50:40.992Z"
     }
   },
   "players": {
@@ -5242,7 +5282,159 @@
         "status": "joined",
         "joined_at": "2025-10-21T12:59:48.040Z"
       }
+    ],
+    "cdc270ea-09a8-4b64-b10a-004c1ae94869": [
+      {
+        "id": 1,
+        "room_id": "cdc270ea-09a8-4b64-b10a-004c1ae94869",
+        "name": "hgbuiojhoilk",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-21T17:44:29.638Z"
+      },
+      {
+        "id": 258,
+        "room_id": "cdc270ea-09a8-4b64-b10a-004c1ae94869",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T17:44:31.061Z"
+      },
+      {
+        "id": 259,
+        "room_id": "cdc270ea-09a8-4b64-b10a-004c1ae94869",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T17:44:31.061Z"
+      },
+      {
+        "id": 260,
+        "room_id": "cdc270ea-09a8-4b64-b10a-004c1ae94869",
+        "name": "player4",
+        "player_order": 4,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T17:44:31.062Z"
+      }
+    ],
+    "b599291a-0cfb-4b57-968e-07fd0d595cb9": [
+      {
+        "id": 1,
+        "room_id": "b599291a-0cfb-4b57-968e-07fd0d595cb9",
+        "name": "d f g d",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-21T18:00:47.484Z"
+      },
+      {
+        "id": 261,
+        "room_id": "b599291a-0cfb-4b57-968e-07fd0d595cb9",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T18:00:48.368Z"
+      },
+      {
+        "id": 262,
+        "room_id": "b599291a-0cfb-4b57-968e-07fd0d595cb9",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T18:00:48.376Z"
+      },
+      {
+        "id": 263,
+        "room_id": "b599291a-0cfb-4b57-968e-07fd0d595cb9",
+        "name": "player4",
+        "player_order": 4,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T18:00:48.377Z"
+      }
+    ],
+    "0e2654c2-7c84-4eb0-93ef-855ac4dff3ea": [
+      {
+        "id": 1,
+        "room_id": "0e2654c2-7c84-4eb0-93ef-855ac4dff3ea",
+        "name": "ewrw",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-21T20:33:55.973Z"
+      },
+      {
+        "id": 264,
+        "room_id": "0e2654c2-7c84-4eb0-93ef-855ac4dff3ea",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T20:33:57.736Z"
+      },
+      {
+        "id": 265,
+        "room_id": "0e2654c2-7c84-4eb0-93ef-855ac4dff3ea",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T20:33:57.745Z"
+      },
+      {
+        "id": 266,
+        "room_id": "0e2654c2-7c84-4eb0-93ef-855ac4dff3ea",
+        "name": "player4",
+        "player_order": 4,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T20:33:57.746Z"
+      }
+    ],
+    "7cd87439-98a8-451e-9bcf-502165144f90": [
+      {
+        "id": 1,
+        "room_id": "7cd87439-98a8-451e-9bcf-502165144f90",
+        "name": "ryan",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-21T20:50:40.992Z"
+      },
+      {
+        "id": 267,
+        "room_id": "7cd87439-98a8-451e-9bcf-502165144f90",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T20:50:42.028Z"
+      },
+      {
+        "id": 268,
+        "room_id": "7cd87439-98a8-451e-9bcf-502165144f90",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T20:50:42.037Z"
+      },
+      {
+        "id": 269,
+        "room_id": "7cd87439-98a8-451e-9bcf-502165144f90",
+        "name": "player4",
+        "player_order": 4,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T20:50:42.038Z"
+      }
     ]
   },
-  "nextPlayerId": 258
+  "nextPlayerId": 270
 }

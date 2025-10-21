@@ -26,22 +26,29 @@ from tools.backend_tools import (
     add_game_note,
     update_player_actions,
     update_player_name,
+    update_complete_player_states,
     set_feedback_decision,
     _execute_update_player_state,
     _execute_update_player_actions,
     _execute_add_game_note,
     _execute_update_player_name,
+    _execute_update_complete_player_states,
     _execute_set_feedback_decision,
 )
 from tools.utils import (
     get_phase_info_from_dsl,
     clean_llm_json_response,
+    format_declaration_for_prompt,
+    format_dict_for_prompt,
+    format_current_phase_for_prompt,
     summarize_items_for_prompt,
     process_human_action_if_needed,
     filter_incomplete_message_sequences,
     _limit_actions_per_player,
     load_dsl_by_gamename,
     initialize_player_states_from_dsl,
+    filter_backend_tools_from_messages,
+    filter_backend_tools_from_response,
 )
 import json
 import uuid
@@ -135,6 +142,7 @@ class AgentState(CopilotKitState):
 # Centralized backend tools (shared across nodes)
 backend_tools = [
     update_player_state,
+    update_complete_player_states,
     set_next_phase,
     update_player_actions,
 ]
@@ -405,9 +413,11 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
 
     📊 **GAME CONTEXT**:
     - Current Phase: {current_phase_id}
-    - Player States: {player_states}
-    - Player Actions: {_limit_actions_per_player(playerActions, 3) if playerActions else {}}
-    - Game Notes: {game_notes[-5:] if game_notes else 'None'}
+    - Player States:
+      {format_dict_for_prompt(player_states)}
+    - Player Actions:
+      {format_dict_for_prompt(_limit_actions_per_player(playerActions, 3) if playerActions else {})}
+
 
     🚫 **MANDATORY LIFE STATUS CHECK**:
     - Dead players: {[f"Player {pid} ({data.get('name', f'Bot {pid}')})" for pid, data in player_states.items() if not data.get('is_alive', True) and pid != "1"]}
@@ -447,7 +457,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
     phases = dsl_content.get('phases', {}) if dsl_content else {}
     current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
     player_states = state.get("player_states", {})
-
+    declaration = dsl_content.get('declaration', {}) if dsl_content else {}
     # Initialize LLM
     model = init_chat_model("anthropic:claude-haiku-4-5-20251001")
     model_with_tools = model.bind_tools([update_player_actions])
@@ -457,51 +467,28 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
         content=(
             "🤖 **BOT BEHAVIOR SIMULATOR**\n"
             "You are controlling ALL bot players (any player_id ≠ 1).\n"
-            f"Current Phase: {current_phase.get('name', f'Phase {current_phase_id}')}\n"
-            f"Phase Description: {current_phase.get('description', '')}\n"
-            f"Player States: {player_states}\n\n"
+            f"Declaration:\n{format_declaration_for_prompt(declaration)}\n\n"
+            f"{format_current_phase_for_prompt(current_phase, current_phase_id)}\n"
+            f"Player States:\n{format_dict_for_prompt(player_states)}\n\n"
+            f"Items Summary:\n{summarize_items_for_prompt(state)}\n\n"
             
             "**Your Job**: For each bot player, decide what they should do in this phase.\n"
-            "- Look at the current phase requirements\n"
+            "- Look at the current phase completion criteria\n"
             "- Check each bot's role and current state\n"
             "- Generate realistic bot actions using update_player_actions(player_id, actions, phase)\n"
-            "- Bots should act strategically based on their roles and game state\n\n"
+            "- The items summary is the current UI of the game, you can use it to decide what to do\n"
+            "- You must do the actions that the completion criteria includes for different roles."
+            "- Bots should act strategically based on their roles and game state.\n\n"
             
             "**Examples**: voting, accusations, night actions, defenses, etc.\n"
             "Keep it simple but realistic for each bot's role and situation."
         )
     )
 
-    # 4. Process messages: remove ToolMessages and tool_calls from AIMessages, no quantity limit
+    # Process messages using utility function to filter backend tools
     full_messages = state.get("messages", []) or []
-    
-    # Process messages: keep only AIMessage content and HumanMessage, preserve order
-    processed_messages = []
-    for msg in full_messages:
-        if isinstance(msg, AIMessage):
-            # Keep AIMessage but remove tool_calls and tool_use blocks from content
-            if msg.content:
-                if isinstance(msg.content, str) and msg.content.strip():
-                    # String content - keep as is
-                    processed_messages.append(AIMessage(content=msg.content))
-                elif isinstance(msg.content, list) and msg.content:
-                    # List content - filter out tool_use blocks, keep text blocks
-                    filtered_content = []
-                    for item in msg.content:
-                        if isinstance(item, dict) and item.get("type") == "tool_use":
-                            # Skip tool_use blocks to avoid Claude API errors
-                            continue
-                        else:
-                            # Keep text blocks and other content
-                            filtered_content.append(item)
-                    
-                    # Only add message if it has non-tool content
-                    if filtered_content:
-                        processed_messages.append(AIMessage(content=filtered_content))
-        elif isinstance(msg, HumanMessage):
-            # Keep HumanMessage as is
-            processed_messages.append(msg)
-        # Skip ToolMessage and others
+    processed_messages = filter_backend_tools_from_messages(full_messages)
+    processed_messages = filter_incomplete_message_sequences(processed_messages)
 
     # Call LLM with backend tool bound
     response = await model_with_tools.ainvoke([
@@ -608,6 +595,8 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     MAX_FRONTEND_TOOLS = 110
     if len(deduped_frontend_tools) > MAX_FRONTEND_TOOLS:
         deduped_frontend_tools = deduped_frontend_tools[:MAX_FRONTEND_TOOLS]
+    
+    backend_tools = [update_complete_player_states, set_next_phase]
 
     # Add all backend tools to ActionExecutor
     all_tools = [*deduped_frontend_tools, *backend_tools]
@@ -647,7 +636,6 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     playerActions = state.get("playerActions", {})
     phases = dsl_content.get('phases', {}) if dsl_content else {}
     current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
-    game_notes = state.get('game_notes', [])
     if current_phase:
         current_phase_str = f"Current phase (ID {current_phase_id}):\n{current_phase}\n"
     else:
@@ -661,20 +649,17 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "Focus on player operation analysis and state management only. UI updates are handled by the next node.\n\n"
 
             "📊 **CURRENT GAME STATE**:\n"
-            f"- DSL: {dsl_content}\n\n"
+            f"- Declaration:\n    {format_declaration_for_prompt(declaration)}\n\n"
             f"- Phase History: {state.get('phase_history', [])}\n\n"
-            f"- Current Phase ID: {current_phase_id}\n\n"
-            f"- Current Phase Name: {current_phase.get('name', 'Unknown')}\n\n"
-            f"- Current Phase Description: {current_phase.get('description', 'No description')}\n\n"
-            f"- Current Phase Completion Criteria: {current_phase.get('completion_criteria', {})}\n\n"
-            f"- Player States: {player_states}\n\n"
-            f"- Player Actions: {playerActions}\n\n"
+            f"- Current Phase:\n{format_current_phase_for_prompt(current_phase, current_phase_id)}\n\n"
+            f"- Player States:\n{format_dict_for_prompt(player_states)}\n\n"
+            f"- Player Actions:\n{format_dict_for_prompt(playerActions)}\n\n"
             f"- Screen Components: {items_summary}\n\n"
 
-            "🔄 **MANDATORY 2-STEP DM WORKFLOW** (MUST execute ALL steps in order):\n\n"
-            "⚠️ **CRITICAL EXECUTION RULE**: You MUST complete ALL 2 STEPS in EVERY response. Skipping any step is forbidden!\n\n"
+            "🔄 **MANDATORY 3-STEP DM WORKFLOW** (MUST execute ALL steps in order):\n\n"
+            "⚠️ **CRITICAL EXECUTION RULE**: You MUST complete ALL 3 STEPS in EVERY response. Skipping any step is forbidden!\n\n"
 
-            "**STEP 1: Analyze Player Actions and Phase Update**\n"
+            "**STEP 1: Analyze Current Player Operations**\n"
             "• **IMPORTANT**: Analyze player operations from playerActions data structure ONLY\n"
             "• Do NOT read or analyze human messages - only use playerActions state\n"
             "• playerActions contains all recorded player behaviors from previous rounds\n"
@@ -682,28 +667,39 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "• Use ONLY actual existing data from playerActions - NEVER fabricate or guess\n"
             "• Use update_player_actions tool to record/update player operations if needed\n"
             "• Output format: 'Player X: [specific operation content from playerActions]'\n"
-            "• If no operation record exists in playerActions, output 'Player X: No operations recorded'\n"
-            "• Based on analyzed actions, verify current phase completion criteria and requirements\n"
-            "• Check if current phase has all necessary conditions met\n"
-            "• Analyze phase-specific rules and constraints from DSL\n"
+            "• If no operation record exists in playerActions, output 'Player X: No operations recorded'\n\n"
+
+            
+
+            "**STEP 2: Phase Management & Transition Decision**\n"
+            "• **MANDATORY Phase Decision**: ALWAYS check current phase completion criteria\n"
             f"• Current phase completion criteria: {current_phase.get('completion_criteria', {})}\n"
-            "• **MANDATORY Phase Update**: You MUST call set_next_phase based on analysis\n"
+            "• **MANDATORY Phase Update**: You MUST call set_next_phase in EVERY response\n"
             "  - **SPECIAL CASE**: If current_phase_id=0 AND items are empty, stay in phase 0 (UI not initialized yet)\n"
             "  - If phase is complete: advance to next phase\n"
             "  - If phase is not complete: stay in current phase (call set_next_phase with same phase_id)\n"
             "• Output format: 'Phase Decision: [Complete/Incomplete] - Advancing to Phase X / Staying in Phase X'\n\n"
 
-            "**STEP 2: Update Player States**\n"
-            "• Based on STEP 1's analyzed player actions, update corresponding player_states\n"
-            "• If players don't have roles assigned, you need to assign roles and update state\n"
-            "• Use update_player_state tool for all state updates\n"
+            "**STEP 3: Update Player States**\n"
+            "• Based on STEP 1's actual operations, update corresponding player_states\n"
+            "• **CRITICAL ROLE ASSIGNMENT**: If players don't have roles assigned, you need to assign roles and update state\n"
+            "  - **MANDATORY**: EVERY player must receive a role - check all player IDs in roomSession\n"
+            "  - **VERIFICATION**: Before proceeding, verify each player has a role assigned\n"
+            "  - **NO EXCEPTIONS**: Never leave any player without a role assignment\n"
+            "• **BATCH UPDATE PREFERRED**: For role assignment or complete state initialization, use update_complete_player_states\n"
+            "  - First call initialize_player_states_from_dsl to get DSL template with all required fields\n"
+            "  - Fill the template with actual player data (names, roles, etc.)\n"
+            "  - Use update_complete_player_states(player_states_dict) to batch update all players\n"
+            "  - Example: update_complete_player_states({\"1\": {\"name\": \"Alice\", \"role\": \"werewolf\", \"is_alive\": true}, \"2\": {\"name\": \"Bob\", \"role\": \"villager\", \"is_alive\": true}})\n"
+            "• Use update_player_state only for single field updates after initial setup\n"
             "• Update logic must comply with DSL-defined state field meanings\n"
             "• Calculate scores, life/death status, game progress, etc.\n"
             "• Output format: 'Updated Player X: field_name = new_value (reason)'\n\n"
-
+            
             "🔧 **Available Backend Tools**:\n"
             "• update_player_actions(player_id, actions, phase) - Record player operations\n"
-            "• update_player_state(player_id, state_name, state_value) - Update player states\n"
+            "• update_player_state(player_id, state_name, state_value) - Update single player state field\n"
+            "• update_complete_player_states(player_states_dict) - Batch update complete player states (preferred for role assignment)\n"
             "• set_next_phase(next_phase_id, transition_reason) - Enter next phase\n\n"
 
             "📋 **Output Format Requirements**:\n"
@@ -727,8 +723,6 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
 
 
 
-
-
     # 4. Process messages: remove ToolMessages and tool_calls from AIMessages, no quantity limit
     full_messages = state.get("messages", []) or []
     
@@ -738,109 +732,23 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             "LATEST GROUND TRUTH (authoritative):\n"
             f"- items: {items_summary}\n"
             f"- current_phase_id: {current_phase_id}\n"
-            f"- player_states: {player_states}\n"
+            f"- player_states:\n{format_dict_for_prompt(player_states)}\n"
         )
     )
 
-    # Process messages: keep only AIMessage content and HumanMessage, preserve order
-    processed_messages = []
-    for msg in full_messages:
-        if isinstance(msg, AIMessage):
-            # Keep AIMessage but remove tool_calls and tool_use blocks from content
-            if msg.content:
-                if isinstance(msg.content, str) and msg.content.strip():
-                    # String content - keep as is
-                    processed_messages.append(AIMessage(content=msg.content))
-                elif isinstance(msg.content, list) and msg.content:
-                    # List content - filter out tool_use blocks, keep text blocks
-                    filtered_content = []
-                    for item in msg.content:
-                        if isinstance(item, dict) and item.get("type") == "tool_use":
-                            # Skip tool_use blocks to avoid Claude API errors
-                            continue
-                        else:
-                            # Keep text blocks and other content
-                            filtered_content.append(item)
-                    
-                    # Only add message if it has non-tool content
-                    if filtered_content:
-                        processed_messages.append(AIMessage(content=filtered_content))
-        elif isinstance(msg, HumanMessage):
-            # Keep HumanMessage as-is
-            processed_messages.append(msg)
-        # Skip ToolMessage and other types
-    
+    # Process messages using utility function to filter backend tools
+    processed_messages = filter_backend_tools_from_messages(full_messages)
+    processed_messages = filter_incomplete_message_sequences(processed_messages)
     response = await model_with_tools.ainvoke([
         system_message,
         latest_state_system,
         *processed_messages,
     ], config)
 
-    # === DETAILED LLM RESPONSE LOGGING ===
-    logger.info(f"[ActionExecutor][LLM_OUTPUT] Raw response content: {response.content}")
-    logger.info(f"[ActionExecutor][LLM_OUTPUT] Response type: {type(response)}")
-    
-    # Log output
-    try:
-        content_preview = getattr(response, "content", None)
-        if isinstance(content_preview, str):
-            logger.info(f"[ActionExecutor][LLM_OUTPUT] Content preview: {content_preview[:400]}")
-        else:
-            logger.info(f"[ActionExecutor][LLM_OUTPUT] Content: (non-text)")
-        tool_calls = getattr(response, "tool_calls", []) or []
-        logger.info(f"[ActionExecutor][TOOL_CALLS] Total tool calls: {len(tool_calls)}")
-        if tool_calls:
-            logger.info(f"[ActionExecutor][TOOL_CALLS] Tool calls details: {tool_calls}")
-            for tc in tool_calls:
-                name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-                args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
-                logger.info(f"[ActionExecutor][TOOL_CALLS] Individual tool_call name={name} args={args}")
-        else:
-            logger.info("[ActionExecutor][TOOL_CALL] tool_calls: none")
-    except Exception:
-        pass
 
-    # Guard: if the model only returned deletions, force a follow-up to produce creation calls and merge
-    try:
-        orig_tool_calls = getattr(response, "tool_calls", []) or []
-        def _get_tool_name(tc):
-            return tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-        deletion_names = {"clearCanvas"}
-        only_deletions = bool(orig_tool_calls) and all((_get_tool_name(tc) in deletion_names) for tc in orig_tool_calls)
-        if only_deletions:
-            logger.warning("[ActionExecutor][GUARD] Only clearCanvas tool calls detected; issuing follow-up request for creation tools.")
-            strict_creation_system = SystemMessage(
-                content=(
-                    "You returned ONLY clearCanvas tools. Now you MUST produce the required creation tools for the current phase in this follow-up.\n"
-                    "Rules:\n"
-                    "- Do NOT call clearCanvas again.\n"
-                    "- Call only creation tools to render the phase UI (e.g., createPhaseIndicator, createTimer, createVotingPanel, createTextDisplay, createDeathMarker, etc.).\n"
-                    f"- Current phase context: ID {current_phase_id}. Follow its 'actions' strictly.\n"
-                    "- Include proper audience permissions on each component (audience_type=true for public; or audience_type=false with audience_ids list).\n"
-                )
-            )
-            # Claude requires at least one HumanMessage
-            followup_human_msg = HumanMessage(content="Please create the missing UI components based on the system instructions.")
-            followup_response = await model_with_tools.ainvoke([
-                strict_creation_system,
-                latest_state_system,
-                followup_human_msg,
-            ], config)
-            try:
-                logger.info(f"[ActionExecutor][GUARD][FOLLOWUP] Raw response content: {followup_response.content}")
-                logger.info(f"[ActionExecutor][GUARD][FOLLOWUP] Response type: {type(followup_response)}")
-            except Exception:
-                pass
-            followup_calls = getattr(followup_response, "tool_calls", []) or []
-            creation_calls_only = [tc for tc in followup_calls if (_get_tool_name(tc) not in deletion_names)]
-            if creation_calls_only:
-                merged_calls = [*orig_tool_calls, *creation_calls_only]
-                response = AIMessage(content="", tool_calls=merged_calls)
-                logger.info(f"[ActionExecutor][GUARD] Merged deletion + creation tool calls: {len(merged_calls)} total")
-            else:
-                logger.warning("[ActionExecutor][GUARD] Follow-up produced no creation calls; using original deletions only.")
-    except Exception:
-        logger.exception("[ActionExecutor][GUARD] Creation follow-up failed")
+    
+
+
 
     # Process backend tool calls in ActionExecutor
     tool_calls = getattr(response, "tool_calls", []) or []
@@ -848,7 +756,7 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     current_player_actions = dict(state.get("playerActions", {}))
     current_game_notes = list(state.get("game_notes", []))
     updated_phase_id = state.get("current_phase_id", 0)
-    
+
     for tc in tool_calls:
         name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
         args = tc.get("args") if isinstance(tc, dict) else getattr(tc, "args", {})
@@ -878,6 +786,13 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
                     current_player_actions, pid, actions, phase, state.get("roomSession", {}), current_player_states
                 )
                 logger.info(f"[ActionExecutor] Updated player actions: {pid} in phase {phase}")
+        elif name == "update_complete_player_states":
+            player_states_dict = args.get("player_states_dict")
+            if player_states_dict:
+                current_player_states = _execute_update_complete_player_states(
+                    current_player_states, player_states_dict
+                )
+                logger.info(f"[ActionExecutor] Batch updated complete player states: {len(player_states_dict)} players")
         elif name == "add_game_note":
             note_type = args.get("note_type")
             content = args.get("content")
@@ -935,34 +850,9 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     
     final_player_states = current_player_states
 
-    # Remove backend tool calls from response to prevent tool_use/tool_result mismatch
-    if hasattr(response, 'tool_calls') and response.tool_calls:
-        backend_tool_names = BACKEND_TOOL_NAMES
-        remaining_tool_calls = []
-        for tc in response.tool_calls:
-            name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-            if name and name not in backend_tool_names:
-                remaining_tool_calls.append(tc)
-        
-        # Update response with only frontend tool calls
-        if remaining_tool_calls != response.tool_calls:
-            # Clean content: remove backend tool_use blocks
-            cleaned_content = response.content
-            if isinstance(cleaned_content, list):
-                # Filter out backend tool_use blocks from content list
-                filtered_content = []
-                for item in cleaned_content:
-                    if isinstance(item, dict) and item.get("type") == "tool_use":
-                        tool_name = item.get("name", "")
-                        if tool_name not in backend_tool_names:
-                            filtered_content.append(item)
-                    else:
-                        filtered_content.append(item)
-                cleaned_content = filtered_content
-            
-            response = AIMessage(content=cleaned_content, tool_calls=remaining_tool_calls)
-            logger.info(f"[ActionExecutor] Removed backend tool calls. Remaining: {len(remaining_tool_calls)} frontend tools")
-
+    # Remove backend tool calls from response using utility function
+    response = filter_backend_tools_from_response(response, BACKEND_TOOL_NAMES)
+    
 
     # Generate monotonic state version
     state_version = get_next_state_version()
@@ -1054,6 +944,7 @@ async def UIUpdateNode(state: AgentState, config: RunnableConfig) -> Command[Lit
     player_states = state.get("player_states", {})
     phases = dsl_content.get('phases', {}) if dsl_content else {}
     current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
+    declaration = dsl_content.get('declaration', {}) if dsl_content else {}
 
     system_message = SystemMessage(
         content=(
@@ -1061,11 +952,9 @@ async def UIUpdateNode(state: AgentState, config: RunnableConfig) -> Command[Lit
             "Your job is to create and update UI components based on current game state.\n\n"
 
             "📊 **CURRENT GAME STATE**:\n"
-            f"- Current Phase ID: {current_phase_id}\n"
-            f"- Phase Name: {current_phase.get('name', 'Unknown')}\n"
-            f"- Phase Description: {current_phase.get('description', 'No description')}\n"
-            f"- Phase Required UI: {current_phase.get('actions', [])}\n"
-            f"- Player States: {player_states}\n"
+            f"- Declaration:\n{format_declaration_for_prompt(declaration)}\n"
+            f"- Current Phase:\n{format_current_phase_for_prompt(current_phase, current_phase_id)}\n"
+            f"- Player States:\n{format_dict_for_prompt(player_states)}\n"
             f"- Current Screen: {items_summary}\n\n"
 
             "🎯 **UI UPDATE WORKFLOW**:\n\n"
@@ -1080,6 +969,9 @@ async def UIUpdateNode(state: AgentState, config: RunnableConfig) -> Command[Lit
             "  - audience_type=true: ALL players can see (public info)\n"
             "  - audience_type=false + audience_ids=['1','2']: ONLY specified players can see (private info)\n"
             "• **EXAMPLES**: Role cards (private), voting results (public), night actions (private to wolves)\n"
+            "• **CHARACTER CARDS MUST HAVE AUDIENCE**: Every createCharacterCard MUST specify audience_ids=['player_id'] for the specific player who owns that character/role\n"
+            "• **MANDATORY FOR ALL PLAYERS**: Create character cards for EVERY player - check roomSession for complete player list\n"
+            "• **VERIFICATION REQUIRED**: Ensure no player is missing their character card\n"
             "• Create all components needed for current phase\n"
             "• Ensure proper positioning to avoid overlaps\n"
             "• Include proper audience targeting\n"
@@ -1120,43 +1012,18 @@ async def UIUpdateNode(state: AgentState, config: RunnableConfig) -> Command[Lit
     # Multiple safety: filter incomplete message sequences
     full_messages = state.get("messages", []) or []
     
-    def filter_incomplete_message_sequences(messages):
-        """Remove messages that have tool_use without corresponding tool_result"""
-        filtered = []
-        i = 0
-        while i < len(messages):
-            msg = messages[i]
-            if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls:
-                # This AIMessage has tool calls, check if next messages have corresponding tool results
-                tool_call_ids = {tc.get('id') if isinstance(tc, dict) else getattr(tc, 'id', None) for tc in msg.tool_calls}
-                tool_call_ids = {tid for tid in tool_call_ids if tid}
-                
-                # Look ahead for ToolMessages
-                j = i + 1
-                found_tool_results = set()
-                while j < len(messages) and isinstance(messages[j], ToolMessage):
-                    if hasattr(messages[j], 'tool_call_id'):
-                        found_tool_results.add(messages[j].tool_call_id)
-                    j += 1
-                
-                # Only include if all tool calls have results
-                if tool_call_ids.issubset(found_tool_results):
-                    filtered.append(msg)
-                    # Also include the corresponding ToolMessages
-                    for k in range(i + 1, j):
-                        if isinstance(messages[k], ToolMessage):
-                            filtered.append(messages[k])
-                    i = j
-                else:
-                    # Skip this incomplete sequence
-                    i += 1
-            else:
-                filtered.append(msg)
-                i += 1
-        return filtered
     
     # Apply safety filtering
     safe_messages = filter_incomplete_message_sequences(full_messages)
+
+    latest_state_system = SystemMessage(
+        content=(
+            "LATEST GROUND TRUTH (authoritative):\n"
+            f"- items: {items_summary}\n"
+            f"- current_phase_id: {current_phase_id}\n"
+            f"- player_states:\n{format_dict_for_prompt(player_states)}\n"
+        )
+    )
     
     response = await model_with_tools.ainvoke([
         system_message,
@@ -1164,6 +1031,50 @@ async def UIUpdateNode(state: AgentState, config: RunnableConfig) -> Command[Lit
     ], config)
 
     logger.info(f"[UIUpdateNode] Created UI components")
+
+
+
+    # Guard: if the model only returned deletions, force a follow-up to produce creation calls and merge
+    try:
+        orig_tool_calls = getattr(response, "tool_calls", []) or []
+        def _get_tool_name(tc):
+            return tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+        deletion_names = {"clearCanvas"}
+        only_deletions = bool(orig_tool_calls) and all((_get_tool_name(tc) in deletion_names) for tc in orig_tool_calls)
+        if only_deletions:
+            logger.warning("[ActionExecutor][GUARD] Only clearCanvas tool calls detected; issuing follow-up request for creation tools.")
+            strict_creation_system = SystemMessage(
+                content=(
+                    "You returned ONLY clearCanvas tools. Now you MUST produce the required creation tools for the current phase in this follow-up.\n"
+                    "Rules:\n"
+                    "- Do NOT call clearCanvas again.\n"
+                    "- Call only creation tools to render the phase UI (e.g., createPhaseIndicator, createTimer, createVotingPanel, createTextDisplay, createDeathMarker, etc.).\n"
+                    f"- Current phase context: ID {current_phase_id}. Follow its 'actions' strictly.\n"
+                    "- Include proper audience permissions on each component (audience_type=true for public; or audience_type=false with audience_ids list).\n"
+                )
+            )
+            # Claude requires at least one HumanMessage
+            followup_human_msg = HumanMessage(content="Please create the missing UI components based on the system instructions.")
+            followup_response = await model_with_tools.ainvoke([
+                strict_creation_system,
+                latest_state_system,
+                followup_human_msg,
+            ], config)
+            try:
+                logger.info(f"[ActionExecutor][GUARD][FOLLOWUP] Raw response content: {followup_response.content}")
+                logger.info(f"[ActionExecutor][GUARD][FOLLOWUP] Response type: {type(followup_response)}")
+            except Exception:
+                pass
+            followup_calls = getattr(followup_response, "tool_calls", []) or []
+            creation_calls_only = [tc for tc in followup_calls if (_get_tool_name(tc) not in deletion_names)]
+            if creation_calls_only:
+                merged_calls = [*orig_tool_calls, *creation_calls_only]
+                response = AIMessage(content="", tool_calls=merged_calls)
+                logger.info(f"[ActionExecutor][GUARD] Merged deletion + creation tool calls: {len(merged_calls)} total")
+            else:
+                logger.warning("[ActionExecutor][GUARD] Follow-up produced no creation calls; using original deletions only.")
+    except Exception:
+        logger.exception("[ActionExecutor][GUARD] Creation follow-up failed")
     
     return Command(
         goto=END,

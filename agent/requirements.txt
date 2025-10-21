@@ -8,3 +8,4 @@ python-dotenv>=1.0.0,<2.0.0
 langgraph-cli[inmem]>=0.3.5
 langchain-openai>=0.0.1
 copilotkit>=0.1.0,<0.2.0
+aiofiles>=23.0.0

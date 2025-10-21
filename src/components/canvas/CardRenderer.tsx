@@ -1,6 +1,6 @@
 "use client";
 
-import type { Item, ItemData, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, AvatarSetData, BackgroundControlData, ResultDisplayData, TimerData, AudiencePermissions, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, BroadcastInputData, PlayerStatesDisplayData, PlayerActionsDisplayData, DeathMarkerData } from "@/lib/canvas/types";
+import type { Item, ItemData, CharacterCardData, ActionButtonData, PhaseIndicatorData, TextDisplayData, VotingPanelData, BackgroundControlData, ResultDisplayData, TimerData, AudiencePermissions, HandsCardData, ScoreBoardData, CoinDisplayData, StatementBoardData, ReactionTimerData, NightOverlayData, TurnIndicatorData, HealthDisplayData, InfluenceSetData, BroadcastInputData, PlayerStatesDisplayData, PlayerActionsDisplayData, DeathMarkerData } from "@/lib/canvas/types";
 import HandsCard from "@/components/canvas/cards/HandsCard";
 import ScoreBoard from "@/components/canvas/cards/ScoreBoard";
 import CoinDisplay from "@/components/canvas/cards/CoinDisplay";
@@ -13,6 +13,29 @@ import InfluenceSet from "@/components/canvas/cards/InfluenceSet";
 import Timer from "@/components/canvas/cards/Timer";
 import { getPlayersFromStates, getCurrentPlayerId } from "@/lib/player-utils";
 // import { chartAddField1Metric, chartRemoveField1Metric, chartSetField1Label, chartSetField1Value, projectAddField4Item, projectRemoveField4Item, projectSetField4ItemDone, projectSetField4ItemText } from "@/lib/canvas/updates";
+
+// Simple Markdown renderer for text display
+function renderMarkdown(text: string): string {
+  if (!text) return '';
+  
+  return text
+    // Headers
+    .replace(/^### (.+)$/gm, '<h3 class="text-base font-bold mt-3 mb-2">$1</h3>')
+    .replace(/^## (.+)$/gm, '<h2 class="text-lg font-bold mt-4 mb-2">$1</h2>')
+    .replace(/^# (.+)$/gm, '<h1 class="text-xl font-bold mt-4 mb-3">$1</h1>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong class="font-bold">$1</strong>')
+    // Italic
+    .replace(/\*(.+?)\*/g, '<em class="italic">$1</em>')
+    // Code inline
+    .replace(/`(.+?)`/g, '<code class="bg-black/10 px-1 rounded text-xs font-mono">$1</code>')
+    // Lists
+    .replace(/^\* (.+)$/gm, '<li class="ml-4">• $1</li>')
+    .replace(/^- (.+)$/gm, '<li class="ml-4">• $1</li>')
+    // Line breaks
+    .replace(/\n/g, '<br/>');
+}
+
 export function CardRenderer(props: {
   item: Item;
   onUpdateData: (updater: (prev: ItemData) => ItemData) => void;
@@ -287,40 +310,24 @@ export function CardRenderer(props: {
   }
   if (item.type === "character_card") {
     const d = item.data as CharacterCardData;
-    const getSizeClasses = (size: string = 'medium') => {
-      const sizeMap: Record<string, string> = {
-        small: "w-45 h-60",
-        medium: "w-55 h-75", 
-        large: "w-70 h-95"
-      };
-      return sizeMap[size] || sizeMap.medium;
-    };
+    // Fixed size for character cards
+    const cardSize = "w-55 h-75";
     // Minimalist RPG styling with subtle gold accents
     const role = String(d.role || "");
-    const r = role.toLowerCase();
-    const roleIcon = r.includes("wolf") || r.includes("werewolf")
-      ? "🐺"
-      : r.includes("seer") || r.includes("oracle")
-      ? "🔮"
-      : r.includes("mage") || r.includes("wizard") || r.includes("witch")
-      ? "🪄"
-      : r.includes("warrior") || r.includes("knight") || r.includes("ronin")
-      ? "⚔️"
-      : r.includes("thief") || r.includes("rogue")
-      ? "🗡️"
-      : r.includes("villager") || r.includes("peasant")
-      ? "🌾"
-      : "";
     
     return (
-      <div className={`${getSizeClasses(d.size)} relative overflow-hidden rounded-2xl border-2 border-amber-500/30 ring-4 ring-amber-400/10 bg-gradient-to-br from-slate-800 via-gray-900 to-black shadow-xl flex flex-col`}>
+      <div className={[
+        cardSize,
+        "relative overflow-hidden rounded-2xl flex flex-col",
+        "bg-black/80 backdrop-blur-xl border border-gray-600/40",
+        "shadow-[0_20px_40px_rgba(0,0,0,0.9)]",
+        "[background-image:linear-gradient(135deg,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.04)_30%,rgba(0,0,0,0.2)_70%,rgba(0,0,0,0.4)_100%)]",
+        "[box-shadow:inset_0_1px_2px_rgba(255,255,255,0.1),inset_0_-1px_2px_rgba(0,0,0,0.3),0_20px_40px_rgba(0,0,0,0.9)]"
+      ].join(" ")}>
         {/* top banner */}
-        <div className="px-4 py-3 bg-gradient-to-r from-amber-500/15 via-amber-400/10 to-amber-500/15 border-b border-amber-500/20">
-          <div className="flex items-center gap-2">
-            {roleIcon && (
-              <span className="text-[calc(1rem+0.3vw)] leading-none">{roleIcon}</span>
-            )}
-            <div className="font-extrabold tracking-wide text-[calc(0.95rem+0.3vw)] leading-none bg-gradient-to-b from-amber-200 to-amber-400 text-transparent bg-clip-text drop-shadow">
+        <div className="px-4 py-3 bg-black/30 backdrop-blur-sm border-b border-gray-600/30">
+          <div className="flex items-center justify-center">
+            <div className="font-extrabold tracking-wide text-[calc(0.95rem+0.3vw)] leading-none text-white/90 drop-shadow-sm">
               {role}
             </div>
           </div>
@@ -384,10 +391,12 @@ export function CardRenderer(props: {
             // Auto-size to parent; only minimum constraints
             "inline-flex max-w-none max-h-none w-auto h-auto",
             "min-w-48 min-h-16 px-6 py-4",
-            // Dark, cartoon-ish look
-            "rounded-3xl bg-gradient-to-br from-slate-800 via-gray-900 to-black",
-            "border-2 border-indigo-500/40 ring-4 ring-indigo-400/20",
-            "text-slate-100 shadow-2xl drop-shadow-[0_0_10px_rgba(99,102,241,0.35)]",
+            // Glass morphism look - high contrast white
+            "rounded-2xl bg-white/70",
+            "border-2 border-white/80 shadow-[0_30px_60px_rgba(255,255,255,0.4)]",
+            "[background-image:linear-gradient(135deg,rgba(255,255,255,0.8)_0%,rgba(255,255,255,0.6)_30%,rgba(255,255,255,0.4)_70%,rgba(0,0,0,0.1)_100%)]",
+            "[box-shadow:inset_0_3px_6px_rgba(255,255,255,0.5),inset_0_-2px_4px_rgba(0,0,0,0.1),0_30px_60px_rgba(255,255,255,0.4)]",
+            "text-gray-900 font-bold",
             // Layout
             "items-center justify-center gap-1.5",
           ].join(" ")
@@ -427,46 +436,51 @@ export function CardRenderer(props: {
     const d = item.data as TextDisplayData;
 
     // Parchment-style theme with subtle variants
+    // Intelligent sizing: fit content when small, fit grid when large with scrolling
+    const contentLength = (d.content || '').length;
+    const isLongContent = contentLength > 300; // Threshold for switching to grid-constrained mode
+    
     const baseParchment = [
-      // Layout/container
-      "relative overflow-hidden min-w-32 min-h-16 w-full h-full",
-      "rounded-[18px] border",
-      // Warm parchment background using layered gradients
-      "bg-[radial-gradient(60%_80%_at_50%_20%,#f3e6c9_0%,#ead9b9_60%,#dfc7a5_100%)]",
-      // Edge burn + inner glow
-      "shadow-[0_10px_24px_rgba(0,0,0,0.35)]",
-      "ring-1 ring-[#b79b79]/40",
-      "[box-shadow:inset_0_0_30px_rgba(0,0,0,0.15),inset_0_1px_0_rgba(255,255,255,0.35)]",
+      // Smart adaptive layout with max height limit
+      "relative overflow-hidden box-border",
+      isLongContent 
+        ? "w-full max-w-md max-h-96" // Large content: constrained width and height with scroll
+        : "w-fit h-fit max-w-md", // Small content: natural size with max width
+      // Glass morphism look - soft light purple
+      "rounded-2xl bg-purple-100/80 backdrop-blur-2xl",
+      "border border-purple-200/40 shadow-[0_25px_50px_rgba(196,181,253,0.3)]",
+      "[background-image:linear-gradient(135deg,rgba(243,232,255,0.6)_0%,rgba(196,181,253,0.4)_30%,rgba(147,51,234,0.1)_70%,rgba(255,255,255,0.2)_100%)]",
+      "[box-shadow:inset_0_2px_4px_rgba(243,232,255,0.8),inset_0_-2px_4px_rgba(196,181,253,0.3),0_25px_50px_rgba(196,181,253,0.3)]",
     ].join(" ");
 
     const getTypeStyles = (type?: string) => {
       switch (type) {
         case "error":
           return {
-            container: `${baseParchment} border-[#b68a7a] ring-red-900/15`,
-            title: "text-[#6b2f24]",
-            content: "text-[#4d251d]",
+            container: `${baseParchment}`,
+            title: "text-red-300/90",
+            content: "text-red-200/80",
             icon: "☠️",
           };
         case "warning":
           return {
-            container: `${baseParchment} border-[#c3a168] ring-amber-900/15`,
-            title: "text-[#7a5a2f]",
-            content: "text-[#4a3b2a]",
+            container: `${baseParchment}`,
+            title: "text-amber-300/90",
+            content: "text-amber-200/80",
             icon: "⚠️",
           };
         case "success":
           return {
-            container: `${baseParchment} border-[#9db38a] ring-emerald-900/15`,
-            title: "text-[#355532]",
-            content: "text-[#3e3a2f]",
+            container: `${baseParchment}`,
+            title: "text-emerald-300/90",
+            content: "text-emerald-200/80",
             icon: "✨",
           };
         default:
           return {
-            container: `${baseParchment} border-[#c9b59a]`,
-            title: "text-[#5a4a3a]",
-            content: "text-[#4a3b2a]",
+            container: `${baseParchment}`,
+            title: "text-purple-800/90",
+            content: "text-purple-700/80",
             icon: "📜",
           };
       }
@@ -475,21 +489,28 @@ export function CardRenderer(props: {
     const styles = getTypeStyles(d.type);
 
     return (
-      <div className={`${styles.container} p-5 flex flex-col gap-2 font-serif`}>
-        {/* Texture overlays */}
-        <div className="pointer-events-none absolute inset-0 opacity-25 mix-blend-multiply bg-[radial-gradient(40%_30%_at_20%_15%,rgba(0,0,0,0.06),transparent_70%),radial-gradient(30%_25%_at_80%_60%,rgba(0,0,0,0.05),transparent_60%)]" />
-        <div className="pointer-events-none absolute inset-0 rounded-[18px] shadow-[inset_0_0_25px_rgba(0,0,0,0.18)]" />
+      <div className={`${styles.container} p-3 flex flex-col font-sans ${isLongContent ? '' : 'justify-center items-center'}`}>
 
         {d.title && (
-          <div className={`relative z-[1] flex items-center gap-2 font-semibold text-sm mb-1 ${styles.title}`}>
-            <span className="text-base leading-none">{styles.icon}</span>
-            <span className="tracking-wide">{d.title}</span>
+          <div className={`relative z-[1] flex items-center justify-center gap-1 font-semibold text-xs mb-1 flex-shrink-0 ${styles.title}`}>
+            <span className="text-sm leading-none flex-shrink-0">{styles.icon}</span>
+            <span className="text-center text-xs" style={{ fontSize: 'clamp(0.7rem, 1.2vw, 0.75rem)' }}>{d.title}</span>
           </div>
         )}
 
-        <div className={`relative z-[1] text-[1.25rem] leading-relaxed flex-1 ${styles.content}`}>
-          {d.content}
-        </div>
+        <div 
+          className={`relative z-[1] ${isLongContent ? 'flex-1 min-h-0' : 'flex-shrink-0'} text-center leading-tight ${isLongContent ? 'overflow-y-auto' : 'overflow-visible'} ${styles.content} prose prose-xs max-w-none p-2`}
+          style={{ 
+            fontSize: 'clamp(1rem, 2vw, 1.125rem)',
+            ...(isLongContent && {
+              scrollbarWidth: 'thin',
+              scrollbarColor: '#9ca3af #e5e7eb'
+            })
+          }}
+          dangerouslySetInnerHTML={{ 
+            __html: renderMarkdown(d.content || '') 
+          }}
+        />
       </div>
     );
   }
@@ -523,9 +544,9 @@ export function CardRenderer(props: {
     };
     
     return (
-      <div className="w-full h-full bg-gradient-to-br from-purple-100 to-blue-100 border-2 border-purple-200 rounded-xl p-4 shadow-lg flex flex-col">
+      <div className="w-auto h-auto min-w-64 max-w-sm rounded-2xl bg-black/50 backdrop-blur-2xl border border-white/15 shadow-[0_25px_50px_rgba(0,0,0,0.8)] [background-image:linear-gradient(135deg,rgba(255,255,255,0.15)_0%,rgba(255,255,255,0.08)_30%,rgba(255,255,255,0.03)_70%,rgba(0,0,0,0.1)_100%)] [box-shadow:inset_0_2px_4px_rgba(255,255,255,0.15),inset_0_-2px_4px_rgba(0,0,0,0.1),0_25px_50px_rgba(0,0,0,0.8)] p-4 flex flex-col">
         {d.title && (
-          <div className="text-lg font-bold text-center text-purple-800 mb-4">
+          <div className="text-lg font-bold text-center text-white/90 mb-4">
             {d.title}
           </div>
         )}
@@ -534,7 +555,7 @@ export function CardRenderer(props: {
             <button
               key={index}
               onClick={() => handleVote(option)}
-              className="flex-1 min-w-24 p-3 rounded-lg font-semibold transition-all duration-200 border-2 bg-white text-purple-700 border-purple-300 hover:bg-purple-50 hover:border-purple-400 hover:shadow-md"
+              className="flex-1 min-w-24 p-3 rounded-lg font-semibold transition-all duration-200 bg-white/10 backdrop-blur-sm border border-white/20 text-white/90 hover:bg-white/20 hover:border-white/30 hover:shadow-lg"
             >
               <div className="flex justify-center items-center">
                 <span>{option}</span>
@@ -547,43 +568,10 @@ export function CardRenderer(props: {
   }
 
   if (item.type === "avatar_set") {
-    const d = item.data as AvatarSetData;
-    
     // Get players using the universal player utils
     const playerStates = props.playerStates || {};
     const players = getPlayersFromStates(playerStates);
     
-    // Avatar mapping based on type
-    const avatarMap: Record<string, string> = {
-      human: '👤',
-      wolf: '🐺', 
-      dog: '🐶',
-      cat: '🐱'
-    };
-    
-    const avatarEmoji = avatarMap[d.avatarType] || avatarMap.human;
-    
-    // Poker chip skins for a retro card-table vibe
-    const chipSkins = [
-      // Red chip
-      'bg-[repeating-conic-gradient(#b91c1c_0deg_20deg,white_20deg_40deg)]',
-      // Blue chip
-      'bg-[repeating-conic-gradient(#1e3a8a_0deg_20deg,white_20deg_40deg)]',
-      // Green chip
-      'bg-[repeating-conic-gradient(#166534_0deg_20deg,white_20deg_40deg)]',
-      // Black chip
-      'bg-[repeating-conic-gradient(#111827_0deg_20deg,white_20deg_40deg)]',
-      // Purple chip
-      'bg-[repeating-conic-gradient(#6d28d9_0deg_20deg,white_20deg_40deg)]',
-      // Teal chip
-      'bg-[repeating-conic-gradient(#0f766e_0deg_20deg,white_20deg_40deg)]',
-      // Orange chip
-      'bg-[repeating-conic-gradient(#c2410c_0deg_20deg,white_20deg_40deg)]',
-      // Brown chip
-      'bg-[repeating-conic-gradient(#6b4423_0deg_20deg,white_20deg_40deg)]',
-      // Pink chip
-      'bg-[repeating-conic-gradient(#be185d_0deg_20deg,white_20deg_40deg)]',
-    ];
     
     // If no players, use test data
     const playersToShow = players.length > 0 ? players : [
@@ -608,22 +596,59 @@ export function CardRenderer(props: {
     return (
       <>
         {/* Left side avatars - positioned outside the canvas area */}
-        <div className="absolute left-0 top-1/2 transform -translate-y-1/2 pointer-events-none">
+        <div className="absolute left-12 top-1/2 transform -translate-y-1/2 pointer-events-none">
           <div className="space-y-4">
             {leftPlayers.map((player) => {
-              const colorIndex = parseInt(player.id) % chipSkins.length;
               const isDead = props.deadPlayers?.includes(player.id) || false;
               
               return (
                 <div key={player.id} className="flex flex-col items-center">
-                  {/* Poker chip avatar */}
-                  <div className={`relative w-16 h-16 rounded-full shadow-xl ring-2 ring-black/20 border-4 border-white ${isDead ? 'grayscale opacity-60 bg-gray-400' : chipSkins[colorIndex]}`}>
-                    <div className="absolute inset-1 rounded-full bg-[radial-gradient(70%_70%_at_35%_30%,#fefefe_0%,#e6e6e6_60%,#cfcfcf_100%)] flex items-center justify-center text-2xl">
-                      {avatarEmoji}
-                    </div>
+                  {/* Pure Cartoon Avatar */}
+                  <div className={`w-20 h-20 flex items-center justify-center transition-all duration-200 hover:scale-110 ${isDead ? 'grayscale opacity-60' : ''}`}>
+                    {(() => {
+                      const avatarId = parseInt(player.id) % 6;
+                      switch (avatarId) {
+                        case 0: // Cute Cat
+                          return (
+                            <div className="text-center">
+                              <div className="text-5xl drop-shadow-lg">😺</div>
+                            </div>
+                          );
+                        case 1: // Cool Dog
+                          return (
+                            <div className="text-center">
+                              <div className="text-5xl drop-shadow-lg">🐶</div>
+                            </div>
+                          );
+                        case 2: // Happy Panda
+                          return (
+                            <div className="text-center">
+                              <div className="text-5xl drop-shadow-lg">🐼</div>
+                            </div>
+                          );
+                        case 3: // Cute Fox
+                          return (
+                            <div className="text-center">
+                              <div className="text-5xl drop-shadow-lg">🦊</div>
+                            </div>
+                          );
+                        case 4: // Cool Bear
+                          return (
+                            <div className="text-center">
+                              <div className="text-5xl drop-shadow-lg">🐻</div>
+                            </div>
+                          );
+                        default: // Cute Rabbit
+                          return (
+                            <div className="text-center">
+                              <div className="text-5xl drop-shadow-lg">🐰</div>
+                            </div>
+                          );
+                      }
+                    })()}
                   </div>
-                  {/* Wooden nameplate */}
-                  <div className={`text-[10px] mt-2 text-center font-semibold px-2 py-1 rounded-md shadow border ${isDead ? 'opacity-60' : ''} bg-[linear-gradient(135deg,#9a6b3f,#7b4a2e)] border-[#5c3a24] text-[#2b1a0e] drop-shadow-[0_1px_0_rgba(255,255,255,0.35)]`}>
+                  {/* Modern nameplate */}
+                  <div className={`text-[10px] mt-2 text-center font-medium px-3 py-1 rounded-full shadow-sm backdrop-blur-sm border ${isDead ? 'opacity-60' : ''} bg-black/20 border-white/20 text-white`}>
                     {player.name}
                   </div>
                 </div>
@@ -633,22 +658,59 @@ export function CardRenderer(props: {
         </div>
         
         {/* Right side avatars - positioned outside the canvas area */}
-        <div className="absolute right-0 top-1/2 transform -translate-y-1/2 pointer-events-none">
+        <div className="absolute right-12 top-1/2 transform -translate-y-1/2 pointer-events-none">
           <div className="space-y-4">
             {rightPlayers.map((player) => {
-              const colorIndex = parseInt(player.id) % chipSkins.length;
               const isDead = props.deadPlayers?.includes(player.id) || false;
               
               return (
                 <div key={player.id} className="flex flex-col items-center">
-                  {/* Poker chip avatar */}
-                  <div className={`relative w-16 h-16 rounded-full shadow-xl ring-2 ring-black/20 border-4 border-white ${isDead ? 'grayscale opacity-60 bg-gray-400' : chipSkins[colorIndex]}`}>
-                    <div className="absolute inset-1 rounded-full bg-[radial-gradient(70%_70%_at_35%_30%,#fefefe_0%,#e6e6e6_60%,#cfcfcf_100%)] flex items-center justify-center text-2xl">
-                      {avatarEmoji}
-                    </div>
+                  {/* Pure Cartoon Avatar */}
+                  <div className={`w-20 h-20 flex items-center justify-center transition-all duration-200 hover:scale-110 ${isDead ? 'grayscale opacity-60' : ''}`}>
+                    {(() => {
+                      const avatarId = parseInt(player.id) % 6;
+                      switch (avatarId) {
+                        case 0: // Cute Cat
+                          return (
+                            <div className="text-center">
+                              <div className="text-5xl drop-shadow-lg">😺</div>
+                            </div>
+                          );
+                        case 1: // Cool Dog
+                          return (
+                            <div className="text-center">
+                              <div className="text-5xl drop-shadow-lg">🐶</div>
+                            </div>
+                          );
+                        case 2: // Happy Panda
+                          return (
+                            <div className="text-center">
+                              <div className="text-5xl drop-shadow-lg">🐼</div>
+                            </div>
+                          );
+                        case 3: // Cute Fox
+                          return (
+                            <div className="text-center">
+                              <div className="text-5xl drop-shadow-lg">🦊</div>
+                            </div>
+                          );
+                        case 4: // Cool Bear
+                          return (
+                            <div className="text-center">
+                              <div className="text-5xl drop-shadow-lg">🐻</div>
+                            </div>
+                          );
+                        default: // Cute Rabbit
+                          return (
+                            <div className="text-center">
+                              <div className="text-5xl drop-shadow-lg">🐰</div>
+                            </div>
+                          );
+                      }
+                    })()}
                   </div>
-                  {/* Wooden nameplate */}
-                  <div className={`text-[10px] mt-2 text-center font-semibold px-2 py-1 rounded-md shadow border ${isDead ? 'opacity-60' : ''} bg-[linear-gradient(135deg,#9a6b3f,#7b4a2e)] border-[#5c3a24] text-[#2b1a0e] drop-shadow-[0_1px_0_rgba(255,255,255,0.35)]`}>
+                  {/* Modern nameplate */}
+                  <div className={`text-[10px] mt-2 text-center font-medium px-3 py-1 rounded-full shadow-sm backdrop-blur-sm border ${isDead ? 'opacity-60' : ''} bg-black/20 border-white/20 text-white`}>
                     {player.name}
                   </div>
                 </div>

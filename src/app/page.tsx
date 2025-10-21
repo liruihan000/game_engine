@@ -2809,14 +2809,12 @@ export default function CopilotKitPage() {
                           ))}
                       </div>
                       
-                      {/* Card table wrapper (wood rim) */}
-                      <div className="rounded-[28px] p-4 bg-[linear-gradient(135deg,#7b4a2e,#9a6b3f,#7a4e2b)] shadow-[0_12px_30px_rgba(0,0,0,0.4)] [box-shadow:inset_0_0_0_2px_rgba(255,255,255,0.12),inset_0_0_0_1px_rgba(0,0,0,0.25)]">
-                        {/* Felt surface canvas */}
-                        <div
-                          style={GAME_GRID_STYLE}
-                          className="relative pb-20 rounded-[18px] border border-[#2a3f2f]/40 ring-1 ring-[#1a2d20]/40 bg-[radial-gradient(80%_80%_at_30%_20%,#1b5e2a_0%,#155c2b_55%,#0e4a22_100%)] overflow-hidden"
-                          data-canvas-container
-                        >
+                      {/* Clean glass surface */}
+                      <div
+                        style={GAME_GRID_STYLE}
+                        className="relative pb-20 rounded-2xl bg-black/30 backdrop-blur-2xl border border-white/20 overflow-visible shadow-[0_8px_16px_rgba(0,0,0,0.2)] [background-image:linear-gradient(135deg,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0.12)_30%,rgba(255,255,255,0.06)_70%,rgba(0,0,0,0.08)_100%)] [box-shadow:inset_0_2px_4px_rgba(255,255,255,0.2),inset_0_-2px_4px_rgba(0,0,0,0.08),0_8px_16px_rgba(0,0,0,0.2)]"
+                        data-canvas-container
+                      >
                           {/* Text Input Panel - Fixed at center bottom */}
                           {broadcastOpen && (
                             <div 
@@ -2865,13 +2863,21 @@ export default function CopilotKitPage() {
                           const itemPosition = (itemData as { position?: string })?.position;
                           const normalizedPosition = itemPosition ? normalizePosition(itemPosition) : 'center';
                           return normalizedPosition === position;
+                        }).sort((a, b) => {
+                          // Sort by priority: text_display < other components < phase_indicator
+                          const getPriority = (type: string) => {
+                            if (type === 'phase_indicator') return 3;
+                            if (type === 'text_display') return 1;
+                            return 2;
+                          };
+                          return getPriority(b.type) - getPriority(a.type);
                         });
 
                         return (
                           <div
                             key={position}
                             style={{ gridArea: position }}
-                            className="flex flex-col items-center justify-center gap-4 p-2 rounded-lg min-h-[100px]"
+                            className="flex flex-wrap items-center justify-center gap-3 p-2 rounded-lg min-h-[100px] max-h-full max-w-full overflow-visible box-border h-full"
                           >
                             {itemsInRegion.map((item) => {
                               // Check audience permissions for delete button visibility
@@ -2882,7 +2888,7 @@ export default function CopilotKitPage() {
                                 itemData.audience_ids?.includes(currentPlayerId);
                               
                               return (
-                                <div key={item.id} className="relative group">
+                                <div key={item.id} className={`relative group ${item.type === 'text_display' ? 'flex-shrink-0 max-w-full' : 'flex-shrink-0 max-w-full'}`} style={{ zIndex: itemsInRegion.indexOf(item) + 1 }}>
                                   {hasPermission && (
                                     <button
                                       type="button"
@@ -2902,7 +2908,6 @@ export default function CopilotKitPage() {
                         );
                       })}
                         </div>
-                      </div>
 
                       {/* Render night overlay components as global overlays */}
                       {(viewState.items ?? []).filter(item => item.type === "night_overlay").map((item) => {
@@ -2941,51 +2946,51 @@ export default function CopilotKitPage() {
                   )}
                 </div>
               )}
-            </div>
           </div>
-          
-          {(viewState.items ?? []).length > 0 ? (
-            <div className="absolute left-1/2 -translate-x-1/2 bottom-4 flex gap-2">
-              {/* Continue button */}
-              <Button
-                variant="default" 
-                size="lg"
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2"
-                disabled={isExecuting}
-                onClick={async () => {
-                  // Use unified interaction handling
-                  await handleUserInteraction("Continue", "continue_game");
-                }}
-              >
-                {isExecuting ? "Processing..." : "Continue"}
-              </Button>
-              
-              <NewItemMenu 
-                onSelect={(type) => addItem(type)}
-                className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-1.25 text-base font-semibold"
-                onClick={() => setShowJsonView((v) => !v)}
-              >
-                {showJsonView
-                  ? "Canvas"
-                  : <>JSON</>
-                }
-              </Button>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
-                onClick={handleExitGame}
-              >
-                Exit Game
-              </Button>
-            </div>
-          ) : null}
+        </div>
+
+            {(viewState.items ?? []).length > 0 ? (
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-4 flex gap-2">
+                {/* Continue button */}
+                <Button
+                  variant="default" 
+                  size="lg"
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2"
+                  disabled={isExecuting}
+                  onClick={async () => {
+                    // Use unified interaction handling
+                    await handleUserInteraction("Continue", "continue_game");
+                  }}
+                >
+                  {isExecuting ? "Processing..." : "Continue"}
+                </Button>
+                
+                <NewItemMenu 
+                  onSelect={(type) => addItem(type)}
+                  className="bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="gap-1.25 text-base font-semibold"
+                  onClick={() => setShowJsonView((v) => !v)}
+                >
+                  {showJsonView
+                    ? "Canvas"
+                    : <>JSON</>
+                  }
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                  onClick={handleExitGame}
+                >
+                  Exit Game
+                </Button>
+              </div>
+            ) : null}
         </main>
         
         {/* Right Chat Area */}

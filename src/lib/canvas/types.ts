@@ -18,15 +18,15 @@ export interface AudiencePermissions {
 
 export type CardType = 
   // MVP Game Components Only
-  | "character_card"    // 角色卡
-  | "action_button"     // 按钮
-  | "phase_indicator"   // 阶段指示器
-  | "text_display"      // 文本展示板
-  | "voting_panel"      // 投票面板
-  | "avatar_set"        // 头像套装
-  | "background_control" // 背景颜色控制
-  | "result_display"    // 结果展示纯艺术字
-  | "timer"             // 定时器
+  | "character_card"    
+  | "action_button"     
+  | "phase_indicator"   
+  | "text_display"      
+  | "voting_panel"      
+  | "avatar_set"        
+  | "background_control" 
+  | "result_display"    
+  | "timer"             
   | "death_marker"      // 死亡标记（显示被淘汰的玩家）
   | "hands_card"        // 手牌卡片（Hand Card for card games）
   | "score_board"       // 计分板（Score Board）
@@ -64,8 +64,8 @@ export const GAME_GRID_STYLE = {
   gridTemplateColumns: '1fr 1fr 1fr',  // equal proportions
   gridTemplateRows: '1fr 1fr 1fr',     // equal proportions
   gap: '1.5rem',
-  minHeight: '80vh',  // Reduced to prevent overflow
-  maxHeight: '80vh',  // Add max height constraint
+  minHeight: '79vh',  // Reduced to prevent overflow
+  maxHeight: '79vh',  // Add max height constraint
   padding: '1.5rem'
 };
 
