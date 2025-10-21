@@ -457,54 +457,77 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
 
 async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[Literal["ActionExecutor"]]:
     """
-    BotBehaviorNode analyzes bot behavior and generates responses for non-human players.
-    
-    Input:
-    - trimmed_messages: Recent message history
-    - player_states: Current player states
-    - current_phase and declaration: Phase configuration
-    - need_feed_back_dict: Required feedback info
-    
-    Output:
+    BotBehaviorNode - Simple bot behavior simulation for non-human players.
+    Only player_id=1 is human, all others are bots that need simulated actions.
     """
 
-    player_states = state.get("player_states", {})
+    # Get current game state
     current_phase_id = state.get("current_phase_id", 0)
-    # Remove need_feed_back_dict dependency - use autonomous analysis only
     dsl_content = state.get("dsl", {})
-    
-    # Get current phase details and NEXT phase for pre-analysis
     phases = dsl_content.get('phases', {}) if dsl_content else {}
-    # Try both int and string keys to handle YAML parsing variations
     current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
-    declaration = dsl_content.get('declaration', {}) if dsl_content else {}
-    playerActions = state.get("playerActions", {})
-    game_notes = state.get('game_notes', [])
+    player_states = state.get("player_states", {})
 
     # Initialize LLM
-    model = init_chat_model("openai:gpt-4.1-mini")
+    model = init_chat_model("anthropic:claude-haiku-4-5-20251001")
     model_with_tools = model.bind_tools([update_player_actions])
-    items_summary = summarize_items_for_prompt(state)
-    bot_behavior_system_prompt = await _load_prompt_async("bot_behavior_system_prompt")
     
-    # System message with precise analysis based on FeedbackDecisionNode logic
+    # Simple bot behavior prompt
     system_message = SystemMessage(
         content=(
-            "🤖 **BOT BEHAVIOR GENERATION - CURRENT PHASE FOCUS**\n\n"
-            f"📊 **CURRENT GAME STATE**:\n\n"
-            f"- **Current Phase ({current_phase_id})**: {current_phase}\n\n"
-            f"- **Player States**: {player_states}\n"
-            f"- **Player Actions**: {_limit_actions_per_player(playerActions, 1) if playerActions else {}}\n\n"
-            f"- **Game Notes**: {game_notes[-5:] if game_notes else 'None'}\n\n"
-            f"- **Items State**: {items_summary}\n\n"
-            f"- **Declaration**: {declaration}\n\n"
-            f"- **Bot Behavior System Prompt**: {bot_behavior_system_prompt}\n\n"
-          
+            "🤖 **BOT BEHAVIOR SIMULATOR**\n"
+            "You are controlling ALL bot players (any player_id ≠ 1).\n"
+            f"Current Phase: {current_phase.get('name', f'Phase {current_phase_id}')}\n"
+            f"Phase Description: {current_phase.get('description', '')}\n"
+            f"Player States: {player_states}\n\n"
+            
+            "**Your Job**: For each bot player, decide what they should do in this phase.\n"
+            "- Look at the current phase requirements\n"
+            "- Check each bot's role and current state\n"
+            "- Generate realistic bot actions using update_player_actions(player_id, actions, phase)\n"
+            "- Bots should act strategically based on their roles and game state\n\n"
+            
+            "**Examples**: voting, accusations, night actions, defenses, etc.\n"
+            "Keep it simple but realistic for each bot's role and situation."
         )
     )
 
+    # 4. Process messages: remove ToolMessages and tool_calls from AIMessages, no quantity limit
+    full_messages = state.get("messages", []) or []
+    
+    # Process messages: keep only AIMessage content and HumanMessage, preserve order
+    processed_messages = []
+    for msg in full_messages:
+        if isinstance(msg, AIMessage):
+            # Keep AIMessage but remove tool_calls and tool_use blocks from content
+            if msg.content:
+                if isinstance(msg.content, str) and msg.content.strip():
+                    # String content - keep as is
+                    processed_messages.append(AIMessage(content=msg.content))
+                elif isinstance(msg.content, list) and msg.content:
+                    # List content - filter out tool_use blocks, keep text blocks
+                    filtered_content = []
+                    for item in msg.content:
+                        if isinstance(item, dict) and item.get("type") == "tool_use":
+                            # Skip tool_use blocks to avoid Claude API errors
+                            continue
+                        else:
+                            # Keep text blocks and other content
+                            filtered_content.append(item)
+                    
+                    # Only add message if it has non-tool content
+                    if filtered_content:
+                        processed_messages.append(AIMessage(content=filtered_content))
+        elif isinstance(msg, HumanMessage):
+            # Keep HumanMessage as is
+            processed_messages.append(msg)
+        # Skip ToolMessage and others
+
     # Call LLM with backend tool bound
-    response = await model_with_tools.ainvoke([system_message], config)
+    response = await model_with_tools.ainvoke([
+        system_message,
+        *processed_messages,
+    ], config)
     
     # Apply backend tool effects inline (no ToolMessage)
     tool_calls = getattr(response, "tool_calls", []) or []
@@ -1054,14 +1077,41 @@ async def UIUpdateNode(state: AgentState, config: RunnableConfig) -> Command[Lit
 
             "**STEP 2: Create Required UI Components**\n"
             "• **UI Operation Order**: clearCanvas() → create tools series\n"
-            "• **Audience Permissions**: audience_type=true (public) or audience_type=false + audience_ids (private)\n"
+            "• **CRITICAL AUDIENCE PERMISSIONS**: Control who can see what - ESSENTIAL FOR GAME BALANCE!\n"
+            "  - audience_type=true: ALL players can see (public info)\n"
+            "  - audience_type=false + audience_ids=['1','2']: ONLY specified players can see (private info)\n"
+            "• **EXAMPLES**: Role cards (private), voting results (public), night actions (private to wolves)\n"
             "• Create all components needed for current phase\n"
             "• Ensure proper positioning to avoid overlaps\n"
             "• Include proper audience targeting\n\n"
+            "• **CRITICAL**: If phase requires player statements/input, you MUST create createTextInputPanel\n"
+            "• **WITHOUT TEXT INPUT PANEL, PLAYERS CANNOT COMMUNICATE OR PARTICIPATE**\n"
+            "• Examples of phases requiring input: defense phase, accusation phase, testimony phase\n"
+            "• Format: createTextInputPanel(title='Enter your defense', placeholder='Type your response...')\n\n"
+            "• **CRITICAL**: If phase requires player choices/voting, you MUST create createVotingPanel\n"
+            "• **WITHOUT VOTING PANEL, PLAYERS CANNOT MAKE CHOICES OR VOTE**\n"
+            "• Examples of phases requiring choices: voting phase, elimination phase, target selection\n"
+            "• Format: createVotingPanel(votingId='vote1', options=['Player A', 'Player B'], title='Vote to eliminate')\n"
+            "• **IMPORTANT**: Use audience_type/audience_ids for voting panels too!\n"
+            "  - Public voting: audience_type=true (everyone sees)\n"
+            "  - Secret voting: audience_type=false + audience_ids=['specific_players']\n"
+            "• Players use submitVote automatically when they click voting options\n"
+           
+
+            "**STEP 3: Optional Broadcasting (when needed)**\n"
+            "• Use addBotChatMessage to broadcast important announcements\n"
+            "• Examples: phase changes, game events, player eliminations, role reveals\n"
+            "• Format: addBotChatMessage(message='Your announcement text')\n"
+            "• Only use when you need to inform all players about game state changes\n\n"
 
             "🚨 **Critical Requirements**:\n"
             "- Every clearCanvas MUST be followed by create tools\n"
-            "- Use proper audience permissions for all components\n"
+            "- **CRITICAL**: ALWAYS set audience_type/audience_ids - NEVER leave blank!\n"
+            "- **Game will break if players see private info they shouldn't see**\n"
+            "- **MANDATORY**: Create createTextInputPanel if phase requires player input - NO EXCEPTIONS!\n"
+            "- **MANDATORY**: Create createVotingPanel if phase requires player choices - NO EXCEPTIONS!\n"
+            "- Players cannot participate without proper input/voting panels in interactive phases\n"
+            "- Use addBotChatMessage for important game announcements\n"
         )
     )
 
