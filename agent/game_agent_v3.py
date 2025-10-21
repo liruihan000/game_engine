@@ -552,8 +552,12 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
                     current_player_actions, pid, actions, phase, state.get("roomSession", {}), current_player_states
                 )
     
-    # Route to RefereeNode
-    logger.info("[BotBehaviorNode] Routing to RefereeNode")
+    # Clean up tool calls from response to avoid tool_use/tool_result mismatch
+    if hasattr(response, 'tool_calls'):
+        response.tool_calls = []
+    
+    # Route to ActionExecutor
+    logger.info("[BotBehaviorNode] Routing to ActionExecutor")
     return Command(
         goto="ActionExecutor",
         update={
@@ -1083,7 +1087,9 @@ async def UIUpdateNode(state: AgentState, config: RunnableConfig) -> Command[Lit
             "• **EXAMPLES**: Role cards (private), voting results (public), night actions (private to wolves)\n"
             "• Create all components needed for current phase\n"
             "• Ensure proper positioning to avoid overlaps\n"
-            "• Include proper audience targeting\n\n"
+            "• Include proper audience targeting\n"
+            "• **REMEMBER**: Always update/create score displays when scores change\n"
+            "• Use createScoreBoard or updateScoreBoard to show current player scores\n\n"
             "• **CRITICAL**: If phase requires player statements/input, you MUST create createTextInputPanel\n"
             "• **WITHOUT TEXT INPUT PANEL, PLAYERS CANNOT COMMUNICATE OR PARTICIPATE**\n"
             "• Examples of phases requiring input: defense phase, accusation phase, testimony phase\n"
@@ -1108,6 +1114,7 @@ async def UIUpdateNode(state: AgentState, config: RunnableConfig) -> Command[Lit
             "- Every clearCanvas MUST be followed by create tools\n"
             "- **CRITICAL**: ALWAYS set audience_type/audience_ids - NEVER leave blank!\n"
             "- **Game will break if players see private info they shouldn't see**\n"
+            "- **REMEMBER**: Update score displays every time scores change in the game\n"
             "- **MANDATORY**: Create createTextInputPanel if phase requires player input - NO EXCEPTIONS!\n"
             "- **MANDATORY**: Create createVotingPanel if phase requires player choices - NO EXCEPTIONS!\n"
             "- Players cannot participate without proper input/voting panels in interactive phases\n"
@@ -1115,12 +1122,50 @@ async def UIUpdateNode(state: AgentState, config: RunnableConfig) -> Command[Lit
         )
     )
 
-    # No message filtering needed for UIUpdateNode - only handles frontend tools
+    # Multiple safety: filter incomplete message sequences
     full_messages = state.get("messages", []) or []
+    
+    def filter_incomplete_message_sequences(messages):
+        """Remove messages that have tool_use without corresponding tool_result"""
+        filtered = []
+        i = 0
+        while i < len(messages):
+            msg = messages[i]
+            if isinstance(msg, AIMessage) and hasattr(msg, 'tool_calls') and msg.tool_calls:
+                # This AIMessage has tool calls, check if next messages have corresponding tool results
+                tool_call_ids = {tc.get('id') if isinstance(tc, dict) else getattr(tc, 'id', None) for tc in msg.tool_calls}
+                tool_call_ids = {tid for tid in tool_call_ids if tid}
+                
+                # Look ahead for ToolMessages
+                j = i + 1
+                found_tool_results = set()
+                while j < len(messages) and isinstance(messages[j], ToolMessage):
+                    if hasattr(messages[j], 'tool_call_id'):
+                        found_tool_results.add(messages[j].tool_call_id)
+                    j += 1
+                
+                # Only include if all tool calls have results
+                if tool_call_ids.issubset(found_tool_results):
+                    filtered.append(msg)
+                    # Also include the corresponding ToolMessages
+                    for k in range(i + 1, j):
+                        if isinstance(messages[k], ToolMessage):
+                            filtered.append(messages[k])
+                    i = j
+                else:
+                    # Skip this incomplete sequence
+                    i += 1
+            else:
+                filtered.append(msg)
+                i += 1
+        return filtered
+    
+    # Apply safety filtering
+    safe_messages = filter_incomplete_message_sequences(full_messages)
     
     response = await model_with_tools.ainvoke([
         system_message,
-        *full_messages,
+        *safe_messages,
     ], config)
 
     logger.info(f"[UIUpdateNode] Created UI components")
