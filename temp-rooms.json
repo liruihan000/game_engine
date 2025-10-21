@@ -1299,6 +1299,16 @@
       "max_players": 8,
       "current_players": 4,
       "created_at": "2025-10-20T21:58:18.290Z"
+    },
+    "5aa045f7-586f-47c4-b495-bb2a7457db10": {
+      "id": "5aa045f7-586f-47c4-b495-bb2a7457db10",
+      "game_name": "werewolf-(mafia)",
+      "thread_id": "95e61a40-2482-4e64-8155-ecf828897379",
+      "host_player_id": 1,
+      "status": "waiting",
+      "max_players": 8,
+      "current_players": 4,
+      "created_at": "2025-10-21T03:59:19.863Z"
     }
   },
   "players": {
@@ -5107,7 +5117,45 @@
         "status": "joined",
         "joined_at": "2025-10-20T21:58:19.255Z"
       }
+    ],
+    "5aa045f7-586f-47c4-b495-bb2a7457db10": [
+      {
+        "id": 1,
+        "room_id": "5aa045f7-586f-47c4-b495-bb2a7457db10",
+        "name": "reter",
+        "player_order": 1,
+        "is_host": true,
+        "status": "active",
+        "joined_at": "2025-10-21T03:59:19.863Z"
+      },
+      {
+        "id": 250,
+        "room_id": "5aa045f7-586f-47c4-b495-bb2a7457db10",
+        "name": "player2",
+        "player_order": 2,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T03:59:20.862Z"
+      },
+      {
+        "id": 251,
+        "room_id": "5aa045f7-586f-47c4-b495-bb2a7457db10",
+        "name": "player3",
+        "player_order": 3,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T03:59:20.871Z"
+      },
+      {
+        "id": 252,
+        "room_id": "5aa045f7-586f-47c4-b495-bb2a7457db10",
+        "name": "player4",
+        "player_order": 4,
+        "is_host": false,
+        "status": "joined",
+        "joined_at": "2025-10-21T03:59:20.871Z"
+      }
     ]
   },
-  "nextPlayerId": 250
+  "nextPlayerId": 253
 }

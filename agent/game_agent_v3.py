@@ -136,6 +136,7 @@ class AgentState(CopilotKitState):
 backend_tools = [
     update_player_state,
     set_next_phase,
+    update_player_actions,
 ]
 
 # Frontend tool allowlist for game engine (DM tools)
@@ -542,7 +543,7 @@ async def BotBehaviorNode(state: AgentState, config: RunnableConfig) -> Command[
 
 
 
-async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[Literal["__end__"]]:
+async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[Literal["UIUpdateNode"]]:
     """
     Execute actions from DSL and current phase by calling frontend tools.
     Audience-aware rendering: always choose explicit audience permissions per component
@@ -551,7 +552,8 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     """
     
     # 1. Define the model
-    model = init_chat_model("anthropic:claude-sonnet-4-5-20250929")
+    model = init_chat_model("anthropic:claude-haiku-4-5-20251001")
+    # model=init_chat_model("openai:gpt-4.1-mini")
 
     # 2. Prepare and bind frontend tools to the model
     def _extract_tool_name(tool: Any) -> Optional[str]:
@@ -627,188 +629,80 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
 
     system_message = SystemMessage(
         content=(
-            "🎮 **YOU ARE THE DM (DUNGEON MASTER)**\n"
-            "You have complete control over all players' game screens. Players can only see what you show them.\n\n"
-
-            "📺 **SCREEN CONTROL SYSTEM**:\n"
-            f"- items: Current screen components {items_summary}\n"
-            "- audience_type=true: Everyone can see it\n"
-            "- audience_type=false + audience_ids=['1','2']: Only specified players can see it\n"
-            f"- DSL: Game rules and flow definition\n\n"
+            "🎮 **YOU ARE THE DM (DUNGEON MASTER) - BACKEND ANALYSIS NODE**\n"
+            "Focus on player operation analysis and state management only. UI updates are handled by the next node.\n\n"
 
             "📊 **CURRENT GAME STATE**:\n"
-            f"- Current Phase: {current_phase_str}\n"
-            f"- Player States: {player_states}\n"
-            f"- Player Actions: {playerActions}\n"
-            f"- Phase History: {state.get('phase_history', [])}\n"
-            f"- Game Description: {declaration.get('description', 'No description available')}\n\n"
+            f"- DSL: {dsl_content}\n\n"
+            f"- Phase History: {state.get('phase_history', [])}\n\n"
+            f"- Current Phase ID: {current_phase_id}\n\n"
+            f"- Current Phase Name: {current_phase.get('name', 'Unknown')}\n\n"
+            f"- Current Phase Description: {current_phase.get('description', 'No description')}\n\n"
+            f"- Current Phase Completion Criteria: {current_phase.get('completion_criteria', {})}\n\n"
+            f"- Player States: {player_states}\n\n"
+            f"- Player Actions: {playerActions}\n\n"
+            f"- Screen Components: {items_summary}\n\n"
 
-            "🔄 **DM EXECUTION WORKFLOW** (Execute in order):\n\n"
+            "🔄 **MANDATORY 3-STEP DM WORKFLOW** (MUST execute ALL steps in order):\n\n"
+            "⚠️ **CRITICAL EXECUTION RULE**: You MUST complete ALL 3 STEPS in EVERY response. Skipping any step is forbidden!\n\n"
 
-            "**STEP 1: ANALYZE CURRENT PHASE**\n"
-            f"• Current phase_id: {current_phase_id}\n"
-            f"• Phase name: {current_phase.get('name', 'Unknown')}\n"
-            f"• Phase description: {current_phase.get('description', 'No description')}\n"
-            f"• Completion criteria: {current_phase.get('completion_criteria', {})}\n"
-            f"• Required actions: {current_phase.get('actions', [])}\n\n"
+            "**STEP 1: Analyze Current Player Operations**\n"
+            "• **IMPORTANT**: Analyze player operations from playerActions data structure ONLY\n"
+            "• Do NOT read or analyze human messages - only use playerActions state\n"
+            "• playerActions contains all recorded player behaviors from previous rounds\n"
+            "• Find each player's specific behaviors in current phase: vote choices, input content, target selections\n"
+            "• Use ONLY actual existing data from playerActions - NEVER fabricate or guess\n"
+            "• Use update_player_actions tool to record/update player operations if needed\n"
+            "• Output format: 'Player X: [specific operation content from playerActions]'\n"
+            "• If no operation record exists in playerActions, output 'Player X: No operations recorded'\n\n"
 
-            "**STEP 2: ANALYZE PLAYER BEHAVIOR - STRICT ANALYSIS**\n"
-            "🚨 **CRITICAL**: Only use ACTUAL data from playerActions - NEVER fabricate!\n"
-            "• Find each player's latest action: highest timestamp + matching current phase name\n"
-            "• Extract exact choices, targets, statements from actual playerActions content\n"
-            "• Process example: playerActions shows 'Player 2 voted for statement 1' → vote_choice=1\n"
-            "• Cross-reference action timestamp and phase name before processing\n"
-            "• FORBIDDEN: Using example values not in playerActions\n"
-            "• FORBIDDEN: Inventing vote results not present in playerActions\n\n"
+            "**STEP 2: Update Player States**\n"
+            "• Based on STEP 1's actual operations, update corresponding player_states\n"
+            "• If players don't have roles assigned, you need to assign roles and update state\n"
+            "• Use update_player_state tool for all state updates\n"
+            "• Update logic must comply with DSL-defined state field meanings\n"
+            "• Calculate scores, life/death status, game progress, etc.\n"
+            "• Output format: 'Updated Player X: field_name = new_value (reason)'\n\n"
 
-            "**STEP 3: UPDATE PLAYER STATES - COMPREHENSIVE STATE UPDATE**\n"
-            "🚨 **UNDERSTAND DSL player_states DEFINITIONS FIRST**: Carefully read declaration.player_states definitions!\n"
-            "• Each field has specific meaning and update conditions\n"
-            "• Base updates on actual evidence, don't fabricate or assume state changes\n"
-            "• Timing matters: Update states when events actually happen, not when anticipated\n\n"
+            "**STEP 3: Phase Management & Transition Decision**\n"
+            "• **MANDATORY Phase Decision**: ALWAYS check current phase completion criteria\n"
+            f"• Current phase completion criteria: {current_phase.get('completion_criteria', {})}\n"
+            "• **MANDATORY Phase Update**: You MUST call set_next_phase in EVERY response\n"
+            "  - **SPECIAL CASE**: If current_phase_id=0 AND items are empty, stay in phase 0 (UI not initialized yet)\n"
+            "  - If phase is complete: advance to next phase\n"
+            "  - If phase is not complete: stay in current phase (call set_next_phase with same phase_id)\n"
+            "• Output format: 'Phase Decision: [Complete/Incomplete] - Advancing to Phase X / Staying in Phase X'\n\n"
 
-            "**STATE UPDATE CHECKLIST**:\n"
-            "• **SCAN ALL PLAYER STATES**: Check every field in every player's state for needed updates\n"
-            "• **SCORE CALCULATIONS**: For reveal/results phases, calculate and update scores based on actual data\n"
-            "  - Example: Two Truths - compare vote_choice vs lie_index, update score accordingly\n"
-            "  - Example: Werewolf - update elimination counts, survival streaks, etc.\n"
-            "• **GAME PROGRESSION**: Update round counters, phase completions, win conditions\n"
-            "• **ACHIEVEMENT TRACKING**: Update any achievement or milestone fields\n"
-            "• **MANDATORY**: Every reveal/results phase MUST include score/progress updates\n\n"
+            "🔧 **Available Backend Tools**:\n"
+            "• update_player_actions(player_id, actions, phase) - Record player operations\n"
+            "• update_player_state(player_id, state_name, state_value) - Update player states\n"
+            "• set_next_phase(next_phase_id, transition_reason) - Enter next phase\n\n"
 
-            "**VOTING VALIDATION & ERROR HANDLING**:\n"
-            "1. Check voting eligibility BEFORE updating player_states\n"
-            "2. If invalid vote detected: DO NOT call update_player_state for vote_choice\n"
-            "3. Only process and record VALID votes from eligible players\n\n"
+            "📋 **Output Format Requirements**:\n"
+            "In your response message, clearly display in sections:\n"
+            "1. **Current Player Operations**: [List each player's specific operations from playerActions]\n"
+            "2. **State Updates**: [List all state changes and reasons]\n"
+            "3. **Phase Management**: [Phase completion analysis and transition decision]\n\n"
 
-            "**DEATH STATUS CHECK**:\n"
-            f"• Current status: Living {[pid for pid, data in player_states.items() if data.get('is_alive', True)]}, Dead {[pid for pid, data in player_states.items() if not data.get('is_alive', True)]}\n"
-            "• If any player dies (is_alive changes from true to false):\n"
-            "  - Immediately set is_alive=false using update_player_state tool\n"
-            "  - Dead players cannot vote, act, or participate in any game mechanics\n\n"
-
-            "**STEP 4: JUDGE PHASE TRANSITION - COMPLETION CRITERIA ANALYSIS**\n"
-            f"• Check if current phase completion_criteria are satisfied:\n"
-            f"  - Type: {current_phase.get('completion_criteria', {}).get('type', 'Unknown')}\n"
-            f"  - Description: {current_phase.get('completion_criteria', {}).get('description', 'None')}\n"
-            "• If conditions are met, use set_next_phase tool to enter next phase\n"
-            "• Record transition reason and logic\n\n"
-
-            "**STEP 5: UPDATE SCREEN CONTENT - UI MANAGEMENT**\n"
-            "**SCREEN CLEANUP & CREATION**:\n"
-            "• **DELETE FIRST**: clearCanvas() calls MUST be executed before all create tools\n"
-            "• **POSITION OVERLAP PREVENTION**: Check existing item positions, NEVER place multiple items at same position\n"
-            "• **POSITION ANALYSIS**: Read itemsState format '[ID] type:name@position' to identify occupied positions\n"
-            "• **GRID POSITIONS**: top-left, top-center, top-right, middle-left, center, middle-right, bottom-left, bottom-center, bottom-right\n"
-            "• **CONFLICT RESOLUTION**: If position occupied, choose next available position in grid\n\n"
-
-            "**MANDATORY AUDIENCE PERMISSIONS**: Every component MUST specify who can see it:\n"
-            "• Public: audience_type=true (everyone sees it)\n"
-            "• Private: audience_type=false + audience_ids=['1','3'] (only specified players see it)\n\n"
-
-            "**DEATH MARKER REQUIREMENTS**:\n"
-            "• Every round, check player_states for is_alive=false\n"
-            "• If dead player exists but no death_marker in items, CREATE one immediately\n"
-            "• Death markers MUST use audience_type=false, audience_ids=[dead_player_id]\n"
-            "• Example: createDeathMarker(playerName='Player 2', playerId='2', audience_type=false, audience_ids=['2'], position='top-right')\n\n"
-
-            "**COMPONENT CREATION RULES**:\n"
-            "• Phase indicators: Always place at 'top-center' position\n"
-            "• Timers: ~10 seconds (max 15), default position 'center'\n"
-            "• Input panels: createTextInputPanel() for collecting player text input\n"
-            "• Result displays: Check existing conclusions first, don't fabricate results\n\n"
-
-            "**STEP 6: REASONING PROCESS OUTPUT - TRANSPARENT REASONING**\n"
-            "In your response message, explain in detail:\n"
-            "• How you analyzed current phase and player behavior\n"
-            "• Why you made these specific state updates\n"
-            "• Phase transition logic and condition checking\n"
-            "• UI changes reasons and player experience considerations\n"
-            "• Help players understand game progress and decisions\n\n"
-
-            "**STEP 7: VALIDATE REASONING - VALIDATION CHECKLIST**\n"
-            "• Check all updates conform to DSL rules and definitions\n"
-            "• Confirm UI display matches current phase requirements\n"
-            "• Verify player state updates based on actual data, not fabricated\n"
-            "• Ensure dead players are correctly filtered and marked\n"
-            "• Verify audience permission settings are correct\n\n"
-
-            "🔧 **AVAILABLE BACKEND TOOLS**:\n"
-            "- update_player_state(player_id, state_name, state_value): Update player states\n"
-            "- update_player_actions(player_id, actions, phase): Update player action records\n"
-            "- set_next_phase(next_phase_id, transition_reason): Transition to next phase\n\n"
-
-            "🚨 **CRITICAL PROHIBITIONS**:\n"
-            "- NEVER return with ONLY cleanup calls - this is task failure!\n"
-            "- Every clearCanvas MUST be followed by create tools in SAME response!\n"
-            "- NEVER fabricate scores - only use player_states actual data\n"
-            "- NEVER create voting options or interactive UI for dead players\n"
-            "- NEVER assume or fabricate data not in playerActions\n\n"
-
-            "🧒 **TREAT PLAYERS LIKE CHILDREN**:\n"
-            "- Explain everything clearly and simply\n"
-            "- Provide as much helpful information as possible\n"
-            "- Guide them through every step\n"
-            "- Never assume they understand anything\n\n"
-
-            "🔧 **TOOL USAGE**: Use exact tool names (no prefixes), capture returned IDs for reuse\n"
+            "🚨 **Critical Constraints**:\n"
+            "- NEVER fabricate player operation data - only read from playerActions state\n"
+            "- NEVER analyze human messages for player operations - ignore message content\n"
+            "- ONLY source for player operations is playerActions data structure\n"
+            "- MANDATORY: You MUST call set_next_phase in EVERY response - no exceptions!\n"
+            "- SPECIAL: If phase_id=0 AND items=[], stay in phase 0 (UI initialization needed first)\n"
+            "- Only use backend tools (update_player_actions, update_player_state, set_next_phase)\n"
+            "- Dead players cannot participate in any game mechanics\n"
+            "- Strictly follow DSL definitions for state updates\n"
+            "- Do NOT attempt to create UI components - that's handled by the next node\n"
         )
     )
 
 
-    backend_tool_names = BACKEND_TOOL_NAMES
-    
-    full_messages = state.get("messages", []) or []
-    try:
-        if full_messages:
-            last_msg = full_messages[-1]
-            if isinstance(last_msg, AIMessage):
-                pending_frontend_call = False
-                for tc in getattr(last_msg, "tool_calls", []) or []:
-                    name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
-                    if name and name not in backend_tool_names:
-                        pending_frontend_call = True
-                        break
-            if pending_frontend_call:
-                try:
-                    # print("[TRACE] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
-                    logger.info("[chatnode][end] Pending frontend tool calls detected; skipping LLM this turn and waiting for ToolMessage(s).")
-                except Exception:
-                    pass
-                return Command(
-                    goto=END
-                )
-    except Exception:
-        pass
 
 
 
     # 4. Process messages: remove ToolMessages and tool_calls from AIMessages, no quantity limit
     full_messages = state.get("messages", []) or []
-    
-    # Process all messages without quantity limit
-    # processed_messages = []
-    # for msg in full_messages:
-    #     if isinstance(msg, ToolMessage):
-    #         # Skip all ToolMessages
-    #         continue
-    #     elif isinstance(msg, AIMessage):
-    #         # Skip AIMessages that contain tool calls to avoid tool_use/tool_result mismatch
-    #         has_tools = (hasattr(msg, 'tool_calls') and msg.tool_calls) or \
-    #                    (hasattr(msg, 'content') and isinstance(msg.content, (list, str)) and 'tool_use' in str(msg.content))
-            
-    #         if not has_tools and msg.content and msg.content.strip():
-    #             # Only include AIMessage with pure text content (no tool usage)
-    #             processed_messages.append(msg)
-    #         # Skip all AIMessages with tool calls to avoid Claude API errors
-    #     elif isinstance(msg, HumanMessage):
-    #         # Keep HumanMessages for ActionExecutor
-    #         processed_messages.append(msg)
-    #     else:
-    #         # Keep other message types (SystemMessage, etc.)
-    #         processed_messages.append(msg)
-    
-    # trimmed_messages = processed_messages
     
     
     latest_state_system = SystemMessage(
@@ -817,15 +711,41 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
             f"- items: {items_summary}\n"
             f"- current_phase_id: {current_phase_id}\n"
             f"- player_states: {player_states}\n"
-            f"- current_phase_actions: {current_phase.get('actions', [])}\n"
         )
     )
 
-    # Use complete full_messages without any processing
+    # Process messages: keep only AIMessage content and HumanMessage, preserve order
+    processed_messages = []
+    for msg in full_messages:
+        if isinstance(msg, AIMessage):
+            # Keep AIMessage but remove tool_calls and tool_use blocks from content
+            if msg.content:
+                if isinstance(msg.content, str) and msg.content.strip():
+                    # String content - keep as is
+                    processed_messages.append(AIMessage(content=msg.content))
+                elif isinstance(msg.content, list) and msg.content:
+                    # List content - filter out tool_use blocks, keep text blocks
+                    filtered_content = []
+                    for item in msg.content:
+                        if isinstance(item, dict) and item.get("type") == "tool_use":
+                            # Skip tool_use blocks to avoid Claude API errors
+                            continue
+                        else:
+                            # Keep text blocks and other content
+                            filtered_content.append(item)
+                    
+                    # Only add message if it has non-tool content
+                    if filtered_content:
+                        processed_messages.append(AIMessage(content=filtered_content))
+        elif isinstance(msg, HumanMessage):
+            # Keep HumanMessage as-is
+            processed_messages.append(msg)
+        # Skip ToolMessage and other types
+    
     response = await model_with_tools.ainvoke([
         system_message,
         latest_state_system,
-        *full_messages,
+        *processed_messages,
     ], config)
 
     # === DETAILED LLM RESPONSE LOGGING ===
@@ -987,6 +907,34 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     
     final_player_states = current_player_states
 
+    # Remove backend tool calls from response to prevent tool_use/tool_result mismatch
+    if hasattr(response, 'tool_calls') and response.tool_calls:
+        backend_tool_names = BACKEND_TOOL_NAMES
+        remaining_tool_calls = []
+        for tc in response.tool_calls:
+            name = tc.get("name") if isinstance(tc, dict) else getattr(tc, "name", None)
+            if name and name not in backend_tool_names:
+                remaining_tool_calls.append(tc)
+        
+        # Update response with only frontend tool calls
+        if remaining_tool_calls != response.tool_calls:
+            # Clean content: remove backend tool_use blocks
+            cleaned_content = response.content
+            if isinstance(cleaned_content, list):
+                # Filter out backend tool_use blocks from content list
+                filtered_content = []
+                for item in cleaned_content:
+                    if isinstance(item, dict) and item.get("type") == "tool_use":
+                        tool_name = item.get("name", "")
+                        if tool_name not in backend_tool_names:
+                            filtered_content.append(item)
+                    else:
+                        filtered_content.append(item)
+                cleaned_content = filtered_content
+            
+            response = AIMessage(content=cleaned_content, tool_calls=remaining_tool_calls)
+            logger.info(f"[ActionExecutor] Removed backend tool calls. Remaining: {len(remaining_tool_calls)} frontend tools")
+
     # Actions completed, end execution; mark phase 0 UI as done so InitialRouter won't loop back
     logger.info(f"[ActionExecutor][end] === ENDING ===")
     # === DETAILED OUTPUT LOGGING ===
@@ -1001,25 +949,147 @@ async def ActionExecutor(state: AgentState, config: RunnableConfig) -> Command[L
     logger.info(f"[State Version] {state_version} - Phase {updated_phase_id} - Updated by ActionExecutor at {timestamp}")
 
     return Command(
-        goto=END,
+        goto="UIUpdateNode",
         update={
             # Use final_messages like agent.py
             "messages": response,
-            "items": state.get("items", []),
             "player_states": final_player_states,  # Updated via backend tool calls
             "playerActions": current_player_actions,  # Updated via backend tool calls
-            "game_notes": current_game_notes,  # Updated via backend tool calls
             "phase_history": current_phase_history,  # Updated when phase changes
             "current_phase_id": updated_phase_id,
             "current_phase_name": get_phase_info_from_dsl(updated_phase_id, dsl_content)[1],
-            "actions": [],  # Clear actions after execution
-            "dsl": state.get("dsl", {}),  # Persist DSL
-            "roomSession": state.get("roomSession", {}),  # Persist roomSession
-            "phase0_ui_done": True if updated_phase_id == 0 else state.get("phase0_ui_done", True),
-            # 🔑 Monotonic version control (avoid underscore prefix for CopilotKit compatibility)
-            "stateVersion": state_version,
-            "stateTimestamp": timestamp,
-            "updatedBy": "ActionExecutor",
+        }
+    )
+
+
+
+
+async def UIUpdateNode(state: AgentState, config: RunnableConfig) -> Command[Literal["__end__"]]:
+    """
+    UI Update Node - Handle all frontend UI creation and updates
+    """
+    
+    # 1. Define the model
+    model = init_chat_model("anthropic:claude-haiku-4-5-20251001")
+    # model=init_chat_model("openai:gpt-4.1-mini")
+    # 2. Prepare and bind frontend tools to the model
+    def _extract_tool_name(tool: Any) -> Optional[str]:
+        """Extract a tool name from either a LangChain tool or an OpenAI function spec dict."""
+        try:
+            # OpenAI tool spec dict: { "type": "function", "function": { "name": "..." } }
+            if isinstance(tool, dict):
+                fn = tool.get("function", {}) if isinstance(tool.get("function", {}), dict) else {}
+                name = fn.get("name") or tool.get("name")
+                if isinstance(name, str) and name.strip():
+                    return name
+                return None
+            # LangChain tool object or @tool-decorated function
+            name = getattr(tool, "name", None)
+            if isinstance(name, str) and name.strip():
+                return name
+            return None
+        except Exception:
+            return None
+
+    # Frontend tools may arrive either under state["tools"] or within the CopilotKit envelope
+    raw_tools = (state.get("tools", []) or [])
+    try:
+        ck = state.get("copilotkit", {}) or {}
+        raw_actions = ck.get("actions", []) or []
+        if isinstance(raw_actions, list) and raw_actions:
+            raw_tools = [*raw_tools, *raw_actions]
+    except Exception:
+        pass
+
+    deduped_frontend_tools: List[Any] = []
+    seen: set[str] = set()
+    for t in raw_tools:
+        name = _extract_tool_name(t)
+        if not name:
+            continue
+        if name not in FRONTEND_TOOL_ALLOWLIST:
+            continue
+        if name in seen:
+            continue
+        seen.add(name)
+        deduped_frontend_tools.append(t)
+
+    # cap to well under 128 (OpenAI tools limit)
+    MAX_FRONTEND_TOOLS = 110
+    if len(deduped_frontend_tools) > MAX_FRONTEND_TOOLS:
+        deduped_frontend_tools = deduped_frontend_tools[:MAX_FRONTEND_TOOLS]
+
+    # Only bind frontend tools to UIUpdateNode
+    model_with_tools = model.bind_tools(
+        deduped_frontend_tools,
+        parallel_tool_calls=True,  # Allow multiple tool calls in single response
+    )
+
+    # 3. Prepare system states for UI updates
+    items_summary = summarize_items_for_prompt(state)
+    current_phase_id = state.get("current_phase_id", 0)
+    dsl_content = state.get("dsl", {})
+    player_states = state.get("player_states", {})
+    phases = dsl_content.get('phases', {}) if dsl_content else {}
+    current_phase = phases.get(current_phase_id, {}) or phases.get(str(current_phase_id), {})
+
+    system_message = SystemMessage(
+        content=(
+            "🎨 **YOU ARE THE UI UPDATE SPECIALIST**\n"
+            "Your job is to create and update UI components based on current game state.\n\n"
+
+            "📊 **CURRENT GAME STATE**:\n"
+            f"- Current Phase ID: {current_phase_id}\n"
+            f"- Phase Name: {current_phase.get('name', 'Unknown')}\n"
+            f"- Phase Description: {current_phase.get('description', 'No description')}\n"
+            f"- Phase Required UI: {current_phase.get('actions', [])}\n"
+            f"- Player States: {player_states}\n"
+            f"- Current Screen: {items_summary}\n\n"
+
+            "🎯 **UI UPDATE WORKFLOW**:\n\n"
+
+            "**STEP 1: Check Current Phase Requirements**\n"
+            f"• Current phase completion criteria: {current_phase.get('completion_criteria', {})}\n"
+            f"• Required UI components: {current_phase.get('actions', [])}\n\n"
+
+            "**STEP 2: Create Required UI Components**\n"
+            "• **UI Operation Order**: clearCanvas() → create tools series\n"
+            "• **Audience Permissions**: audience_type=true (public) or audience_type=false + audience_ids (private)\n"
+            "• Create all components needed for current phase\n"
+            "• Ensure proper positioning to avoid overlaps\n"
+            "• Include proper audience targeting\n\n"
+
+            "🚨 **Critical Requirements**:\n"
+            "- Every clearCanvas MUST be followed by create tools\n"
+            "- Use proper audience permissions for all components\n"
+        )
+    )
+
+    # No message filtering needed for UIUpdateNode - only handles frontend tools
+    full_messages = state.get("messages", []) or []
+    
+    response = await model_with_tools.ainvoke([
+        system_message,
+        *full_messages,
+    ], config)
+
+    logger.info(f"[UIUpdateNode] Created UI components")
+    
+    return Command(
+        goto=END,
+        update={
+            "messages": response,
+            "items": state.get("items", []),
+            "player_states": state.get("player_states", {}),
+            "playerActions": state.get("playerActions", {}),
+            "game_notes": state.get("game_notes", []),
+            "phase_history": state.get("phase_history", []),
+            "current_phase_id": state.get("current_phase_id", 0),
+            "current_phase_name": state.get("current_phase_name", ""),
+            "actions": [],
+            "dsl": state.get("dsl", {}),
+            "roomSession": state.get("roomSession", {}),
+            "phase0_ui_done": True,
         }
     )
 
@@ -1033,6 +1103,7 @@ workflow.add_node("ChatBotNode", ChatBotNode)
 workflow.add_node("BotBehaviorNode", BotBehaviorNode)
 # workflow.add_node("RoleAssignmentNode", RoleAssignmentNode)
 workflow.add_node("ActionExecutor", ActionExecutor)
+workflow.add_node("UIUpdateNode", UIUpdateNode)
 # workflow.add_node("ActionValidatorNode", ActionValidatorNode)
 
 # Set entry point
