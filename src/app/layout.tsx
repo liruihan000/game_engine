@@ -25,7 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${manrope.variable} ${GeistMono.variable}`}>
-      <body className="subpixel-antialiased">
+      <body className="subpixel-antialiased" suppressHydrationWarning={true}>
         <DynamicCopilotProvider>
           <Nav />
           {children}
