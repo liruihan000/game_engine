@@ -423,7 +423,7 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     else:
         logger.info(f"[ChatBotNode] No Game Notes Available")
 
-    chat_system_prompt = await _load_prompt_async("chat_system_prompt")
+    chatbot_system_prompt = await _load_prompt_async("chatbot_system_prompt")
 
     # Enhanced LLM system for intelligent bot chat responses
     system_prompt = f"""
@@ -441,7 +441,7 @@ async def ChatBotNode(state: AgentState, config: RunnableConfig) -> Command[Lite
     - **CRITICAL**: Dead players CANNOT speak or respond to chat - exclude them entirely!
 
     💬 **USER MESSAGE**: {last_msg.content}
-    {chat_system_prompt}
+    {chatbot_system_prompt}
     """
     
     try:

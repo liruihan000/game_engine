@@ -2381,7 +2381,7 @@ export default function CopilotKitPage() {
       { name: "audience_type", type: "boolean", required: false, description: "true=public; false=private" },
       { name: "audience_ids", type: "string[]", required: false, description: "Visible player IDs if private" },
     ],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    
     handler: ({ name, title, position, maxHeight, maxItems, audience_type, audience_ids }: any) => {
       const normalized = (name ?? "").trim();
       if (normalized) {
