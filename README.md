@@ -15,11 +15,7 @@ I haven't made any customized operations on any DSLs. They are all automatically
 
 ## 💡 Overview
 
-This project was born from obsession.  
-Over five sleepless nights — maybe ten hours of rest in total — I poured everything I had into building a prototype that could **turn pure text into playable, dynamic AI-driven worlds**.
-
-What started as a technical test quickly became a personal mission:  
-to prove that **AI shouldn’t just describe worlds — it should *build* them, *run* them, and *evolve* them.**
+**turn pure text into playable, dynamic AI-driven worlds**.
 
 It's a system where games are not programmed but described —  
 where an agent reads a rule set, generates logic, composes UI, and plays *with* or *against* you.  
