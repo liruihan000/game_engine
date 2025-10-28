@@ -1,7 +1,5 @@
 # 🎮 Full-Stack AI Game Engine
 
-*Built in under 5 days — with almost no sleep and endless curiosity.*
-
 **Documentation:** [Google Doc](https://docs.google.com/document/d/1CugOHIvGYZ7J339M6bQpwU7fyY-Dg1BHJ__HTwXXYDA/edit?usp=drive_link)  
 
 **Future development plan:** [Google Doc](https://docs.google.com/document/d/10kWj0d3kgHijSTeN-svgy8nV4BalymIZrE-zh7uruv0/edit?usp=drive_link)  
